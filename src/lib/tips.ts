@@ -3,7 +3,7 @@
 // another language shows its English), each translated context's language (its original text), and
 // any element with data-tip (data-tip-title above it, data-tip-sub below). Components that draw
 // their own targets, like the atlas, call showTip and hideTip directly.
-import { ensureTerms, languageName, termFor, translation } from "./translate.svelte";
+import { ensureTerms, languageName, termFor, termsReady, translation } from "./translate.svelte";
 
 const TARGET = ".tok, .term, [data-original], [data-tip]";
 
@@ -68,9 +68,10 @@ function contentFor(target: HTMLElement, refresh: () => void): TipContent | null
   if (target.dataset.tip) return { title: target.dataset.tipTitle, body: target.dataset.tip, sub: target.dataset.tipSub };
   const term = target.dataset.term;
   if (!term) return null;
-  if (!translation.terms) void ensureTerms().then(refresh);
+  // One attempt per hover: a failed load settles as "No translation" rather than retrying in a loop.
+  if (!termsReady() && !translation.failed) void ensureTerms().then(refresh);
   const entry = termFor(term);
-  if (!entry) return { title: term, sub: translation.terms || translation.failed ? "No translation" : "Translating…" };
+  if (!entry) return { title: term, sub: termsReady() || translation.failed ? "No translation" : "Translating…" };
   return { title: term, lang: entry[2], roman: entry[1] || undefined, body: entry[0], sub: languageName(entry[2]) };
 }
 

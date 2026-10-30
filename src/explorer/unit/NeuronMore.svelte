@@ -38,7 +38,7 @@
   {#if !pole.silent}<Row title="Tests" tip="A weight read holds when it predicts the side's own top firings"><Facts facts={tests} /></Row>{/if}
   {#if pole.peaks.length}
     <Row title="Peaks on" tip="The tokens its top firings land on, and how many of them">
-      <div class="toks">{#each pole.peaks as [token, n], i (i)}<Token {token} count={n} {i} />{/each}</div>
+      <div class="toks">{#each pole.peaks as [token, n], i (i)}<Token {token} times={n} {i} />{/each}</div>
     </Row>
   {/if}
   {#if others.length}<Row title="Other reads" tip="What other lenses read from its weights, strongest at this depth first"><Reads reads={others} all={pole.reads} /></Row>{/if}

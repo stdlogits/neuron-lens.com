@@ -1,7 +1,7 @@
 <script lang="ts">
   import Icon from "../../ui/Icon.svelte";
   import Swap from "../../ui/Swap.svelte";
-  import { formatValue, mediaUrl, type MediaDoc } from "../../lib/data";
+  import { formatValue, mediaUrl, releaseMedia, type MediaDoc } from "../../lib/data";
   import { sourceName } from "../../lib/media";
   import type { Modality, ModelId } from "../../lib/models";
   import { languageName, translation } from "../../lib/translate.svelte";
@@ -14,11 +14,15 @@
 
   let url = $state<string | null>(null);
   let loaded = $state(false);
+  // Held while shown, so the page can let go of pictures and sounds nobody is looking at.
   $effect(() => {
     const where = doc.h;
+    const [m, kind] = [model, modality];
+    let live = true;
     url = null;
     loaded = false;
-    mediaUrl(model, modality, where).then((u) => { if (doc.h === where) url = u; }, () => undefined);
+    mediaUrl(m, kind, where).then((u) => { if (live) url = u; }, () => undefined);
+    return () => { live = false; releaseMedia(m, kind, where); };
   });
 
   const label = $derived(doc.l[0] ?? "");

@@ -55,7 +55,7 @@
   <Row title="Habits"><Facts facts={habits} /></Row>
   {#if head.sources.length}
     <Row title="Looked at" tip="The tokens it attended to at its top firings, and how many of them">
-      <div class="toks">{#each head.sources as [token, n], i (i)}<Token {token} count={n} {i} />{/each}</div>
+      <div class="toks">{#each head.sources as [token, n], i (i)}<Token {token} times={n} {i} />{/each}</div>
     </Row>
   {/if}
   {#if head.outRz.length}
@@ -65,7 +65,7 @@
   {/if}
   {#if head.peaks.length}
     <Row title="Peaks on" tip="The query tokens of its top firings, and how many of them">
-      <div class="toks">{#each head.peaks as [token, n], i (i)}<Token {token} count={n} {i} />{/each}</div>
+      <div class="toks">{#each head.peaks as [token, n], i (i)}<Token {token} times={n} {i} />{/each}</div>
     </Row>
   {/if}
   {#if others.length}<Row title="Other reads" tip="What other lenses read from its weights, strongest at this depth first"><Reads reads={others} all={head.reads} scope="all heads" /></Row>{/if}

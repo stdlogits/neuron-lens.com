@@ -40,7 +40,7 @@
 
 <div class="explorer" style:--tint={lens.tint}>
   <section class="intro" aria-labelledby="title">
-    <h1 id="title" class="rise">Neuron Lens</h1>
+    <h1 id="title" class="rise">The Atlas</h1>
     <div class="rise" style:--i="1"><Segmented options={models} value={lens.modelId} onchange={lens.setModel} label="Model" /></div>
     <div class="rise" style:--i="2">
       <Swap key={lens.modelId}><p class="lede">{lens.model.lede}</p></Swap>

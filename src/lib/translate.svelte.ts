@@ -6,24 +6,32 @@ import { DEFAULT_MODEL, type ModelId } from "./models";
 
 const KEY = "neuron-lens.english";
 
-export const translation = $state<{ on: boolean; terms: Terms | null; failed: boolean }>({ on: false, terms: null, failed: false });
+export const translation = $state<{ on: boolean; terms: Terms | null; failed: boolean; ready: ModelId[] }>({ on: false, terms: null, failed: false, ready: [] });
 
-// Each model has its own vocabulary, so its own terms file.
+// Each model has its own terms file. A term means the same whichever model's run translated it, so
+// every file loaded is merged into one: a page showing both models' tokens (About) reads them all.
 let model: ModelId = DEFAULT_MODEL;
-let pending: Promise<void> | null = null;
-export function ensureTerms(): Promise<void> {
-  const asked = model;
-  pending ??= loadTerms(asked)
-    .then((terms) => { if (asked === model) { translation.terms = terms; translation.failed = false; } })
-    .catch(() => { pending = null; translation.failed = true; });
-  return pending;
+const pending = new Map<ModelId, Promise<void>>();
+export function ensureTerms(which: ModelId = model): Promise<void> {
+  let loading = pending.get(which);
+  if (!loading) {
+    loading = loadTerms(which)
+      .then((terms) => {
+        translation.terms = { ...terms, ...translation.terms };
+        translation.ready = [...translation.ready, which];
+        translation.failed = false;
+      })
+      .catch(() => { pending.delete(which); translation.failed = true; });
+    pending.set(which, loading);
+  }
+  return loading;
 }
 
+/** Whether the model's own terms (the explorer's current one, by default) have arrived. */
+export const termsReady = (which: ModelId = model) => translation.ready.includes(which);
+
 export function setTermsModel(next: ModelId) {
-  if (next === model) return;
   model = next;
-  pending = null;
-  translation.terms = null;
   if (translation.on) void ensureTerms();
 }
 

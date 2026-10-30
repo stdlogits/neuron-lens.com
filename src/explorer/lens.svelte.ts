@@ -59,8 +59,9 @@ export class Lens {
   headLayer = $state<{ model: ModelId; layer: number; heads: HeadDetail[] } | null>(null);
   /** The catalog itself failed to load. */
   failed = $state(false);
-  /** The selected unit's detail failed to load. */
-  detailFailed = $state(false);
+  /** Loads that failed, each by what it asked for (`model/L8/n344`, `model/L8/heads`, …). A failure
+   * shows only while the viewer is still where it was asked for, so a late one can't mark another. */
+  failures = $state<string[]>([]);
 
   // ---------- state outside the address
 
@@ -110,6 +111,17 @@ export class Lens {
   /** Query heads sharing the selected head's key-value head (all 16 on Gemma 4's global layers). */
   readonly groupSize = $derived(this.headDetail ? this.headRows.filter((row) => row[2] === this.headDetail!.kv).length : 1);
 
+  readonly neuronKey = $derived(this.selected === null ? null : `${this.modelId}/L${this.layer}/n${this.selected}`);
+  readonly rowsKey = $derived(`${this.modelId}/L${this.layer}/rows`);
+  readonly headLayerKey = $derived(`${this.modelId}/L${this.layer}/heads`);
+  readonly headIndexKey = $derived(`${this.modelId}/heads`);
+  /** What the reading pane needs here failed to load: it offers to try again. */
+  readonly detailFailed = $derived(
+    this.unit === "heads"
+      ? this.failures.includes(this.headLayerKey) || (!this.heads && this.failures.includes(this.headIndexKey))
+      : (this.all && this.failures.includes(this.rowsKey)) || (this.neuronKey !== null && this.failures.includes(this.neuronKey)),
+  );
+
   readonly totals = $derived({ neurons: this.model.layers * this.model.mlp, heads: this.model.layers * this.model.heads, easiest: this.index?.id === this.modelId ? this.index.neurons.length : null });
   readonly title = $derived(this.route.index !== null && this.selectedId ? `${this.selectedId} · ${this.model.name} · Neuron Lens` : this.route.layer !== null || this.modelId !== DEFAULT_MODEL ? `${this.model.name} · Neuron Lens` : "Neuron Lens");
 
@@ -124,7 +136,7 @@ export class Lens {
         this.scores = null;
         this.heads = null;
         void loadIndex(model).then((index) => { if (this.modelId === model) this.index = index; }, () => { if (this.modelId === model) this.failed = true; });
-        void loadHeadIndex(model).then((heads) => { if (this.modelId === model) this.heads = heads; }, () => undefined);
+        this.loadHeadIndex(model);
       });
     });
     // A new unit or model: the filter starts over.
@@ -140,11 +152,7 @@ export class Lens {
       const layer = this.layer;
       untrack(() => {
         if (!this.scores) void loadScores(model).then((scores) => { if (this.modelId === model) this.scores = scores; }, () => undefined);
-        if (this.layerRows?.model === model && this.layerRows.layer === layer) return;
-        void loadLayerIndex(model, layer).then(
-          (rows) => { if (this.modelId === model && this.layer === layer) this.layerRows = { model, layer, rows }; },
-          () => { if (this.modelId === model && this.layer === layer) this.detailFailed = true; },
-        );
+        this.loadRows(model, layer);
       });
     });
     // The selected neuron's detail. Its chunk depends on the index's chunk size: loadNeuron waits for it.
@@ -171,29 +179,55 @@ export class Lens {
     $effect(() => { document.title = this.title; });
   }
 
+  private fail = (key: string) => { if (!this.failures.includes(key)) this.failures = [...this.failures, key]; };
+  private settle = (key: string) => { if (this.failures.includes(key)) this.failures = this.failures.filter((k) => k !== key); };
+
   loadNeuron(model: ModelId, layer: number, n: number) {
     if (this.neuron?.model === model && this.neuron.layer === layer && this.neuron.n === n) return;
-    this.detailFailed = false;
+    const key = `${model}/L${layer}/n${n}`;
+    this.settle(key);
     loadNeuron(model, layer, n).then((detail) => {
-      if (this.modelId !== model || this.layer !== layer || this.selected !== n) return;
-      if (detail) this.neuron = { model, layer, n, detail };
-      else this.detailFailed = true;
-    }, () => { if (this.modelId === model && this.layer === layer) this.detailFailed = true; });
+      if (!detail) return this.fail(key);
+      if (this.modelId === model && this.layer === layer && this.selected === n) this.neuron = { model, layer, n, detail };
+    }, () => this.fail(key));
+  }
+
+  loadRows(model: ModelId, layer: number) {
+    if (this.layerRows?.model === model && this.layerRows.layer === layer) return;
+    const key = `${model}/L${layer}/rows`;
+    this.settle(key);
+    loadLayerIndex(model, layer).then(
+      (rows) => { if (this.modelId === model && this.layer === layer) this.layerRows = { model, layer, rows }; },
+      () => this.fail(key),
+    );
   }
 
   loadHeads(model: ModelId, layer: number) {
     if (this.headLayer?.model === model && this.headLayer.layer === layer) return;
-    this.detailFailed = false;
+    const key = `${model}/L${layer}/heads`;
+    this.settle(key);
     loadHeadLayer(model, layer).then(
       (heads) => { if (this.modelId === model && this.layer === layer) this.headLayer = { model, layer, heads }; },
-      () => { if (this.modelId === model && this.layer === layer) this.detailFailed = true; },
+      () => this.fail(key),
     );
   }
 
+  loadHeadIndex(model: ModelId) {
+    const key = `${model}/heads`;
+    this.settle(key);
+    loadHeadIndex(model).then((heads) => { if (this.modelId === model) this.heads = heads; }, () => this.fail(key));
+  }
+
+  /** Ask again for whatever the current place is missing. */
   retry() {
-    this.detailFailed = false;
-    if (this.unit === "heads") { this.headLayer = null; this.loadHeads(this.modelId, this.layer); }
-    else if (this.selected !== null) { this.neuron = null; this.loadNeuron(this.modelId, this.layer, this.selected); }
+    const model = this.modelId;
+    if (this.unit === "heads") {
+      if (!this.heads) this.loadHeadIndex(model);
+      this.loadHeads(model, this.layer);
+      return;
+    }
+    if (this.all) this.loadRows(model, this.layer);
+    if (this.selected !== null) this.loadNeuron(model, this.layer, this.selected);
   }
 
   // ---------- going places

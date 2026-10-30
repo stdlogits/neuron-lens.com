@@ -7,6 +7,7 @@
   <nav aria-label="More">
     <a href="/about">About</a>
     <a href="/credits">Credits</a>
+    <a href="https://github.com/stdlogits/neuron-lens" rel="external noreferrer">Research</a>
     <a href="https://github.com/stdlogits/neuron-lens.com" rel="external noreferrer">Source</a>
     <a href="https://drowse.ai" rel="external noreferrer">Drowse</a>
   </nav>

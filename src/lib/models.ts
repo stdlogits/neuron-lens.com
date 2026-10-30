@@ -18,6 +18,16 @@ export interface BandInfo {
   dark?: boolean;
 }
 
+export interface LabelCheck {
+  /** Sides (for neurons) or heads checked. */
+  count: number;
+  /** AUROC of the firing label at picking out held-out top firings, and of another unit's label. */
+  fires: [number, number];
+  /** How often a judge picked the write label out of four from what the unit does, and chance. */
+  writes: [number, number];
+  note?: string;
+}
+
 export interface ModelInfo {
   id: ModelId;
   name: string;
@@ -40,8 +50,8 @@ export interface ModelInfo {
   media: Modality[];
   examples: string[];
   start: { neurons: number; heads: number };
-  /** What the blind checks of Haiku's labels found (neuron-lens findings §8, §12, §13), shown beneath them. */
-  labelChecks: { neurons: string; heads: string };
+  /** What the blind checks of Haiku's labels found (neuron-lens findings §8, §12, §13); null where not yet checked. */
+  labelChecks: { neurons: LabelCheck | null; heads: LabelCheck | null };
   /** The two labels a head's card in the layer strip shows: the ones that held up when checked blind. */
   headCard: ["fires" | "attends" | "writes", "fires" | "attends" | "writes"];
 }
@@ -106,8 +116,8 @@ export const MODELS: Record<ModelId, ModelInfo> = {
     examples: ["owl", "Bible", "she", "money", "圣经", "L20h17"],
     start: { neurons: 8, heads: 20 },
     labelChecks: {
-      neurons: "Checked blind on 100 poles, the firing labels pick out held-out top firings at AUROC 0.82 (another pole's label: 0.56), and a judge picks the write label out of four from steered text 61% of the time (chance 25%).",
-      heads: "Checked blind on 100 heads, the firing labels pick out held-out top firings at AUROC 0.71 (another head's label: 0.51), and a judge picks the write label out of four from what the head writes in context 49% of the time (chance 25%).",
+      neurons: { count: 100, fires: [0.82, 0.56], writes: [0.61, 0.25] },
+      heads: { count: 100, fires: [0.71, 0.51], writes: [0.49, 0.25] },
     },
     headCard: ["attends", "writes"],
   },
@@ -154,8 +164,8 @@ export const MODELS: Record<ModelId, ModelInfo> = {
     examples: ["panda", "mosque", "Arabic", "rain", "熊猫", "L28h6"],
     start: { neurons: 23, heads: 28 },
     labelChecks: {
-      neurons: "Not yet checked blind on this model.",
-      heads: "Checked blind on 80 heads, the firing labels pick out held-out top firings at AUROC 0.71 (another head's label: 0.47), but the write labels are at chance: a judge picks one out of four from what the head writes in context 22% of the time (chance 25%). Read the write labels as guesses.",
+      neurons: null,
+      heads: { count: 80, fires: [0.71, 0.47], writes: [0.22, 0.25], note: "Read the write labels as guesses." },
     },
     headCard: ["fires", "attends"],
   },

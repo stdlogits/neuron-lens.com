@@ -50,6 +50,17 @@ export function rise(_node: Element, { delay = 0, duration = IN, y = 6 }: { dela
   return { delay, duration, easing: ease, css: (t, u) => `opacity: ${t}; transform: translateY(${u * y}px)` };
 }
 
+/** Appearing in place without moving (a tag joining a line, a crossfade). */
+export function fadeIn(_node: Element, { delay = 0, duration = IN }: { delay?: number; duration?: number } = {}): TransitionConfig {
+  return { delay, duration: reducedMotion() ? FAST : duration, easing: ease, css: (t) => `opacity: ${t}` };
+}
+
+/** A small mark arriving in place: it fades in and grows from 60%. */
+export function swell(_node: Element, { duration = IN }: { duration?: number } = {}): TransitionConfig {
+  if (reducedMotion()) return { duration: FAST, css: (t) => `opacity: ${t}` };
+  return { duration, easing: ease, css: (t) => `opacity: ${t}; transform: scale(${0.6 + 0.4 * t})` };
+}
+
 /** Leaving: a quick fade. */
 export function fadeOut(_node: Element, { duration = OUT }: { duration?: number } = {}): TransitionConfig {
   return { duration: reducedMotion() ? 0 : duration, easing: ease, css: (t) => `opacity: ${t}` };

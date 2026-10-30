@@ -9,7 +9,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 const settle = (page: Page) => page.waitForLoadState("networkidle");
-const explorerTitle = (page: Page) => page.getByRole("heading", { level: 1, name: "Neuron Lens", exact: true });
+const explorerTitle = (page: Page) => page.getByRole("heading", { level: 1, name: "The Atlas", exact: true });
 
 for (const [path, name] of [["/about", "About"], ["/credits", "Credits"]] as const) {
   test(`${path} renders`, async ({ page }) => {

@@ -71,6 +71,17 @@ async function answer(route) {
   });
 }
 
+/** A silent MP3 of about `seconds` seconds. Synthetic like the mock's own sounds, which build.mjs cuts to
+ * two frames (about 50 ms): over before a test can see one playing. A frame at 128 kbps and 44.1 kHz is
+ * 417 bytes and 26 ms.
+ * @param {number} seconds
+ * @returns {Buffer} */
+export function silentClip(seconds) {
+  const frame = Buffer.alloc(417);
+  frame.set([0xff, 0xfb, 0x90, 0x64]);
+  return Buffer.concat(Array.from({ length: Math.ceil(seconds / 0.026) }, () => frame));
+}
+
 /** Route every /data request of the page to the mock catalog.
  * @param {import("@playwright/test").Page} page */
 export async function serveCatalog(page) {

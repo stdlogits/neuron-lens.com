@@ -29,7 +29,12 @@ const MISSING: Route = { page: "missing" };
 
 export function parse(pathname: string, search = ""): Route {
   const query = new URLSearchParams(search);
-  const parts = pathname.split("/").filter(Boolean).map((part) => decodeURIComponent(part));
+  let parts: string[];
+  try {
+    parts = pathname.split("/").filter(Boolean).map((part) => decodeURIComponent(part));
+  } catch {
+    return MISSING; // a malformed escape
+  }
   if (parts.length === 0 || (parts.length === 1 && (parts[0] === "neuron-lens" || parts[0] === "neurons"))) return legacy(query);
   if (parts.length === 1 && parts[0] === "about") return { page: "about" };
   if (parts.length === 1 && parts[0] === "credits") return { page: "credits" };
@@ -74,8 +79,13 @@ export function href(route: Route): string {
   if (route.page === "about") return "/about";
   if (route.page === "credits") return "/credits";
   if (route.page === "missing") return "/";
-  const { model, layer, unit, index, all } = route;
-  if (layer === null) return model === DEFAULT_MODEL && unit === "neurons" && !all ? "/" : `/${model}${unit === "heads" ? "/heads" : ""}`;
+  const { model, unit, index, all } = route;
+  // A unit needs its layer in the path: an old link may name a neuron without one.
+  const layer = route.layer ?? (index === null ? null : MODELS[model].start[unit]);
+  if (layer === null) {
+    if (model === DEFAULT_MODEL && unit === "neurons" && !all) return "/";
+    return `/${model}${unit === "heads" ? "/heads" : ""}${all ? "?all" : ""}`;
+  }
   const base = `/${model}/L${layer}`;
   if (unit === "heads") return index === null ? `${base}/heads` : `${base}/h${index}`;
   return `${index === null ? base : `${base}/n${index}`}${all ? "?all" : ""}`;

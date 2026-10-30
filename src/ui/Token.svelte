@@ -7,10 +7,12 @@
   // merged into it; a value is what it measured. A token two reads agree on is tinted. With English
   // on, a token from another language morphs into its English and turns italic. Hovering one lights
   // up its variants across the unit (lib/tips.ts), and a foreign token's tip gives its meaning.
-  let { token, count = 1, flags = 0, value, i = 0 }: {
+  let { token, count = 1, times, flags = 0, value, i = 0 }: {
     token: string;
     /** Variants merged into this token (release, released, Release…). */
     count?: number;
+    /** How many times it occurs (among a unit's top firings, say): shown as ×n like variants. */
+    times?: number;
     /** 1: another read names it too. 2: it measurably drives or peaks the unit. */
     flags?: number;
     value?: number;
@@ -27,6 +29,7 @@
     parts.lead ? "word start" : "",
     parts.byte ? "byte piece" : "",
     count > 1 ? `${count} variants` : "",
+    times !== undefined ? `${times} times` : "",
     agree ? "two reads agree" : "",
     english ? `translated from ${term}` : "",
   ].filter(Boolean).join(", "));
@@ -44,7 +47,7 @@
   data-stem={stem(token)}
   data-term={term}
   lang={english ? "en" : undefined}
-><span class="ws" aria-hidden="true">{parts.lead ? "·" : ""}</span>{#if term}<MorphText text={shown} numbers={false} />{:else}{shown}{/if}{#if described}<span class="sr-only">{` (${described})`}</span>{/if}{#if count > 1}<span class="n" aria-hidden="true">×{count}</span>{/if}{#if value !== undefined}<span class="n">{formatValue(value)}</span>{/if}</svelte:element>
+><span class="ws" aria-hidden="true">{parts.lead ? "·" : ""}</span>{#if term}<MorphText text={shown} numbers={false} />{:else}{shown}{/if}{#if described}<span class="sr-only">{` (${described})`}</span>{/if}{#if count > 1 || times !== undefined}<span class="n" aria-hidden="true">×{times ?? count}</span>{/if}{#if value !== undefined}<span class="n">{formatValue(value)}</span>{/if}</svelte:element>
 
 <style>
   .tok {

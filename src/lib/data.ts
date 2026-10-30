@@ -249,30 +249,68 @@ export async function loadMediaDoc(model: ModelId, modality: Modality, doc: numb
 export const loadMediaCredits = (model: ModelId) => load<MediaCredits>(model, "media/credits.json");
 
 // Shown images and sounds live end to end in pack files, one fetched by an HTTP range. A server that
-// ignores the range sends the whole pack, which is then kept and sliced.
+// ignores the range sends the whole pack, which is then sliced; the last few such packs are kept.
+//
+// Each image or sound becomes a blob: URL, shared by everyone showing it. Whoever calls mediaUrl holds
+// it until they call releaseMedia with the same place; once nobody holds it, it waits among the most
+// recently used for a while (going back to a unit is instant) and is revoked when pushed out.
+const KEEP_IDLE = 48;
+const KEEP_PACKS = 2;
 const wholePacks = new Map<string, Promise<ArrayBuffer>>();
-const mediaUrls = new Map<string, Promise<string>>();
-export function mediaUrl(model: ModelId, modality: Modality, [pack, offset, length]: [number, number, number]): Promise<string> {
-  const url = `${DATA_BASE}/${model}/media/${modality}/p${pad(pack, 3)}.bin`;
-  const key = `${url}#${offset}`;
-  let pending = mediaUrls.get(key);
-  if (!pending) {
+interface Held { url: Promise<string>; holders: number }
+const mediaUrls = new Map<string, Held>();
+const mediaKey = (model: ModelId, modality: Modality, [pack, offset]: [number, number, number]) => `${model}/${modality}/${pack}#${offset}`;
+
+function wholePack(url: string, response: Response): Promise<ArrayBuffer> {
+  const buffer = response.arrayBuffer();
+  wholePacks.set(url, buffer);
+  while (wholePacks.size > KEEP_PACKS) wholePacks.delete(wholePacks.keys().next().value!);
+  buffer.catch(() => wholePacks.delete(url));
+  return buffer;
+}
+
+export function mediaUrl(model: ModelId, modality: Modality, where: [number, number, number]): Promise<string> {
+  const key = mediaKey(model, modality, where);
+  let held = mediaUrls.get(key);
+  if (held) {
+    // Most recently used last, so eviction walks from the front.
+    mediaUrls.delete(key);
+    mediaUrls.set(key, held);
+  } else {
+    const [pack, offset, length] = where;
+    const url = `${DATA_BASE}/${model}/media/${modality}/p${pad(pack, 3)}.bin`;
     const type = modality === "image" ? "image/webp" : "audio/mpeg";
-    pending = (async () => {
-      const whole = wholePacks.get(url);
+    const made = (async () => {
+      let whole = wholePacks.get(url);
       if (!whole) {
         const response = await fetch(url, { headers: { Range: `bytes=${offset}-${offset + length - 1}` } });
         if (!response.ok) throw new Error(`${url}: ${response.status}`);
         if (response.status === 206) return URL.createObjectURL(new Blob([await response.arrayBuffer()], { type }));
-        wholePacks.set(url, response.arrayBuffer());
+        whole = wholePack(url, response);
       }
-      const buffer = await wholePacks.get(url)!;
-      return URL.createObjectURL(new Blob([buffer.slice(offset, offset + length)], { type }));
+      return URL.createObjectURL(new Blob([(await whole).slice(offset, offset + length)], { type }));
     })();
-    pending.catch(() => mediaUrls.delete(key));
-    mediaUrls.set(key, pending);
+    held = { url: made, holders: 0 };
+    made.catch(() => { if (mediaUrls.get(key) === held) mediaUrls.delete(key); });
+    mediaUrls.set(key, held);
   }
-  return pending;
+  held.holders += 1;
+  return held.url;
+}
+
+/** Let go of an image or sound from mediaUrl. Unheld ones past the most recent few are revoked. */
+export function releaseMedia(model: ModelId, modality: Modality, where: [number, number, number]) {
+  const held = mediaUrls.get(mediaKey(model, modality, where));
+  if (held) held.holders = Math.max(0, held.holders - 1);
+  let idle = 0;
+  for (const entry of mediaUrls.values()) if (entry.holders === 0) idle += 1;
+  for (const [key, entry] of mediaUrls) {
+    if (idle <= KEEP_IDLE) break;
+    if (entry.holders > 0) continue;
+    mediaUrls.delete(key);
+    idle -= 1;
+    entry.url.then((url) => URL.revokeObjectURL(url), () => undefined);
+  }
 }
 
 function decodeScores(encoded: string): Uint8Array {
