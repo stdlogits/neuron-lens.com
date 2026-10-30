@@ -119,4 +119,5 @@ It refuses a dirty tree, a HEAD not on `origin/main`, or a missing catalog; runs
 account first. Cloudflare Web Analytics is on (a9's choice): the CSP allows its beacon from
 `static.cloudflareinsights.com` and its reports to `cloudflareinsights.com`. Keep Rocket Loader and
 email obfuscation off: they add inline scripts the CSP blocks. The zone's security-headers transform
-sets `Referrer-Policy: same-origin`, so `_headers` says the same.
+sets `Referrer-Policy: same-origin` and `X-Frame-Options: SAMEORIGIN`, so `_headers` says the same
+(the CSP's `frame-ancestors 'none'` still forbids framing).
