@@ -31,7 +31,6 @@ export interface LabelCheck {
 export interface ModelInfo {
   id: ModelId;
   name: string;
-  lede: string;
   layers: number;
   mlp: number;
   heads: number;
@@ -60,7 +59,6 @@ export const MODELS: Record<ModelId, ModelInfo> = {
   "qwen3-8b": {
     id: "qwen3-8b",
     name: "Qwen3-8B",
-    lede: "What each neuron and attention head in Qwen3-8B responds to, and what it makes the model say.",
     layers: 36,
     mlp: 12288,
     heads: 32,
@@ -124,7 +122,6 @@ export const MODELS: Record<ModelId, ModelInfo> = {
   "gemma-4-12b": {
     id: "gemma-4-12b",
     name: "Gemma 4 12B",
-    lede: "What each neuron and attention head in Gemma 4 12B responds to in text, images and sound, and what it makes the model say.",
     layers: 48,
     mlp: 15360,
     heads: 16,

@@ -2,7 +2,6 @@
   import { onMount } from "svelte";
   import Segmented from "../ui/Segmented.svelte";
   import Tabs from "../ui/Tabs.svelte";
-  import Swap from "../ui/Swap.svelte";
   import MorphText from "../ui/MorphText.svelte";
   import Search from "./Search.svelte";
   import Atlas from "./Atlas.svelte";
@@ -40,15 +39,12 @@
 
 <div class="explorer" style:--tint={lens.tint}>
   <section class="intro" aria-labelledby="title">
-    <h1 id="title" class="rise">The Atlas</h1>
+    <h1 id="title" class="rise">Explorer</h1>
     <div class="rise" style:--i="1"><Segmented options={models} value={lens.modelId} onchange={lens.setModel} label="Model" /></div>
-    <div class="rise" style:--i="2">
-      <Swap key={lens.modelId}><p class="lede">{lens.model.lede}</p></Swap>
-    </div>
-    <p class="figures rise" style:--i="3">
+    <p class="figures rise" style:--i="2">
       {#each lens.figures as figure (figure.label)}<span><b><MorphText text={figure.value} /></b> {figure.label}</span>{/each}
     </p>
-    <div class="find rise" style:--i="4"><Search /></div>
+    <div class="find rise" style:--i="3"><Search /></div>
   </section>
 
   <section class="map" aria-label="Every layer">
@@ -82,7 +78,6 @@
   .explorer { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s7); min-width: 0; transition: --tint var(--glide) var(--ease); }
   .intro { display: grid; justify-items: start; gap: var(--s5); }
   h1 { font: var(--type-title); letter-spacing: -0.04em; }
-  .lede { max-width: 56ch; color: var(--ink2); font: var(--type-body); }
   .figures { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s5); color: var(--ink3); font: var(--type-small); }
   .figures b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
   .find { width: min(100%, 640px); }

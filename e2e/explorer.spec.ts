@@ -16,7 +16,7 @@ const path = (page: Page) => { const url = new URL(page.url()); return url.pathn
 
 test("the explorer opens on Qwen3-8B with its figures", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1, name: "The Atlas" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Explorer" })).toBeVisible();
   await expect(page.getByRole("group", { name: "Model" }).getByRole("button", { name: "Qwen3-8B" })).toHaveAttribute("aria-pressed", "true");
   // 36 layers of 12,288 neurons and 32 heads.
   const main = page.locator("main");
