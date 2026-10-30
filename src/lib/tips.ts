@@ -62,16 +62,17 @@ export function hideTip() {
   tip.hidden = true;
 }
 
-function contentFor(target: HTMLElement, refresh: () => void): TipContent | null {
+/** `mayLoad`: a fresh hover may ask for the translations (again, after a failure); the redraw when
+ * they arrive may not, so a failed load settles instead of retrying in a loop. */
+function contentFor(target: HTMLElement, refresh: () => void, mayLoad: boolean): TipContent | null {
   const original = target.dataset.original;
   if (original) return { title: original, lang: target.dataset.lang, sub: languageName(target.dataset.lang ?? "") };
   if (target.dataset.tip) return { title: target.dataset.tipTitle, body: target.dataset.tip, sub: target.dataset.tipSub };
   const term = target.dataset.term;
   if (!term) return null;
-  // One attempt per hover: a failed load settles as "No translation" rather than retrying in a loop.
-  if (!termsReady() && !translation.failed) void ensureTerms().then(refresh);
+  if (!termsReady() && mayLoad) void ensureTerms().then(refresh);
   const entry = termFor(term);
-  if (!entry) return { title: term, sub: termsReady() || translation.failed ? "No translation" : "Translating…" };
+  if (!entry) return { title: term, sub: termsReady() || (translation.failed && !mayLoad) ? "No translation" : "Translating…" };
   return { title: term, lang: entry[2], roman: entry[1] || undefined, body: entry[0], sub: languageName(entry[2]) };
 }
 
@@ -85,8 +86,8 @@ export function tips(root: HTMLElement) {
     linked = [];
   }
 
-  function show(target: HTMLElement) {
-    const content = contentFor(target, () => { if (current === target) show(target); });
+  function show(target: HTMLElement, mayLoad = true) {
+    const content = contentFor(target, () => { if (current === target) show(target, false); }, mayLoad);
     if (!content) { hideTip(); target.removeAttribute("aria-describedby"); return; }
     showTip(target, content);
     target.setAttribute("aria-describedby", "tip");
@@ -138,7 +139,7 @@ export function tips(root: HTMLElement) {
   const scroll = () => {
     if (!current) return;
     const box = current.getBoundingClientRect();
-    if ((current.contains(document.activeElement) || current.matches(":hover")) && box.bottom > 0 && box.top < window.innerHeight) show(current);
+    if ((current.contains(document.activeElement) || current.matches(":hover")) && box.bottom > 0 && box.top < window.innerHeight) show(current, false);
     else leave();
   };
 

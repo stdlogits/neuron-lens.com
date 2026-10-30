@@ -42,7 +42,7 @@
 
   // The rows have loaded for this place (the filter may still leave none).
   const loaded = $derived(lens.unit === "heads" ? lens.heads !== null : lens.all ? lens.layerRows?.model === lens.modelId && lens.layerRows.layer === lens.layer : lens.index?.id === lens.modelId);
-  const listKey = $derived(`${lens.modelId}/${lens.unit}/${lens.layer}/${lens.all}/${lens.activeFilter.value}/${loaded}`);
+  const listKey = $derived(`${lens.modelId}/${lens.unit}/${lens.layer}/${lens.all}/${lens.activeFilter.value}/${loaded}/${lens.listFailed}`);
   const sub = $derived(`${lens.band.name}, ${lens.unit === "heads" && lens.globalLayer ? "global attention" : "easiest first"}`);
 
   // A phone shows fewer before the button, so the unit isn't far below.
@@ -64,7 +64,9 @@
   <div class="slot">
     {#key listKey}
       <div class="body" out:fadeOut>
-        {#if !loaded}
+        {#if !loaded && lens.listFailed}
+          <p class="none rise">This layer's list didn't load. <button type="button" class="retry" onclick={() => lens.retry()}>Try again</button></p>
+        {:else if !loaded}
           <div class="pending" aria-hidden="true">{#each { length: narrow ? 4 : 8 } as _, i (i)}<i></i>{/each}</div>
         {:else if items.length === 0}
           <p class="none rise">None in this layer</p>
@@ -85,6 +87,8 @@
   .slot { display: grid; min-width: 0; }
   .body { grid-area: 1 / 1; min-width: 0; }
   .none { padding: var(--s3) var(--s4); color: var(--ink3); font: var(--type-small); }
+  .retry { display: block; margin-top: var(--s2); padding: 0; border: 0; background: none; color: var(--ink); font: var(--type-control); cursor: pointer; transition: color var(--fast) var(--ease); }
+  @media (hover: hover) { .retry:hover { color: var(--ink2); } }
   .pending { display: grid; gap: 2px; animation: appear var(--in) var(--ease) 150ms backwards; }
   .pending i { display: block; height: 72px; border-radius: var(--r-box); background: var(--wash); }
   .pending i:nth-child(even) { height: 52px; }

@@ -84,12 +84,14 @@ echo "deploy: dist has $files files, $(du -sh dist | cut -f1), none over 25 MiB"
 
 # Wrangler with an empty home and nothing else from this shell: no saved login, and no other
 # credential variable (it also honours CF_API_KEY/CF_EMAIL and prefers a global key to the token).
+# It would also read a .env in the repo, so it gets an empty one instead.
 wrangler_home=$(mktemp -d)
 trap 'rm -rf "$wrangler_home"' EXIT
+: > "$wrangler_home/empty.env"
 env -i PATH="$PATH" TMPDIR="${TMPDIR:-/tmp}" LANG="${LANG:-en_US.UTF-8}" \
   HOME="$wrangler_home" XDG_CONFIG_HOME="$wrangler_home/config" WRANGLER_SEND_METRICS=false \
   CLOUDFLARE_API_TOKEN="$CLOUDFLARE_API_TOKEN" CLOUDFLARE_ACCOUNT_ID="$CLOUDFLARE_ACCOUNT_ID" \
-  ./node_modules/.bin/wrangler pages deploy dist --project-name neuron-lens --branch main \
+  ./node_modules/.bin/wrangler pages deploy dist --env-file "$wrangler_home/empty.env" --project-name neuron-lens --branch main \
   --commit-hash "$rev" --commit-message "$(git log -1 --format=%s)" --commit-dirty=false
 
 node scripts/verify-deployment.mjs "$origin" --build dist

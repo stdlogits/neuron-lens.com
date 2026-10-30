@@ -122,6 +122,11 @@ export class Lens {
       : (this.all && this.failures.includes(this.rowsKey)) || (this.neuronKey !== null && this.failures.includes(this.neuronKey)),
   );
 
+  /** The layer's list failed to load (every neuron in All mode, or the heads' index). */
+  readonly listFailed = $derived(
+    this.unit === "heads" ? !this.heads && this.failures.includes(this.headIndexKey) : this.all && this.failures.includes(this.rowsKey),
+  );
+
   readonly totals = $derived({ neurons: this.model.layers * this.model.mlp, heads: this.model.layers * this.model.heads, easiest: this.index?.id === this.modelId ? this.index.neurons.length : null });
   readonly title = $derived(this.route.index !== null && this.selectedId ? `${this.selectedId} · ${this.model.name} · Neuron Lens` : this.route.layer !== null || this.modelId !== DEFAULT_MODEL ? `${this.model.name} · Neuron Lens` : "Neuron Lens");
 

@@ -257,7 +257,7 @@ export const loadMediaCredits = (model: ModelId) => load<MediaCredits>(model, "m
 const KEEP_IDLE = 48;
 const KEEP_PACKS = 2;
 const wholePacks = new Map<string, Promise<ArrayBuffer>>();
-interface Held { url: Promise<string>; holders: number }
+interface Held { url: Promise<string>; holders: number; failed: boolean }
 const mediaUrls = new Map<string, Held>();
 const mediaKey = (model: ModelId, modality: Modality, [pack, offset]: [number, number, number]) => `${model}/${modality}/${pack}#${offset}`;
 
@@ -272,7 +272,7 @@ function wholePack(url: string, response: Response): Promise<ArrayBuffer> {
 export function mediaUrl(model: ModelId, modality: Modality, where: [number, number, number]): Promise<string> {
   const key = mediaKey(model, modality, where);
   let held = mediaUrls.get(key);
-  if (held) {
+  if (held && !held.failed) {
     // Most recently used last, so eviction walks from the front.
     mediaUrls.delete(key);
     mediaUrls.set(key, held);
@@ -290,9 +290,15 @@ export function mediaUrl(model: ModelId, modality: Modality, where: [number, num
       }
       return URL.createObjectURL(new Blob([(await whole).slice(offset, offset + length)], { type }));
     })();
-    held = { url: made, holders: 0 };
-    made.catch(() => { if (mediaUrls.get(key) === held) mediaUrls.delete(key); });
-    mediaUrls.set(key, held);
+    // A failed one stays listed until asked for again, then is fetched afresh under the same entry:
+    // whoever held the failure still holds it, so their release can't free someone else's copy.
+    const entry: Held = held ?? { url: made, holders: 0, failed: false };
+    entry.url = made;
+    entry.failed = false;
+    made.catch(() => { if (entry.url === made) entry.failed = true; });
+    mediaUrls.delete(key);
+    mediaUrls.set(key, entry);
+    held = entry;
   }
   held.holders += 1;
   return held.url;
