@@ -1,0 +1,11 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+.wrangler/
+.DS_Store
+# The built catalog (several GB) is made by scripts/neurons from the private neuron-lens catalogs.
+public/data/*
+!public/data/404.html
+# Translation runs: each keeps its state and Batch API results here.
+.neuron-lens/
