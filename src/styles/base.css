@@ -178,7 +178,7 @@ canvas {
   }
 }
 
-/* ---------- the tip: inverted, on hover and focus only (lib/tips.ts) */
+/* ---------- the tip: frosted glass in the page's own colours, on hover and focus only (lib/tips.ts) */
 
 .tip {
   position: fixed;
@@ -190,8 +190,10 @@ canvas {
   width: max-content;
   padding: var(--s3) var(--s4);
   border-radius: var(--r-box);
-  background: var(--ink);
-  color: var(--paper);
+  background: color-mix(in oklch, var(--paper) 72%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+  color: var(--ink);
   font: var(--type-small);
   box-shadow: var(--float);
   overflow-wrap: anywhere;
@@ -220,8 +222,21 @@ canvas {
 }
 
 .tip .tip-sub {
+  color: var(--ink2);
   font: var(--type-meta);
-  opacity: 0.72;
+}
+
+/* Without a blur behind it, the glass would let the page show through: make it solid instead. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tip {
+    background: var(--paper);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .tip {
+    background: var(--paper);
+  }
 }
 
 /* ---------- the gliding selection (lib/motion.ts, glide): the host sets --glide-bg and --glide-radius */

@@ -1,4 +1,4 @@
-// The site's one tooltip: an inverted card that follows hover and focus. A single listener on the
+// The site's one tooltip: a pane of frosted glass that follows hover and focus. A single listener on the
 // page covers every token chip (hovering one lights up its variants in the same unit, and a term from
 // another language shows its English), each translated context's language (its original text), and
 // any element with data-tip (data-tip-title above it, data-tip-sub below). Components that draw

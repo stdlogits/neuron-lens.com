@@ -7,7 +7,7 @@ lines. It is where Drowse's next look is being tried out, so what works here may
 
 - **Flat and borderless.** Surfaces are told apart by fill alone: paper, then `--wash`, then
   `--wash2` for something chosen. No borders, rules, outlines (except focus), side bars or shadows.
-  The one shadow is under the inverted tip.
+  The one shadow is under the tip, a pane of frosted glass in the page's own colours.
 - **One accent, sparingly.** The accent is depth: a layer's place on the ramp from `--deep` (violet,
   layer 0) to `--late` (cyan, the last layer), set as `--tint` by the explorer for the current
   layer. It fills (a marked token, a meter, a bar); it never colours text.
@@ -65,5 +65,5 @@ Reduced motion keeps fades and drops movement.
 chip; · marks a word start, ×n variants, a value in 12 px), `Context` (a firing on a wash, the token
 marked), `LabelText` (a label whose foreign terms translate), `Switch`, `IconButton` (36 px round
 wash), `Icon`, `Expander` (a text button that opens below), `Meter` (a 24 × 4 tint bar), `Swap`,
-`MorphText`. The tip is one element for the site (`src/lib/tips.ts`): give anything `data-tip`
+`MorphText`. The tip (frosted glass, blurred behind) is one element for the site (`src/lib/tips.ts`): give anything `data-tip`
 (and optionally `data-tip-title`, `data-tip-sub`), or call `showTip`/`hideTip`.
