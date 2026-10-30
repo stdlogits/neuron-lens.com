@@ -120,4 +120,5 @@ account first. Cloudflare Web Analytics is on (a9's choice): the CSP allows its 
 `static.cloudflareinsights.com` and its reports to `cloudflareinsights.com`. Keep Rocket Loader and
 email obfuscation off: they add inline scripts the CSP blocks. The zone's security-headers transform
 sets `Referrer-Policy: same-origin` and `X-Frame-Options: SAMEORIGIN`, so `_headers` says the same
-(the CSP's `frame-ancestors 'none'` still forbids framing).
+(the CSP's `frame-ancestors 'none'` still forbids framing). Its Browser Cache TTL (4 hours) raises a
+shorter `max-age`, so `/data/*` asks for 4 hours itself.

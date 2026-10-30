@@ -28,4 +28,4 @@
 # The catalog changes only when it is rebuilt and redeployed, which is rare.
 /data/*
   ! Cache-Control
-  Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+  Cache-Control: public, max-age=14400, stale-while-revalidate=86400
