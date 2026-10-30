@@ -242,7 +242,9 @@ export async function browserSmoke(origin) {
       { timeout: 60_000 },
     ).catch(() => problems.push(`no ${IMAGE} loaded at ${SMOKE_PATH} within 60 s`));
 
-    // A sound: an audio element already in the page, else the first play button.
+    // A sound: an audio element already in the page, else the first play button. Sound tiles render
+    // once their documents load, after the images, so wait for one to appear.
+    await page.locator(AUDIO).or(page.getByRole("button", { name: PLAY_BUTTON })).first().waitFor({ timeout: 30_000 }).catch(() => undefined);
     let started = true;
     if (await page.locator(AUDIO).count()) await page.locator(AUDIO).first().evaluate((audio) => { audio.muted = true; return audio.play(); });
     else {
