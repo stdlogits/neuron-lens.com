@@ -3,7 +3,7 @@
 </script>
 
 <footer>
-  <span>Neuron Lens, by a9lim and Claude</span>
+  <span>Neuron Lens, by a9lim, treetown and Claude</span>
   <nav aria-label="More">
     <a href="/about">About</a>
     <a href="/credits">Credits</a>

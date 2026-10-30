@@ -12,7 +12,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "e2e:fixtures": "node e2e/fixtures/build.mjs",
+    "verify:deployment": "node scripts/verify-deployment.mjs",
+    "deploy": "bash scripts/deploy.sh"
   },
   "dependencies": {
     "torph": "0.1.3"

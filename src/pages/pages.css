@@ -1,0 +1,110 @@
+/* The reading pages (About, Credits, Not found): a title and a lead, then parts, each a caption
+ * beside what it is about. Captions stay in view while their part scrolls past on wide screens. */
+
+.pg {
+  display: grid;
+  gap: var(--s9);
+  min-width: 0;
+}
+
+.pg-hero {
+  display: grid;
+  justify-items: start;
+  gap: var(--s5);
+}
+
+.pg-hero h1 {
+  font: var(--type-title);
+  letter-spacing: -0.04em;
+}
+
+.pg-lead {
+  max-width: 52ch;
+  color: var(--ink2);
+  font: var(--type-lead);
+}
+
+.pg-part {
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  gap: var(--s5) var(--s7);
+  align-items: start;
+  min-width: 0;
+}
+
+.pg-cap {
+  position: sticky;
+  top: var(--s5);
+  display: grid;
+  justify-items: start;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+.pg-cap h2 {
+  font: var(--type-heading);
+  letter-spacing: -0.02em;
+}
+
+.pg-cap p {
+  color: var(--ink2);
+}
+
+.pg-body {
+  display: grid;
+  gap: var(--s5);
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .pg {
+    gap: var(--s8);
+  }
+
+  .pg-part {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pg-cap {
+    position: static;
+  }
+}
+
+/* The one filled button on a page: the way into the explorer. */
+.pg-go {
+  display: inline-flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 var(--s5);
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  color: var(--paper);
+  font: var(--type-control);
+  transition: opacity var(--fast) var(--ease), scale var(--fast) var(--ease);
+}
+
+.pg-go:active {
+  scale: 0.97;
+}
+
+@media (hover: hover) {
+  .pg-go:hover {
+    opacity: 0.86;
+  }
+}
+
+/* reveal (pages/reveal.ts): children wait unseen, then rise 24 ms apart as their block comes into view. */
+.rv-wait > * {
+  opacity: 0;
+}
+
+.rv-in > * {
+  animation: rise var(--in) var(--ease) backwards;
+  animation-delay: calc(min(var(--i, 0) * 24ms, 160ms));
+}
+
+@media print {
+  .rv-wait > * {
+    opacity: 1;
+  }
+}

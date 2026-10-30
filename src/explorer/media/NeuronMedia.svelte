@@ -1,12 +1,27 @@
 <script lang="ts">
+  import ModalityMedia from "./ModalityMedia.svelte";
+  import { useLens } from "../lens.svelte";
   import type { Pole } from "../../lib/data";
+  import type { Modality } from "../../lib/models";
 
-  // Stub: replaced by the media lane. What one side of a neuron responds to in images and sound.
-  let { pole, layer, neuron }: { pole: Pole; layer: number; neuron: number } = $props();
+  // What one side of a Gemma 4 neuron responds to in images and in sound. Nothing for a side (or a
+  // model) without media.
+  // layer and neuron name the unit for whoever places this; the side's media carries all it needs.
+  let { pole }: { pole: Pole; layer: number; neuron: number } = $props();
+  const lens = useLens();
+
+  const ORDER: Modality[] = ["image", "audio"];
+  const present = $derived(ORDER.filter((modality) => pole.media?.[modality]));
 </script>
 
-{#if pole.media}<div class="stub">NeuronMedia L{layer} n{neuron} {Object.keys(pole.media).join(", ")}</div>{/if}
+{#if present.length}
+  <div class="media">
+    {#each present as modality (modality)}
+      <ModalityMedia model={lens.modelId} {modality} media={pole.media![modality]!} />
+    {/each}
+  </div>
+{/if}
 
 <style>
-  .stub { padding: var(--s4); border-radius: var(--r-box); background: var(--wash); color: var(--ink3); font: var(--type-small); }
+  .media { display: grid; gap: var(--s6); min-width: 0; }
 </style>

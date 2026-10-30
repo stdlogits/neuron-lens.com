@@ -108,7 +108,7 @@ export function glide(node: HTMLElement, selector = "[aria-pressed='true'], [ari
   const resize = new ResizeObserver(queue);
   resize.observe(node);
   void document.fonts?.ready.then(queue);
-  queue();
+  place();
 
   return {
     update(next?: string) { if (next) selector = next; queue(); },

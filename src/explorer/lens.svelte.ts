@@ -122,6 +122,7 @@ export class Lens {
         this.matches = { neurons: new Set(), heads: new Set() };
         this.failed = false;
         this.scores = null;
+        this.heads = null;
         void loadIndex(model).then((index) => { if (this.modelId === model) this.index = index; }, () => { if (this.modelId === model) this.failed = true; });
         void loadHeadIndex(model).then((heads) => { if (this.modelId === model) this.heads = heads; }, () => undefined);
       });
@@ -222,8 +223,12 @@ export class Lens {
     const all = unit === "neurons" && (this.all || (this.index?.id === this.modelId && !this.index.neurons.some((row) => row[0] === layer && row[1] === index)));
     go(this.hrefFor({ unit, layer, index, all }));
   };
-  /** The next or previous unit in the list (wrapping). Steps replace the history entry. */
-  stepTo = (delta: -1 | 1) => (this.order.length && this.position >= 0 ? this.order[(this.position + delta + this.order.length) % this.order.length] : null);
+  /** The next or previous unit in the list (wrapping); from a unit the filter hides, the list's first. */
+  stepTo = (delta: -1 | 1) => {
+    if (!this.order.length) return null;
+    if (this.position < 0) return this.order[delta === 1 ? 0 : this.order.length - 1];
+    return this.order[(this.position + delta + this.order.length) % this.order.length];
+  };
   step = (delta: -1 | 1) => {
     const next = this.stepTo(delta);
     if (next !== null) go(this.unitHref(this.unit, this.layer, next), { replace: true });

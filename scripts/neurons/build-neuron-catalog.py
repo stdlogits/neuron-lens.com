@@ -1,18 +1,21 @@
 """Build the Neuron Lens explorer's static data from a neuron-lens catalog (Qwen3-8B or Gemma 4 12B).
 
-    uv run --no-project --with pyarrow --with numpy --with tokenizers python -I \
-        scripts/neurons/build-neuron-catalog.py <catalog dir> <tokenizer.json> <out dir> [translations.jsonl,...]
+From the repository root:
 
-The catalog dir is neuron-lens's ``data/catalog/<model>``, whose name picks the model's profile below;
-the files go to ``<out dir>/<model>/``. It holds ``neurons/<table>/L<layer>.parquet`` (a row per pole,
+    uv run --no-project --with pyarrow --with numpy --with tokenizers python -I \
+        scripts/neurons/build-neuron-catalog.py <catalog dir> <tokenizer.json> public/data [translations.jsonl,...]
+
+The catalog dir is neuron-lens's ``data/catalog/<model>`` (``~/Work/neuron-lens/data/catalog/<model>``),
+whose name picks the model's profile below; the files go to ``<out dir>/<model>/``, which the site
+serves as ``/data/<model>/``. It holds ``neurons/<table>/L<layer>.parquet`` (a row per pole,
 the + poles first) and ``heads/<table>.parquet`` (a row per head) for its tables, ``acts``,
 ``drivers``, ``reads``, ``legible`` and ``labels``; Gemma 4 adds ``neurons/{image,audio}/``,
 ``neurons/{image,audio}_optimised.parquet``, ``heads/media.parquet`` and ``media/*_docs.parquet``.
 Every neuron and head is written, with everything the page would otherwise compute baked in: decoded
 tokens, the hub filter, merged variants, strength percentiles, which reads to trust at each depth
 (the labeller's plan, so the page shows the evidence Haiku saw), the tokens two lenses (or a lens and
-a measurement) agree on, the translations from ``translate.py`` (every run's ``translations.jsonl``,
-comma-separated: a term means the same whichever model's run translated it), and for Gemma 4 each
+a measurement) agree on, the translations from ``translate.py`` (every run's ``translations.jsonl``
+under ``.neuron-lens/``, comma-separated: a term means the same whichever model's run translated it), and for Gemma 4 each
 pole's image and sound evidence.
 
 Output, all JSON:
@@ -28,6 +31,9 @@ Output, all JSON:
 - Gemma 4: ``media/<modality>/d<block>.json``: each image's or sound's source, labels, caption (and
   its translation), link, and where ``media.py`` packed it when this site can show it, ``DOC_BLOCK``
   documents to a file, which the poles' top documents name by number. Run ``media.py`` first.
+
+The site's types for these files are in ``src/lib/data.ts``: change both together, and the e2e mock
+catalog with them (``node e2e/fixtures/build.mjs``).
 
 ``NEURON_LAYERS=8,21`` builds only those layers (for development).
 """

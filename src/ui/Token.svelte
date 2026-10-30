@@ -48,6 +48,7 @@
 
 <style>
   .tok {
+    position: relative;
     display: inline-flex;
     align-items: baseline;
     max-width: 100%;

@@ -44,7 +44,7 @@
 
 <style>
   .site { display: flex; flex-direction: column; min-height: 100svh; }
-  main { flex: 1; display: grid; align-content: start; width: 100%; max-width: var(--page); margin: 0 auto; padding: var(--s7) var(--gutter) var(--s9); }
+  main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; width: 100%; max-width: var(--page); margin: 0 auto; padding: var(--s7) var(--gutter) var(--s9); }
   main:focus { outline: none; }
   .skip { position: fixed; left: var(--s2); top: var(--s2); z-index: 60; padding: var(--s2) var(--s4); border-radius: var(--r-pill); background: var(--ink); color: var(--paper); font: var(--type-control); transform: translateY(-200%); }
   .skip:focus { transform: none; }

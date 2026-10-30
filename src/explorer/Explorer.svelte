@@ -57,7 +57,7 @@
         <Segmented options={units} value={lens.unit} onchange={lens.setUnit} label="Units" />
         <Tabs options={scopes} value={lens.unit === "heads" || lens.all ? "all" : "easiest"} onchange={(value) => lens.setAll(value === "all")} label="Which units" />
       </div>
-      <Tabs options={lens.filters} value={lens.activeFilter.value} onchange={(value) => (lens.filter = value)} label="Filter" />
+      <div class="filters"><Tabs options={lens.filters} value={lens.activeFilter.value} onchange={(value) => (lens.filter = value)} label="Filter" scroll /></div>
     </div>
     <Atlas />
   </section>
@@ -79,17 +79,20 @@
 </div>
 
 <style>
-  .explorer { display: grid; gap: var(--s7); min-width: 0; transition: --tint var(--glide) var(--ease); }
+  .explorer { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s7); min-width: 0; transition: --tint var(--glide) var(--ease); }
   .intro { display: grid; justify-items: start; gap: var(--s5); }
   h1 { font: var(--type-title); letter-spacing: -0.04em; }
   .lede { max-width: 56ch; color: var(--ink2); font: var(--type-body); }
   .figures { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s5); color: var(--ink3); font: var(--type-small); }
   .figures b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
   .find { width: min(100%, 640px); }
-  .map { display: grid; gap: var(--s4); min-width: 0; }
-  .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s4); }
+  .map { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); min-width: 0; }
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s4); min-width: 0; }
   .left { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s5); }
+  .filters { min-width: 0; max-width: 100%; }
   .panes { display: flex; flex-wrap: wrap; align-items: start; gap: var(--s7); scroll-margin-top: var(--s5); }
+  /* On a phone the chosen unit comes first, under the atlas; the layer's list follows it. */
+  @media (max-width: 720px) { .panes > :global(nav.layer) { order: 2; } }
   .notice { color: var(--ink2); }
   .foot { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); }
   kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 var(--s1); border-radius: var(--r-chip); background: var(--wash); color: var(--ink2); font: var(--type-meta); }

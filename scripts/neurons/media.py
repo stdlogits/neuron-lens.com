@@ -2,13 +2,16 @@
 licences let this site show them, as the model saw them: 384 × 384 images (photographs
 centre-cropped, documents and drawings letterboxed) and the middle 2.56 s of each sound at 16 kHz.
 
+From the repository root:
+
     uv run --no-project --with-editable "$HOME/Work/neuron-lens[media]" python -I \
-        scripts/neurons/media.py <catalog dir> <out dir> [--sources fleurs,mnist] [--modality audio]
+        scripts/neurons/media.py ~/Work/neuron-lens/data/catalog/gemma-4-12b public/data/gemma-4-12b \
+        [--sources fleurs,mnist] [--modality audio]
 
 ``--modality ""`` only rewrites the credits from the packs already on disk.
 
 The catalog dir is neuron-lens's ``data/catalog/gemma-4-12b``; the out dir is the model's data folder
-(``public-hosted/neurons-data/gemma-4-12b``). Each allowed source is streamed again with
+(``public/data/gemma-4-12b``). Each allowed source is streamed again with
 neuron-lens's own reader (``media_sets._take``: the same split, seed and count as the exemplar run),
 and an item is kept only when its bytes' SHA-1 matches its document's, so a page never shows an image
 or sound other than the one the catalog names. Synthetic probes are drawn again and matched by their
@@ -18,7 +21,7 @@ Output, under ``<out dir>/media/``:
 
 - ``<modality>/p<pack>.bin``: WebP thumbnails (192 px) or MP3 clips (32 kbps), end to end, each pack
   under ``PACK_BYTES``; the page fetches one by HTTP range (one file a pack keeps the site under
-  Cloudflare Pages' file limit);
+  Cloudflare Pages' file limit, and the site's CSP must allow the ``blob:`` URLs it shows them from);
 - ``<modality>/hosted.json``: document -> [pack, offset, length];
 - ``credits.json``: each shown source's name, licence and credit, for the page.
 

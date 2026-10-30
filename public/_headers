@@ -1,0 +1,31 @@
+# Cloudflare Pages response headers. scripts/verify-deployment.mjs reads this file and checks the live
+# site against it, so it is the one place these are written down.
+#
+# Rules apply in order; a header set by two rules is joined with a comma, so a later rule replaces one
+# with "! Name" before setting it again.
+#
+# CSP: scripts only from this origin (public/theme.js is a file for that reason: no inline scripts);
+# inline styles because Svelte sets style attributes; images and sounds from blob: because the
+# explorer turns each one cut from a media pack into a blob: URL, and images from data: for the
+# optimised patches the catalog carries inline. The dev server sends none of this, so a CSP mistake
+# only shows on the deployed site.
+
+/*
+  Content-Security-Policy: default-src 'self'; base-uri 'none'; connect-src 'self'; font-src 'self'; form-action 'none'; frame-ancestors 'none'; img-src 'self' data: blob:; media-src 'self' blob:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'
+  Cross-Origin-Opener-Policy: same-origin
+  Permissions-Policy: accelerometer=(), bluetooth=(), browsing-topics=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), magnetometer=(), microphone=(), midi=(), payment=(), publickey-credentials-get=(), serial=(), usb=(), xr-spatial-tracking=()
+  Referrer-Policy: no-referrer
+  Strict-Transport-Security: max-age=31536000
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Cache-Control: no-cache
+
+# Hashed by Vite: a new build has new names.
+/assets/*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+# The catalog changes only when it is rebuilt and redeployed, which is rare.
+/data/*
+  ! Cache-Control
+  Cache-Control: public, max-age=3600, stale-while-revalidate=86400

@@ -1,7 +1,9 @@
 """Machine-translate the Neuron Lens explorer's non-English text with Claude Haiku 5.5 (Batch API).
 
+From the repository root:
+
     uv run --no-project --with anthropic --with pyarrow --with torch --with tokenizers python -I \
-        scripts/neurons/translate.py <stage> --catalog <catalog dir> --tokenizer <tokenizer.json> --work <dir>
+        scripts/neurons/translate.py <stage> --catalog <catalog dir> --tokenizer <tokenizer.json> [--work <dir>]
 
 Three kinds of item, collected from a neuron-lens catalog (Qwen3-8B or Gemma 4 12B):
 
@@ -16,7 +18,8 @@ Three kinds of item, collected from a neuron-lens catalog (Qwen3-8B or Gemma 4 1
 ``--parts`` picks what ``collect`` gathers (``vocab,contexts,captions,labels``), so a model's labels
 can be translated in their own run once they exist; ``--known`` names other runs' ``items.jsonl``,
 whose items are skipped. Each run keeps its state in its own ``--work`` folder, by default
-``webui/.neuron-lens/<model>``.
+``.neuron-lens/<model>`` (gitignored); a later labels-only run goes in a folder of its own, such as
+``.neuron-lens/gemma-4-12b-labels``.
 
 Stages (state under ``--work``; nothing is sent to the API without an explicit stage):
 
@@ -458,7 +461,7 @@ def main() -> None:
     ap.add_argument("--catalog", default=str(Path.home() / "Work/neuron-lens/data/catalog/qwen3-8b"))
     ap.add_argument("--token-counts", help="default: neuron-lens's token counts for the catalog's model")
     ap.add_argument("--tokenizer")
-    ap.add_argument("--work", help="default: webui/.neuron-lens/<model>")
+    ap.add_argument("--work", help="default: .neuron-lens/<model> in the repository")
     ap.add_argument("--parts", default="vocab,contexts,captions,labels")
     ap.add_argument("--known", default="", help="comma-separated items.jsonl of earlier runs, whose items are skipped")
     ap.add_argument("--n", type=int, default=12, help="pilot requests per kind")

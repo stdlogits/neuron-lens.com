@@ -43,7 +43,8 @@
   .open .chev { rotate: 180deg; }
   .body { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows var(--glide) var(--ease), opacity var(--glide) var(--ease); }
   .open .body { grid-template-rows: 1fr; opacity: 1; }
-  .inner { min-height: 0; overflow: hidden; }
+  /* Positioned, so absolutely placed text inside (screen-reader copies) is clipped with the rest. */
+  .inner { position: relative; min-height: 0; overflow: hidden; }
   .open .inner { overflow: visible; }
   .inner > :global(:first-child) { margin-top: var(--s4); }
 </style>
