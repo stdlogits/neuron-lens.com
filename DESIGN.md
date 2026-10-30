@@ -1,7 +1,7 @@
 # Design
 
 Neuron Lens is drawn in one language, "Ledger": white paper, two washes, three inks, one accent, no
-lines. It is where Drowse's next look is being tried out, so what works here may travel.
+lines.
 
 ## Principles
 

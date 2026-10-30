@@ -10,7 +10,6 @@
   <nav aria-label="Site">
     <a href="/about" aria-current={page === "about" ? "page" : undefined}>About</a>
     <a href="/credits" aria-current={page === "credits" ? "page" : undefined}>Credits</a>
-    <a href="https://drowse.ai" rel="external noreferrer" class="out">Drowse<Icon name="external" size={14} /></a>
     <button type="button" class="theme" onclick={toggleTheme} aria-label={theme.mode === "dark" ? "Use light theme" : "Use dark theme"} data-tip={theme.mode === "dark" ? "Light" : "Dark"}>
       <span class="sun" class:on={theme.mode === "dark"}><Icon name="sun" /></span>
       <span class="moon" class:on={theme.mode !== "dark"}><Icon name="moon" /></span>
@@ -31,5 +30,5 @@
   /* The two icons trade places with a quarter turn. */
   .theme span { grid-area: 1 / 1; display: grid; opacity: 0; rotate: -90deg; scale: 0.6; transition: opacity var(--glide) var(--ease), rotate var(--glide) var(--ease), scale var(--glide) var(--ease); }
   .theme span.on { opacity: 1; rotate: 0deg; scale: 1; }
-  @media (max-width: 520px) { nav { gap: var(--s4); } .out { display: none !important; } }
+  @media (max-width: 520px) { nav { gap: var(--s4); } }
 </style>

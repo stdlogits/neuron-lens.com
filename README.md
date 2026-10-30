@@ -6,9 +6,8 @@ ideas that set it off, the examples where it fired hardest, what pushing it prom
 the images and sounds it responds to. Every unit has an address (`/qwen3-8b/L8/n344`,
 `/gemma-4-12b/L35/h14`).
 
-It started as a page of [drowse](https://drowse.ai), whose old links still lead here. The readings come
-from the neuron-lens analysis (weight lenses, top firings, steering checks), with labels by Claude
-Haiku 5.5.
+The readings come from the neuron-lens analysis (weight lenses, top firings, steering checks), with
+labels by Claude Haiku 5.5.
 
 ## Run it
 

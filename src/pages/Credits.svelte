@@ -78,12 +78,6 @@
     ],
   };
 
-  const drowse: Group = {
-    id: "drowse",
-    title: "Part of",
-    lines: [{ name: ext("Drowse", "https://drowse.ai"), detail: [ext("drowse.ai", "https://drowse.ai")] }],
-  };
-
   let media = $state<MediaCredits | null>(null);
   let mediaFailed = $state(false);
   onMount(() => { loadMediaCredits("gemma-4-12b").then((credits) => (media = credits), () => (mediaFailed = true)); });
@@ -101,7 +95,6 @@
       { id: "sounds", title: "Sounds", lines: collections("audio"), note: "Images and sounds from other collections are linked to their sources, never hosted here." },
     ] : []),
     software,
-    drowse,
   ]);
 
   $effect(() => { document.title = "Credits · Neuron Lens"; });
