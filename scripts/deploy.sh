@@ -13,9 +13,12 @@
 # custom domain. Leave the zone's Web Analytics injection, Rocket Loader and email obfuscation off:
 # each puts an inline script in the HTML, which the CSP blocks.
 #
-# Credentials come only from the environment: CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages >
-# Edit) and CLOUDFLARE_ACCOUNT_ID. This machine's `wrangler login` belongs to the other account, so
-# Wrangler runs here with an empty home and never sees it.
+# Which account: CLOUDFLARE_ACCOUNT_ID, from the environment or from ~/.config/cloudflare/neuron-lens.env
+# (outside the repo; NEURON_LENS_DEPLOY_ENV names another file). It is required, because the Cloudflare
+# user this machine is logged in as also reaches the account that hosts drowse.ai: every Wrangler call
+# here is pinned to that one ID. How to sign in: with CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages >
+# Edit) Wrangler runs on that token alone, with an empty home; without one it uses this machine's
+# `wrangler login`. Either way no other credential variable reaches it.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -32,13 +35,16 @@ while (($#)); do
   shift
 done
 
-if [[ "$dry_run" == 0 ]]; then
-  for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
-    if [[ -z "${!name:-}" ]]; then
-      echo "deploy: set $name (a9's account; see the top of this script)" >&2
-      exit 1
-    fi
-  done
+config=${NEURON_LENS_DEPLOY_ENV:-$HOME/.config/cloudflare/neuron-lens.env}
+if [[ -f "$config" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$config"
+  set +a
+fi
+if [[ "$dry_run" == 0 && ! "${CLOUDFLARE_ACCOUNT_ID:-}" =~ ^[0-9a-f]{32}$ ]]; then
+  echo "deploy: set CLOUDFLARE_ACCOUNT_ID to a9's account (in $config or the environment; see the top of this script)" >&2
+  exit 1
 fi
 
 # The upload records HEAD as its commit, so HEAD must be committed and on origin/main. A dry run
@@ -82,16 +88,22 @@ echo "deploy: dist has $files files, $(du -sh dist | cut -f1), none over 25 MiB"
 
 [[ "$dry_run" == 1 ]] && exit 0
 
-# Wrangler with an empty home and nothing else from this shell: no saved login, and no other
-# credential variable (it also honours CF_API_KEY/CF_EMAIL and prefers a global key to the token).
-# It would also read a .env in the repo, so it gets an empty one instead.
-wrangler_home=$(mktemp -d)
-trap 'rm -rf "$wrangler_home"' EXIT
-: > "$wrangler_home/empty.env"
-env -i PATH="$PATH" TMPDIR="${TMPDIR:-/tmp}" LANG="${LANG:-en_US.UTF-8}" \
-  HOME="$wrangler_home" XDG_CONFIG_HOME="$wrangler_home/config" WRANGLER_SEND_METRICS=false \
-  CLOUDFLARE_API_TOKEN="$CLOUDFLARE_API_TOKEN" CLOUDFLARE_ACCOUNT_ID="$CLOUDFLARE_ACCOUNT_ID" \
-  ./node_modules/.bin/wrangler pages deploy dist --env-file "$wrangler_home/empty.env" --project-name neuron-lens --branch main \
+# Wrangler sees nothing else from this shell: no stray credential variable (it also honours
+# CF_API_KEY/CF_EMAIL and prefers a global key to a token), and an empty .env in place of any in the
+# repo. With a token it also gets an empty home, so no saved login either.
+scratch=$(mktemp -d)
+trap 'rm -rf "$scratch"' EXIT
+: > "$scratch/empty.env"
+if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]]; then
+  auth=(HOME="$scratch" XDG_CONFIG_HOME="$scratch/config" CLOUDFLARE_API_TOKEN="$CLOUDFLARE_API_TOKEN")
+  echo "deploy: signing in with CLOUDFLARE_API_TOKEN"
+else
+  auth=(HOME="$HOME")
+  echo "deploy: signing in with this machine's wrangler login"
+fi
+env -i PATH="$PATH" TMPDIR="${TMPDIR:-/tmp}" LANG="${LANG:-en_US.UTF-8}" WRANGLER_SEND_METRICS=false \
+  CLOUDFLARE_ACCOUNT_ID="$CLOUDFLARE_ACCOUNT_ID" "${auth[@]}" \
+  ./node_modules/.bin/wrangler pages deploy dist --env-file "$scratch/empty.env" --project-name neuron-lens --branch main \
   --commit-hash "$rev" --commit-message "$(git log -1 --format=%s)" --commit-dirty=false
 
 node scripts/verify-deployment.mjs "$origin" --build dist

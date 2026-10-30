@@ -36,8 +36,8 @@ e2e tests bring their own mock catalog (`e2e/fixtures`).
 
 `scripts/deploy.sh` builds from a clean, pushed `main` with the catalog in place, uploads `dist` to
 Cloudflare Pages with Wrangler, and checks the live site with `scripts/verify-deployment.mjs`. It
-takes its credentials from `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; `--dry-run` stops
-before the upload.
+needs `CLOUDFLARE_ACCOUNT_ID` (in the environment or `~/.config/cloudflare/neuron-lens.env`) and signs
+in with `CLOUDFLARE_API_TOKEN` if set, else with `wrangler login`; `--dry-run` stops before the upload.
 
 ## Credits
 

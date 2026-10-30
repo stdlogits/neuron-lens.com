@@ -104,10 +104,13 @@ Pages caps a site at 20,000 files (Free plan) and a file at 25 MiB; media packs 
 ## Deploy
 
 `scripts/deploy.sh` (`npm run deploy`) deploys to the Cloudflare Pages project `neuron-lens` in a9's
-own Cloudflare account, production branch `main`, then verifies `https://neuron-lens.com`. That
-account is not the one that hosts drowse.ai, whose `wrangler login` is on this machine: the script
-takes `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` from the environment only, and runs Wrangler
-with an empty home so it can never fall back to that login. Never run `wrangler login` for this site.
+own Cloudflare account, production branch `main`, then verifies `https://neuron-lens.com`. The
+Cloudflare user logged in on this machine reaches that account and also the one that hosts drowse.ai,
+so the script pins every Wrangler call to `CLOUDFLARE_ACCOUNT_ID`, which it requires (from the
+environment or `~/.config/cloudflare/neuron-lens.env`, outside the repo). It signs in with
+`CLOUDFLARE_API_TOKEN` when set (then Wrangler gets an empty home), else with the machine's
+`wrangler login`, and passes Wrangler no other credential variable and an empty `.env`. Never run a
+Wrangler command for this site without that account ID.
 
 It refuses a dirty tree, a HEAD not on `origin/main`, or a missing catalog; runs `npm ci`, `check` and
 `build`; checks `dist` against Pages' file limits; uploads with the pinned Wrangler
