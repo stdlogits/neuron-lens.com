@@ -29,17 +29,34 @@
     loadIndex(id).then((index) => { layers[id] = index.layerMeta; }, () => { failed = true; });
   });
 
-  // The dark band speaks through the model's caution: its first sentence leads, the rest follows.
-  const caution = $derived.by(() => {
-    const at = model.caution.indexOf(". ");
-    return at < 0 ? [model.caution, ""] : [model.caution.slice(0, at + 1), model.caution.slice(at + 2)];
-  });
+  // What to trust in each band, for each half of a pole (the research README's "which reads to trust
+  // where"): the read that holds, then what it shows. Lens reads are tinted; the rest are not.
+  type Read = [read: string, shows: string];
+  const TRUST: Record<ModelId, Record<string, { drives: Read; writes: Read }>> = {
+    "qwen3-8b": {
+      embed: { drives: ["S-lens", "the literal token"], writes: ["S-lens", "the tokens it detects"] },
+      early: { drives: ["S-lens", "literal tokens"], writes: ["S-lens", "the tokens it detects; the R-lens from about L4"] },
+      crossover: { drives: ["Both lenses", "agreeing most"], writes: ["Both lenses", "agreeing most"] },
+      concept: { drives: ["R-lens", "concepts, and the exact drivers"], writes: ["R-lens", "what steering does, rarely what follows"] },
+      dark: { drives: ["Exact drivers", "and activations, nothing else"], writes: ["R-lens", "what steering does"] },
+      predict: { drives: ["R-lens", "and the exact drivers"], writes: ["R-lens", "the next token, from about L23"] },
+      suppress: { drives: ["R-lens", "and the exact drivers"], writes: ["R-lens", "the next token, held back"] },
+    },
+    "gemma-4-12b": {
+      token: { drives: ["S-lens", "literal tokens"], writes: ["Nothing", "too weak to read"] },
+      early: { drives: ["S-lens", "fading by L9, back at L10–13"], writes: ["R-lens", "what steering does, from L11"] },
+      middle: { drives: ["Exact drivers", "and activations, nothing else"], writes: ["R-lens", "what steering does"] },
+      late: { drives: ["Examples", "input reads are weak"], writes: ["R-lens", "the next word, at L33–40"] },
+    },
+  };
+  const trust = $derived(TRUST[modelId][band.key] ?? null);
+  const isLens = (read: string) => /lens/.test(read);
   const tabs = $derived(model.bands.map((b) => ({ value: b.key, label: b.short, hint: `${b.name}, ${bandRange(b)}` })));
 </script>
 
 <Part id="depth" title="Depth" onnear={() => (wanted = true)}>
   {#snippet caption()}
-    <p>What a neuron's weights give away changes with depth. Each bar is a layer, as tall as the share of its neurons a weight-only read explains.</p>
+    <p>Each bar: how much of a layer its weights explain.</p>
   {/snippet}
   <div class="spec">
     <Segmented options={models} value={modelId} onchange={(id) => (modelId = id)} label="Model" />
@@ -75,10 +92,19 @@
     </div>
     <Tabs options={tabs} value={band.key} onchange={choose} label="Depth" />
     <Swap key="{modelId}:{band.key}">
-      <div class="band">
+      <div class="band" style:--tint={depthColor(model, Math.round((band.first + band.last) / 2))}>
         <p class="name">{band.name}<span class="meta">{bandRange(band)}</span></p>
-        <p class="lead">{band.dark ? caution[0] : band.summary}</p>
-        <p class="reading">{band.dark ? caution[1] : band.reading}</p>
+        <p class="lead">{band.summary}</p>
+        {#if trust}
+          <div class="trust">
+            {#each [{ half: "What drives it", read: trust.drives }, { half: "What it writes", read: trust.writes }] as cell (cell.half)}
+              <div class="cell">
+                <p class="meta">{cell.half}</p>
+                <p><b class="read" class:lens={isLens(cell.read[0])}>{cell.read[0]}</b> {cell.read[1]}</p>
+              </div>
+            {/each}
+          </div>
+        {/if}
         <a class="prose-link open" href="/{modelId}/L{band.first}">Open layer {band.first}</a>
       </div>
     </Swap>
@@ -116,11 +142,14 @@
   :global(.rv-in) .col i { animation: grow var(--glide) var(--ease) backwards; animation-delay: var(--d); }
   @keyframes grow { from { transform: scaleY(0); } }
   .axis { display: flex; justify-content: space-between; }
-  .band { display: grid; justify-items: start; gap: var(--s2); max-width: 64ch; }
+  .band { display: grid; justify-items: start; gap: var(--s2); max-width: 72ch; }
   .name { display: flex; align-items: baseline; gap: var(--s3); font: var(--type-label); }
   .lead { font: var(--type-lead); }
-  .reading { color: var(--ink2); }
+  .trust { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3) var(--s5); width: 100%; margin-top: var(--s2); }
+  .cell { display: grid; align-content: start; gap: var(--s1); color: var(--ink2); }
+  .read { display: inline-block; margin-right: var(--s1); padding: 0 var(--s2); border-radius: var(--r-chip); background: var(--wash); color: var(--ink); font: var(--type-control); line-height: 24px; }
+  .read.lens { background: color-mix(in oklch, var(--tint) 14%, var(--paper)); }
   .open { margin-top: var(--s2); font: var(--type-control); }
-  @media (max-width: 600px) { .ramp { height: 128px; } .col i { width: 72%; } }
+  @media (max-width: 600px) { .ramp { height: 128px; } .col i { width: 72%; } .trust { grid-template-columns: minmax(0, 1fr); } }
   @media (prefers-reduced-motion: reduce) { :global(.rv-in) .col i { animation: none; } }
 </style>

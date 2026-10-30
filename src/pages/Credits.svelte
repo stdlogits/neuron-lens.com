@@ -55,13 +55,33 @@
     ],
   };
 
-  const site: Group = {
-    id: "site",
-    title: "This site",
+  const methods: Group = {
+    id: "methods",
+    title: "Methods",
     lines: [
-      { name: ext("Source", "https://github.com/stdlogits/neuron-lens.com"), detail: [ext("stdlogits/neuron-lens.com", "https://github.com/stdlogits/neuron-lens.com")], licence: ext("AGPL-3.0", "https://www.gnu.org/licenses/agpl-3.0.html") },
-      { name: ext("Drowse", "https://drowse.ai"), detail: [ext("Neuron Lens is part of Drowse")] },
+      { name: ext("Logit lens", "https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens"), detail: [ext("nostalgebraist, 2020")] },
+      { name: ext("J-lens", "https://transformer-circuits.pub/2026/workspace/"), detail: [ext("Gurnee et al., 2026")] },
+      { name: ext("R-lens", "https://www.lesswrong.com/posts/nv8oedrnLXKRzNEL9/r-lens-making-j-lens-more-faithful-on-early-layers"), detail: [ext("camilablank et al., 2026")] },
+      { name: ext("K-lens", "https://x.com/voooooogel/status/2084858861551526002"), detail: [ext("Theia Vogel, 2026")] },
+      { name: ext("RelP", "https://arxiv.org/abs/2508.21258"), detail: [ext("arXiv 2508.21258")] },
     ],
+  };
+
+  const code: Group = {
+    id: "code",
+    title: "Data and code",
+    lines: [
+      { name: ext("Catalog", "https://huggingface.co/datasets/stdlogits/neuron-lens"), detail: [ext("stdlogits/neuron-lens", "https://huggingface.co/datasets/stdlogits/neuron-lens"), ext("Hugging Face")] },
+      { name: ext("Lenses", "https://huggingface.co/stdlogits/rs-lenses"), detail: [ext("stdlogits/rs-lenses", "https://huggingface.co/stdlogits/rs-lenses"), ext("Hugging Face")] },
+      { name: ext("Research and findings", "https://github.com/stdlogits/neuron-lens"), detail: [ext("stdlogits/neuron-lens", "https://github.com/stdlogits/neuron-lens"), ext("GitHub")] },
+      { name: ext("This site", "https://github.com/stdlogits/neuron-lens.com"), detail: [ext("stdlogits/neuron-lens.com", "https://github.com/stdlogits/neuron-lens.com"), ext("GitHub")], licence: ext("AGPL-3.0", "https://www.gnu.org/licenses/agpl-3.0.html") },
+    ],
+  };
+
+  const drowse: Group = {
+    id: "drowse",
+    title: "Part of",
+    lines: [{ name: ext("Drowse", "https://drowse.ai"), detail: [ext("drowse.ai", "https://drowse.ai")] }],
   };
 
   let media = $state<MediaCredits | null>(null);
@@ -74,12 +94,14 @@
   const groups = $derived<Group[]>([
     people,
     models,
+    methods,
+    code,
     ...(media ? [
       { id: "images", title: "Images", lines: collections("image") },
       { id: "sounds", title: "Sounds", lines: collections("audio"), note: "Images and sounds from other collections are linked to their sources, never hosted here." },
     ] : []),
     software,
-    site,
+    drowse,
   ]);
 
   $effect(() => { document.title = "Credits · Neuron Lens"; });

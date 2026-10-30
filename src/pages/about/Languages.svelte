@@ -23,7 +23,7 @@
 
 <Part id="languages" title="Other languages" onnear={load} tint={depthColor(MODELS[OWL.model], OWL.layer)}>
   {#snippet caption()}
-    <p>Much of what these models read isn't English. Switch on English and the rest turns into machine translations by Claude Haiku 5.5.</p>
+    <p>Machine translations by Claude Haiku 5.5.</p>
   {/snippet}
   <div class="spec">
     <div class="top">

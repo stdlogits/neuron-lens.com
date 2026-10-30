@@ -22,8 +22,9 @@ const target = resolve(here, "catalog");
 
 /** easiest: layer -> how many of its easiest neurons; neurons: [layer, neuron] deep links; heads: layer -> how many, plus named ones. */
 const KEEP = {
-  "qwen3-8b": { easiest: { 8: 6 }, neurons: [[8, 344]], allTop: 2, heads: { 20: { top: 4, named: [17] } } },
-  "gemma-4-12b": { easiest: { 23: 4 }, neurons: [[33, 12225], [14, 8313]], allTop: 2, heads: { 28: { top: 4, named: [6] } } },
+  // Qwen3-8B also keeps the About page's gallery (src/pages/about/specimens.ts); Gemma 4 its head.
+  "qwen3-8b": { easiest: { 8: 6 }, neurons: [[8, 344], [1, 11672], [8, 1931], [28, 8868], [30, 1034], [35, 9510]], allTop: 2, heads: { 20: { top: 4, named: [17] } } },
+  "gemma-4-12b": { easiest: { 23: 4 }, neurons: [[33, 12225], [14, 8313]], allTop: 2, heads: { 28: { top: 4, named: [6] }, 35: { top: 1, named: [14] } } },
 };
 
 const pad = (value, width = 2) => String(value).padStart(width, "0");

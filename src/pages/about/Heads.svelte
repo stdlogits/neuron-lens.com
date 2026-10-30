@@ -5,7 +5,7 @@
   import Context from "../../ui/Context.svelte";
   import LabelText from "../../ui/LabelText.svelte";
   import { PATTERN_NAMES, PATTERN_THRESHOLDS, ROLES, describeRole, loadHeadLayer, type HeadDetail } from "../../lib/data";
-  import { MODELS, depthColor, headBandNote } from "../../lib/models";
+  import { MODELS, depthColor } from "../../lib/models";
   import { INDUCTION } from "./specimens";
 
   // An attention head: its three labels, one firing with the token it looked at, where it looks on
@@ -28,7 +28,7 @@
 
 <Part id="heads" title="Heads" onnear={load} tint={depthColor(model, INDUCTION.layer)}>
   {#snippet caption()}
-    <p>Attention heads carry words from one place in the text to another. Each is labelled for what it fires on, what it attends to and what it writes.</p>
+    <p>Where a head looks, and what it carries.</p>
   {/snippet}
   <div class="spec">
     <UnitLink model={INDUCTION.model} layer={INDUCTION.layer} head={INDUCTION.h} />
@@ -71,7 +71,6 @@
                   <li><button type="button" class="role" class:own data-tip-title={role.name} data-tip={describeRole(role, model)}>{role.short}{#if own}<span class="sr-only"> (this head)</span>{/if}</button></li>
                 {/each}
               </ul>
-              <p class="note">{headBandNote(model, INDUCTION.layer)}</p>
             </div>
           </div>
         </div>
@@ -107,7 +106,6 @@
   .role { display: inline-block; margin: 0; padding: 0; border: 0; background: transparent; color: var(--ink3); font: var(--type-small); cursor: help; transition: color var(--fast) var(--ease); }
   .role.own { padding: 0 var(--s2); border-radius: var(--r-chip); background: color-mix(in oklch, var(--tint) 14%, var(--paper)); color: var(--ink); font-weight: 500; }
   @media (hover: hover) { .role:hover { color: var(--ink); } }
-  .note { margin-top: var(--s2); color: var(--ink2); font: var(--type-small); }
   .ghost { height: 240px; border-radius: var(--r-row); background: var(--wash); }
   @media (max-width: 760px) {
     .labels { grid-template-columns: minmax(0, 1fr); }

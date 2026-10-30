@@ -5,7 +5,7 @@
   import Token from "../../ui/Token.svelte";
   import Icon from "../../ui/Icon.svelte";
   import LabelText from "../../ui/LabelText.svelte";
-  import { headline, loadIndex, loadMediaDoc, loadNeuron, mediaUrl, type MediaDoc, type Pole } from "../../lib/data";
+  import { headline, loadIndex, loadMediaDoc, loadNeuron, mediaUrl, releaseMedia, type MediaDoc, type Pole } from "../../lib/data";
   import { MODELS, depthColor, type Modality } from "../../lib/models";
   import { playOnly, sourceName } from "../../lib/media";
   import { translation } from "../../lib/translate.svelte";
@@ -22,6 +22,14 @@
   let sounds = $state<Item[]>([]);
   let failed = $state(false);
 
+  // Every mediaUrl call holds its blob until released: each is noted here and let go on destroy.
+  const held: [Modality, [number, number, number]][] = [];
+  let gone = false;
+  function hold(modality: Modality, where: [number, number, number]) {
+    held.push([modality, where]);
+    return mediaUrl(APPLE.model, modality, where);
+  }
+
   async function load() {
     try {
       const [detail, index] = await Promise.all([loadNeuron(APPLE.model, APPLE.layer, APPLE.n), loadIndex(APPLE.model)]);
@@ -32,15 +40,16 @@
         return info ? { doc, info, url: null } : null;
       }));
       const [imageList, soundList] = await Promise.all([docs("image"), docs("audio")]);
+      if (gone) return;
       pole = side;
       images = imageList.filter((item): item is Item => item !== null);
       sounds = soundList.filter((item): item is Item => item !== null && item.info.h !== undefined).slice(0, 3);
       // Shown images come out of their pack by range, one at a time as they arrive.
       for (const item of images) {
         if (!item.info.h) continue;
-        void mediaUrl(APPLE.model, "image", item.info.h).then((url) => {
+        void hold("image", item.info.h).then((url) => {
           const at = images.findIndex((i) => i.doc === item.doc);
-          if (at >= 0) images[at] = { ...images[at], url };
+          if (!gone && at >= 0) images[at] = { ...images[at], url };
         }, () => undefined);
       }
     } catch {
@@ -56,28 +65,41 @@
     return text === text.toUpperCase() ? text.charAt(0) + text.slice(1).toLowerCase() : text;
   };
 
+  // One sound at a time. Each press takes a ticket; stopping or leaving voids it, so a clip whose
+  // bytes arrive late never starts on its own.
   let playing = $state<number | null>(null);
   let stop: (() => void) | null = null;
-  async function toggle(item: Item) {
-    if (playing === item.doc) { stop?.(); return; }
+  let ticket = 0;
+  function halt() {
+    ticket += 1;
     stop?.();
-    if (!item.info.h) return;
+    stop = null;
+    playing = null;
+  }
+  async function toggle(item: Item) {
+    const again = playing === item.doc;
+    halt();
+    if (again || !item.info.h) return;
+    const mine = ticket;
     playing = item.doc;
     try {
-      const url = await mediaUrl(APPLE.model, "audio", item.info.h);
-      if (playing !== item.doc) return;
-      stop = playOnly(url, () => { if (playing === item.doc) playing = null; });
+      const url = await hold("audio", item.info.h);
+      if (mine !== ticket) return;
+      stop = playOnly(url, () => { if (mine === ticket) { playing = null; stop = null; } });
     } catch {
-      playing = null;
+      if (mine === ticket) playing = null;
     }
   }
-  $effect(() => () => stop?.());
+  $effect(() => () => {
+    gone = true;
+    halt();
+    for (const [modality, where] of held.splice(0)) releaseMedia(APPLE.model, modality, where);
+  });
 </script>
 
 <Part id="media" title="Images and sound" onnear={load} tint={depthColor(model, APPLE.layer)}>
   {#snippet caption()}
-    <p>{model.name} takes in images and sound too, so its neurons were also read on 50,000 images and 47,000 sounds.</p>
-    <p class="meta">Some are shown under their licences; the rest are linked. <a class="prose-link" href="/credits">Credits</a></p>
+    <p>{model.name} also reads 50,000 images and 47,000 sounds.</p>
   {/snippet}
   <div class="spec">
     <UnitLink model={APPLE.model} layer={APPLE.layer} neuron={APPLE.n} />
@@ -105,6 +127,7 @@
                   </li>
                 {/each}
               </ul>
+              <p class="meta">Drawn ones are shown under their licences; the rest link out. <a class="prose-link" href="/credits">Credits</a></p>
             </div>
           {/if}
 

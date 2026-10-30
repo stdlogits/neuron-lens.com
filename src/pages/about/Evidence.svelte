@@ -1,71 +1,78 @@
 <script lang="ts">
   import Part from "../Part.svelte";
-  import UnitLink from "./UnitLink.svelte";
-  import Swap from "../../ui/Swap.svelte";
   import Token from "../../ui/Token.svelte";
-  import Meter from "../../ui/Meter.svelte";
-  import { headline, loadNeuron, type NeuronDetail, type ReadColumn } from "../../lib/data";
+  import Context from "../../ui/Context.svelte";
+  import { headline, loadNeuron, neuronId, type Pole } from "../../lib/data";
   import { MODELS, depthColor } from "../../lib/models";
-  import { OWL } from "./specimens";
+  import { GALLERY } from "./specimens";
 
-  // The same side read two ways: the tokens that set it off in real text, beside what its weights
-  // say through each lens. A token both name is tinted; hovering one lights its variants everywhere.
-  let detail = $state<NeuronDetail | null>(null);
+  // Three ways to read a pole, side by side for a handful of real ones: where it fires in real text,
+  // the exact tokens that drive it, and what its weights say it writes. A row is a pole; its name
+  // opens it in the explorer.
+  const model = MODELS["qwen3-8b"];
+  let poles = $state<(Pole | null)[]>(GALLERY.map(() => null));
   let failed = $state(false);
-  const load = () => loadNeuron(OWL.model, OWL.layer, OWL.n).then((d) => (detail = d), () => (failed = true));
-
-  const side = $derived(detail?.poles.find((pole) => pole.pole === 1) ?? null);
-  const read = (col: ReadColumn) => side?.reads.find((r) => r.col === col && !r.twin) ?? null;
-  const lenses = $derived([
-    { name: "S-lens", says: "tokens it responds to", read: read("read_S") },
-    { name: "R-lens", says: "what it makes the model say", read: read("write_R") },
-  ]);
+  function load() {
+    GALLERY.forEach((row, i) => {
+      loadNeuron(model.id, row.layer, row.n).then((detail) => { poles[i] = detail?.poles.find((p) => p.pole === row.pole) ?? null; }, () => (failed = true));
+    });
+  }
+  const writes = (pole: Pole) => headline(pole.reads.find((r) => r.col === "write_R")?.tokens ?? [], 4);
+  const COLUMNS = [
+    { name: "Where it fires", how: "15M tokens of web, Chinese, Python and chat" },
+    { name: "Exact drivers", how: "each common token, swapped into 8 documents" },
+    { name: "What it writes", how: "the R-lens, from the weights alone" },
+  ];
 </script>
 
-<Part id="evidence" title="Two kinds of evidence" onnear={load} tint={depthColor(MODELS[OWL.model], OWL.layer)}>
+<Part id="reads" title="Three ways to read" onnear={load}>
   {#snippet caption()}
-    <p>In real text: where it fires across 15 million tokens. From its weights: what two lenses read straight off the neuron, with no text at all.</p>
-    <p class="key meta"><span class="chip">owl</span> two reads agree on it</p>
+    <p>Real text, exact drivers, and the weights.</p>
   {/snippet}
   <div class="spec">
-    <UnitLink model={OWL.model} layer={OWL.layer} neuron={OWL.n} />
-    <Swap key={side !== null}>
-      {#if side}
-        <div class="ways" data-link-scope>
-          <div class="way">
-            <h3 class="head">In real text</h3>
-            <p class="says">Tokens that set it off most</p>
-            <div class="toks">{#each side.drivers.slice(0, 8) as [token, value], i (i)}<Token {token} {value} {i} />{/each}</div>
-          </div>
-          <div class="way">
-            <h3 class="head">From its weights</h3>
-            {#each lenses as lens (lens.name)}
-              {#if lens.read}
-                <div class="lens">
-                  <p class="says"><b>{lens.name}</b> {lens.says}<Meter value={lens.read.pct / 100} label={`Stronger than ${lens.read.pct}% of this layer's sides`} /></p>
-                  <div class="toks">{#each headline(lens.read.tokens, 8) as [token, count, flags], i (i)}<Token {token} {count} {flags} {i} />{/each}</div>
-                </div>
-              {/if}
-            {/each}
-          </div>
+    <div class="table" data-link-scope>
+      <span></span>
+      {#each COLUMNS as column (column.name)}<p class="col"><span class="name">{column.name}</span><span class="meta">{column.how}</span></p>{/each}
+      {#each GALLERY as row, i (`${row.layer}:${row.n}`)}
+        {@const pole = poles[i]}
+        <div class="row" style:--tint={depthColor(model, row.layer)}>
+          <a class="id" href="/{model.id}/L{row.layer}/n{row.n}" data-tip={pole?.label.fires} data-tip-title={`${neuronId(row.layer, row.n)} ${row.pole > 0 ? "+" : "−"}`}>{neuronId(row.layer, row.n)}<span class="sign">{row.pole > 0 ? "+" : "−"}</span></a>
+          {#if pole}
+            <div class="cell" data-col={COLUMNS[0].name}>{#if pole.contexts[0]}<Context context={pole.contexts[0]} />{/if}</div>
+            <div class="cell toks" data-col={COLUMNS[1].name}>{#each pole.drivers.slice(0, 3) as [token, value], k (k)}<Token {token} {value} i={k} />{/each}</div>
+            <div class="cell toks" data-col={COLUMNS[2].name}>
+              {#if row.note}<span class="note">{row.note}</span>{:else}{#each writes(pole) as [token, count, flags], k (k)}<Token {token} {count} {flags} i={k} />{/each}{/if}
+            </div>
+          {:else}
+            <span class="ghost"></span><span class="ghost"></span><span class="ghost"></span>
+          {/if}
         </div>
-      {:else}
-        <div class="ways">{#if failed}<p class="meta">This specimen didn't load.</p>{:else}<span class="ghost"></span><span class="ghost"></span>{/if}</div>
-      {/if}
-    </Swap>
+      {/each}
+    </div>
+    {#if failed}<p class="meta">Some of these didn't load.</p>{/if}
+    <p class="meta">From <a class="prose-link" href="https://huggingface.co/datasets/stdlogits/neuron-lens" rel="external noreferrer">the catalog</a>, every pole and head of both models.</p>
   </div>
 </Part>
 
 <style>
   .spec { display: grid; gap: var(--s4); min-width: 0; }
-  .ways { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s6) var(--s7); padding-top: var(--s2); }
-  .way { display: grid; align-content: start; gap: var(--s3); min-width: 0; }
-  .lens { display: grid; gap: var(--s3); }
-  .lens + .lens { margin-top: var(--s3); }
-  .says { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); color: var(--ink2); font: var(--type-small); }
-  .says b { color: var(--ink); font-weight: 500; }
-  .key { display: flex; align-items: center; gap: var(--s2); }
-  .chip { padding: 2px var(--s2); border-radius: var(--r-chip); background: color-mix(in oklch, var(--tint) 14%, var(--paper)); color: var(--ink); font: var(--type-small); }
-  .ghost { height: 160px; border-radius: var(--r-row); background: var(--wash); }
-  @media (max-width: 600px) { .ways { grid-template-columns: minmax(0, 1fr); } }
+  .table { display: grid; grid-template-columns: 120px minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); gap: var(--s2) var(--s5); }
+  .col { display: grid; align-content: start; gap: 2px; padding-bottom: var(--s2); }
+  .col .name { font: var(--type-label); }
+  .row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: start; padding: var(--s3) 0; }
+  .id { display: inline-flex; align-items: baseline; gap: var(--s2); padding-top: var(--s3); font: 600 16px/24px var(--display); font-variant-numeric: tabular-nums; transition: color var(--fast) var(--ease); }
+  .sign { color: var(--ink3); }
+  @media (hover: hover) { .id:hover { color: var(--ink2); } }
+  .cell { min-width: 0; }
+  .cell.toks { padding-top: var(--s2); }
+  .note { color: var(--ink2); font: var(--type-small); }
+  .ghost { height: 48px; border-radius: var(--r-box); background: var(--wash); }
+  @media (max-width: 760px) {
+    .table { grid-template-columns: minmax(0, 1fr); }
+    .table > span:first-child, .col { display: none; }
+    .row { row-gap: var(--s2); padding: var(--s4) 0; }
+    .id { padding-top: 0; }
+    .cell.toks { padding-top: 0; }
+    .cell::before { content: attr(data-col); display: block; width: 100%; margin-bottom: var(--s1); color: var(--ink3); font: var(--type-meta); }
+  }
 </style>

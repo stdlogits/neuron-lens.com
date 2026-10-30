@@ -2,35 +2,34 @@
   import Part from "../Part.svelte";
   import { MODELS, MODEL_ORDER, depthColor } from "../../lib/models";
 
+  import type { LabelCheck } from "../../lib/models";
+
   // The blind checks of the labels, drawn as pairs of bars: each label beside what it has to beat
-  // (another unit's label, or chance). The numbers come from each model's labelChecks sentence; a
-  // sentence they can't be read from is shown as written.
+  // (another unit's label, or chance).
   interface Pair { value: number; against: number; shown: string; againstShown: string }
   interface Check { count: string | null; fires: Pair | null; writes: Pair | null; rest: string; text: string }
 
-  function parse(text: string): Check {
-    const count = text.match(/on (\d+) (poles|heads)/);
-    const auroc = text.match(/AUROC (\d*\.\d+) \(another [^:]+: (\d*\.\d+)\)/);
-    const judge = text.match(/(\d+)% of the time \(chance (\d+)%\)/);
-    const rest = judge ? text.slice((judge.index ?? 0) + judge[0].length).replace(/^\.\s*/, "") : "";
+  const percent = (value: number) => `${Math.round(value * 100)}%`;
+  function check(found: LabelCheck | null, unit: "neurons" | "heads"): Check {
+    if (!found) return { count: null, fires: null, writes: null, rest: "", text: "Not yet checked blind on this model." };
     return {
-      count: count ? `${count[1]} ${count[2] === "poles" ? "sides" : "heads"}` : null,
-      fires: auroc ? { value: Number(auroc[1]), against: Number(auroc[2]), shown: auroc[1], againstShown: auroc[2] } : null,
-      writes: judge ? { value: Number(judge[1]) / 100, against: Number(judge[2]) / 100, shown: `${judge[1]}%`, againstShown: `${judge[2]}%` } : null,
-      rest,
-      text,
+      count: `${found.count} ${unit === "neurons" ? "sides" : "heads"}`,
+      fires: { value: found.fires[0], against: found.fires[1], shown: found.fires[0].toFixed(2), againstShown: found.fires[1].toFixed(2) },
+      writes: { value: found.writes[0], against: found.writes[1], shown: percent(found.writes[0]), againstShown: percent(found.writes[1]) },
+      rest: found.note ?? "",
+      text: "",
     };
   }
 
   const groups = MODEL_ORDER.map((id) => ({
     model: MODELS[id],
-    rows: (["neurons", "heads"] as const).map((unit) => ({ unit: unit === "neurons" ? "Neurons" : "Heads", against: unit === "neurons" ? "another side's label" : "another head's label", check: parse(MODELS[id].labelChecks[unit]) })),
+    rows: (["neurons", "heads"] as const).map((unit) => ({ unit: unit === "neurons" ? "Neurons" : "Heads", against: unit === "neurons" ? "another side's label" : "another head's label", check: check(MODELS[id].labelChecks[unit], unit) })),
   }));
 </script>
 
-<Part id="checks" title="How far to trust the labels" tint={depthColor(MODELS["qwen3-8b"], 8)}>
+<Part id="checks" title="Checked blind" tint={depthColor(MODELS["qwen3-8b"], 8)}>
   {#snippet caption()}
-    <p>Labels were checked blind. A firing label should pick out its own unit's firings better than another's label does; a judge should pick the write label out of four from what the unit does.</p>
+    <p>How well the labels hold up.</p>
   {/snippet}
   <div class="ledger">
     <div class="cols" aria-hidden="true">
@@ -63,6 +62,7 @@
       </div>
     {/each}
   </div>
+  <p class="meta">More in <a class="prose-link" href="https://github.com/stdlogits/neuron-lens" rel="external noreferrer">the research and findings</a>.</p>
 </Part>
 
 <style>
