@@ -116,5 +116,7 @@ It refuses a dirty tree, a HEAD not on `origin/main`, or a missing catalog; runs
 `build`; checks `dist` against Pages' file limits; uploads with the pinned Wrangler
 (`--commit-hash` HEAD); and waits for the live site to serve this build before verifying it.
 `--dry-run` stops before the upload. The Pages project and the custom domain must exist in that
-account first. Keep the zone's HTML-rewriting features (Web Analytics injection, Rocket Loader, email
-obfuscation) off: they add inline scripts the CSP blocks.
+account first. Cloudflare Web Analytics is on (a9's choice): the CSP allows its beacon from
+`static.cloudflareinsights.com` and its reports to `cloudflareinsights.com`. Keep Rocket Loader and
+email obfuscation off: they add inline scripts the CSP blocks. The zone's security-headers transform
+sets `Referrer-Policy: same-origin`, so `_headers` says the same.

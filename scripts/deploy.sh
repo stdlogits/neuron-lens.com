@@ -10,8 +10,9 @@
 # The site lives in a9's own Cloudflare account, not the one that hosts drowse.ai. Before the first
 # deploy, in that account: create the Pages project (`wrangler pages project create neuron-lens
 # --production-branch main`, or Workers & Pages in the dashboard) and attach neuron-lens.com to it as a
-# custom domain. Leave the zone's Web Analytics injection, Rocket Loader and email obfuscation off:
-# each puts an inline script in the HTML, which the CSP blocks.
+# custom domain. The CSP allows Cloudflare Web Analytics' injected beacon (static.cloudflareinsights.com,
+# reporting to cloudflareinsights.com); leave Rocket Loader and email obfuscation off, since they add
+# inline scripts the CSP blocks.
 #
 # Which account: CLOUDFLARE_ACCOUNT_ID, from the environment or from ~/.config/cloudflare/neuron-lens.env
 # (outside the repo; NEURON_LENS_DEPLOY_ENV names another file). It is required, because the Cloudflare
