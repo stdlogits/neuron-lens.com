@@ -2,15 +2,16 @@
   import { untrack } from "svelte";
   import Scale from "./atlas/Scale.svelte";
   import { matchKey, useLens } from "./lens.svelte";
-  import { SHADES, rankLayers, shadeScale, sliceOf, sliceRange, type Ranked } from "./atlas/levels";
+  import { ALL_ROWS, SHADES, byteShades, field, shadeScale } from "./atlas/levels";
   import { IN, ease, fadeOut, glide } from "../lib/motion";
   import { hideTip, showTip, type TipContent } from "../lib/tips";
   import { headId, loadLayerIndex, neuronId, type HeadRow, type IndexRow } from "../lib/data";
   import { depthColor } from "../lib/models";
+  import { theme } from "../lib/theme.svelte";
 
   // The map of every layer: a column a layer, a short bar a unit, the most readable at the top, each
-  // shaded by how readable it is. Neurons (the easiest 40 a layer, or in All mode the whole layer in
-  // 40 slices) and heads share one look. Click a bar to open its unit, a column to open its layer;
+  // shaded by how readable it is. Neurons (the easiest 40 a layer) and heads share one look; All mode
+  // draws every neuron of a layer instead, a cell each in neuron order, on a canvas. Click a bar to open its unit, a column to open its layer;
   // press and drag to scrub through layers. As a slider: ←/→ layer, ↑/↓ unit, Enter opens.
   const lens = useLens();
 
@@ -20,16 +21,17 @@
 
   // ---------- what the bars stand for
 
-  /** A bar: its unit (null for one of All mode's slices) and its opacity. */
-  interface Bar { unit: number | null; o: number }
+  /** A bar: its unit and its opacity. */
+  interface Bar { unit: number; o: number }
 
   const layers = $derived(Array.from({ length: lens.model.layers }, (_, L) => L));
   const last = $derived(lens.model.layers - 1);
   const indexReady = $derived(lens.index?.id === lens.modelId);
   const headsReady = $derived(lens.heads?.length === lens.model.layers * lens.model.heads);
-  const ranked = $derived<Ranked[] | null>(lens.scores?.length === lens.model.layers ? rankLayers(lens.scores) : null);
+  /** All mode: each readability byte's shade, once every layer's scores are in. */
+  const byteShade = $derived<Uint8Array | null>(lens.scores?.length === lens.model.layers ? byteShades(lens.scores) : null);
   // All mode shows the easiest neurons until every layer's scores are in, then crossfades.
-  const mode = $derived<"heads" | "all" | "easiest">(lens.unit === "heads" ? "heads" : lens.all && ranked ? "all" : "easiest");
+  const mode = $derived<"heads" | "all" | "easiest">(lens.unit === "heads" ? "heads" : lens.all && byteShade ? "all" : "easiest");
   const ready = $derived(mode === "heads" ? headsReady : mode === "all" || indexReady);
 
   function byLayer<T extends IndexRow | HeadRow>(rows: T[], score: number): T[][] {
@@ -70,7 +72,7 @@
     loadLayerIndex(model, layer).then((rows) => {
       if (lens.modelId !== model) return;
       keep(layer, rows);
-      if (pointed?.layer === layer) point(pointed.layer, pointed.slot, pointed.along, true);
+      if (pointed?.layer === layer) point(pointed.layer, pointed.slot, pointed.along, pointed.x, pointed.y, true);
     }, () => asked.delete(`${model}:${layer}`));
   }
   $effect(() => {
@@ -83,39 +85,18 @@
     if (rows?.model === lens.modelId && !untrack(() => known[rows.layer])) untrack(() => keep(rows.layer, rows.rows));
   });
 
-  /** A layer as All mode's slices: lit where a search hit ranks; with a filter, by the share that passes where the layer's rows are in. */
-  function slices(layer: Ranked, L: number, hits: IndexRow[]): Bar[] {
-    const n = layer.order.length;
-    const lit = new Set(hits.filter((row) => lens.passesNeuron(row)).map((row) => sliceOf(layer.rank[row[1]], n)));
-    const rows = filtering ? known[L] : undefined;
-    return Array.from(layer.shades, (shade, s) => {
-      let o = SHADES[shade];
-      if (matches.size) o = lit.has(s) ? 1 : SHADES[0];
-      else if (rows) {
-        const [from, to] = sliceRange(s, n);
-        let pass = 0;
-        for (let r = from; r < to; r += 1) if (rows[layer.order[r]] && lens.passesNeuron(rows[layer.order[r]])) pass += 1;
-        o = SHADES[0] + (o - SHADES[0]) * Math.sqrt(pass / Math.max(1, to - from));
-      }
-      return { unit: null, o };
-    });
-  }
-
   const columns = $derived.by<Bar[][]>(() => {
     if (!ready) return layers.map(() => []);
     if (mode === "heads") return headColumns.map((column) => column.map((row) => ({ unit: row[1], o: opacity(headShade(row[10]), lens.passesHead(row), matches.has(matchKey(row[0], row[1]))) })));
     if (mode === "easiest") return neuronColumns.map((column) => column.map((row) => ({ unit: row[1], o: opacity(neuronShade(row[4]), lens.passesNeuron(row), matches.has(matchKey(row[0], row[1]))) })));
-    const hits: IndexRow[][] = layers.map(() => []);
-    if (matches.size) for (const row of lens.index?.neurons ?? []) if (matches.has(matchKey(row[0], row[1]))) hits[row[0]].push(row);
-    return ranked!.map((layer, L) => slices(layer, L, hits[L]));
+    return layers.map(() => []);
   });
-  const rows = $derived(Math.max(1, ...columns.map((column) => column.length)));
+  const rows = $derived(mode === "all" ? ALL_ROWS : Math.max(1, ...columns.map((column) => column.length)));
 
   /** The selected unit's bar in the current column. */
   const selected = $derived.by(() => {
     const unit = lens.selected;
-    if (unit === null || !ready) return -1;
-    if (mode === "all") return unit < ranked![lens.layer].rank.length ? sliceOf(ranked![lens.layer].rank[unit], ranked![lens.layer].rank.length) : -1;
+    if (unit === null || !ready || mode === "all") return -1;
     return (mode === "heads" ? headColumns : neuronColumns)[lens.layer]?.findIndex((row) => row[1] === unit) ?? -1;
   });
 
@@ -127,6 +108,96 @@
   const bar = $derived(narrow ? 2 : 3);
   const pitch = $derived(bar + GAP);
   const height = $derived(PAD * 2 + rows * pitch - GAP);
+
+  // ---------- All mode: every neuron a cell, in neuron order, across the bars' width of its column
+
+  const share = $derived(narrow ? 0.7 : 0.62);
+  const grid = $derived(field(lens.model.mlp, (width / lens.model.layers) * share, height - PAD * 2));
+  const left = (L: number) => (L + (1 - share) / 2) * (width / lens.model.layers);
+  /** A neuron's cell, in px from the plot's corner. */
+  const cell = (L: number, i: number) => ({ x: left(L) + (i % grid.g) * grid.cw, y: PAD + Math.floor(i / grid.g) * grid.ch });
+  /** The neuron whose cell holds a point of the plot, if any. */
+  function neuronAt(L: number, x: number, y: number): number | null {
+    const cx = Math.floor((x - left(L)) / grid.cw);
+    const cy = Math.floor((y - PAD) / grid.ch);
+    if (cx < 0 || cx >= grid.g || cy < 0) return null;
+    const i = cy * grid.g + cx;
+    return i < lens.model.mlp ? i : null;
+  }
+
+  let canvas = $state<HTMLCanvasElement>();
+  let probe = $state<HTMLSpanElement>();
+  let swatch: CanvasRenderingContext2D | null = null;
+  /** A depth colour as RGB, read through the page's own CSS (it mixes theme colours in oklch). */
+  function rgb(css: string): [number, number, number] {
+    probe!.style.color = css;
+    swatch ??= document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+    if (!swatch) return [128, 128, 128];
+    swatch.clearRect(0, 0, 1, 1);
+    swatch.fillStyle = "#808080";
+    swatch.fillStyle = getComputedStyle(probe!).color;
+    swatch.fillRect(0, 0, 1, 1);
+    const [r, g, b] = swatch.getImageData(0, 0, 1, 1).data;
+    return [r, g, b];
+  }
+
+  // Each neuron's opacity, as the bars': lit by a search, narrowed by a filter where its layer's rows
+  // are in (the current layer and any pointed at); a cell takes the brightest neuron that falls in it.
+  $effect(() => {
+    if (mode !== "all" || !canvas || !probe || !byteShade || !lens.scores || width === 0) return;
+    void theme.mode;
+    const scale = window.devicePixelRatio || 1;
+    const W = Math.round(width * scale);
+    const H = Math.round(height * scale);
+    canvas.width = W;
+    canvas.height = H;
+    const hits = new Map<number, Set<number>>();
+    for (const key of matches) {
+      const [L, i] = key.split(":").map(Number);
+      if (!hits.has(L)) hits.set(L, new Set());
+      hits.get(L)!.add(i);
+    }
+    const image = new ImageData(W, H);
+    const px = image.data;
+    const { g, cw, ch } = grid;
+    for (const L of layers) {
+      const bytes = lens.scores[L];
+      const [r, gr, b] = rgb(depthColor(lens.model, L));
+      const lit = hits.get(L);
+      const rows = filtering ? known[L] : undefined;
+      const x0 = left(L);
+      for (let i = 0; i < bytes.length; i += 1) {
+        const row = rows?.[i];
+        const a = Math.round(255 * opacity(byteShade[bytes[i]], row ? lens.passesNeuron(row) : true, lit?.has(i) ?? false));
+        const cx = i % g;
+        const cy = (i - cx) / g;
+        const xa = Math.floor((x0 + cx * cw) * scale);
+        const xb = Math.max(xa + 1, Math.floor((x0 + (cx + 1) * cw) * scale));
+        const ya = Math.floor((PAD + cy * ch) * scale);
+        const yb = Math.max(ya + 1, Math.floor((PAD + (cy + 1) * ch) * scale));
+        for (let y = ya; y < yb && y < H; y += 1) {
+          for (let x = xa; x < xb && x < W; x += 1) {
+            const at = (y * W + x) * 4;
+            if (px[at + 3] >= a) continue;
+            px[at] = r;
+            px[at + 1] = gr;
+            px[at + 2] = b;
+            px[at + 3] = a;
+          }
+        }
+      }
+    }
+    canvas.getContext("2d")?.putImageData(image, 0, 0);
+  });
+
+  /** All mode: the selected neuron's row, marked by an ink bar as wide as a selected bar. */
+  const pin = $derived.by(() => {
+    if (mode !== "all" || lens.selected === null || lens.selected >= lens.model.mlp || width === 0) return null;
+    const column = width / lens.model.layers;
+    const { y } = cell(lens.layer, lens.selected);
+    const wide = narrow ? 1 : 0.86;
+    return { x: (lens.layer + (1 - wide) / 2) * column, y: y + grid.ch / 2 - bar / 2, w: column * wide };
+  });
 
   // ---------- motion: the first plot of a model arrives column by column; later ones crossfade
 
@@ -146,9 +217,11 @@
   let area = $state<HTMLDivElement>();
   /** The column under a mouse, washed. */
   let hover = $state<number | null>(null);
-  let pointed: { layer: number; slot: number; along: number; unit: number } | null = null;
+  let pointed: { layer: number; slot: number; along: number; x: number; y: number; unit: number } | null = null;
   /** The pointed bar, lifted to full strength so the tip's subject is plain. */
   let lit = $state<{ layer: number; slot: number } | null>(null);
+  /** All mode: the pointed neuron's cell. */
+  let spotted = $state<{ x: number; y: number } | null>(null);
   let press = $state<{ from: number; moved: boolean } | null>(null);
   // A run of layer changes (one drag, or keys while focused) adds one history entry, then replaces it.
   let pushed = false;
@@ -163,21 +236,17 @@
     const box = area!.getBoundingClientRect();
     const column = box.width / lens.model.layers;
     const L = Math.max(0, Math.min(last, Math.floor((event.clientX - box.left) / column)));
-    const y = event.clientY - box.top - PAD + GAP / 2;
-    const i = Math.floor(y / pitch);
-    const slot = y >= 0 && event.clientY < box.bottom && i < columns[L].length ? i : null;
-    // Along the bar: All mode walks the ranks of its slice from left to right.
-    const along = Math.max(0, Math.min(0.999, (event.clientX - box.left - L * column - column * 0.19) / (column * 0.62)));
-    return { L, slot, along };
+    const x = event.clientX - box.left;
+    const y = event.clientY - box.top;
+    const i = Math.floor((y - PAD + GAP / 2) / pitch);
+    const slot = y - PAD + GAP / 2 >= 0 && event.clientY < box.bottom && i < columns[L].length ? i : null;
+    const along = Math.max(0, Math.min(0.999, (x - L * column - column * 0.19) / (column * 0.62)));
+    return { L, slot, along, x, y };
   }
 
-  function unitAt(L: number, slot: number, along: number): number | null {
-    const bar = columns[L]?.[slot];
-    if (!bar) return null;
-    if (bar.unit !== null || mode !== "all") return bar.unit;
-    const layer = ranked![L];
-    const [from, to] = sliceRange(slot, layer.order.length);
-    return layer.order[from + Math.floor(along * (to - from))];
+  function unitAt(L: number, slot: number | null, x: number, y: number): number | null {
+    if (mode === "all") return y < height ? neuronAt(L, x, y) : null;
+    return slot === null ? null : columns[L]?.[slot]?.unit ?? null;
   }
 
   function content(L: number, slot: number, unit: number): TipContent {
@@ -190,23 +259,31 @@
     return { title: neuronId(L, unit), body: row?.[2], sub: row?.[3] };
   }
 
-  /** Name the unit under the pointer in the tip, which glides from bar to bar. */
-  function point(L: number, slot: number | null, along: number, refresh = false) {
-    const unit = slot === null ? null : unitAt(L, slot, along);
-    if (slot === null || unit === null) { unpoint(); return; }
-    if (!refresh && pointed?.unit === unit && pointed.layer === L && pointed.slot === slot) return;
-    pointed = { layer: L, slot, along, unit };
-    if (lit?.layer !== L || lit.slot !== slot) lit = { layer: L, slot };
+  /** Name the unit under the pointer in the tip, which glides from bar to bar (or cell to cell). */
+  function point(L: number, slot: number | null, along: number, x: number, y: number, refresh = false) {
+    const unit = unitAt(L, slot, x, y);
+    if (unit === null) { unpoint(); return; }
+    if (!refresh && pointed?.unit === unit && pointed.layer === L) return;
+    pointed = { layer: L, slot: slot ?? -1, along, x, y, unit };
     const box = area!.getBoundingClientRect();
     const column = box.width / lens.model.layers;
-    const wide = L === lens.layer && slot === selected ? 0.86 : 0.62;
-    const rect = new DOMRect(box.left + L * column + (column * (1 - wide)) / 2, box.top + PAD + slot * pitch, column * wide, bar);
-    showTip(rect, content(L, slot, unit));
+    let rect: DOMRect;
+    if (mode === "all") {
+      const at = cell(L, unit);
+      spotted = { x: at.x + grid.cw / 2, y: at.y + grid.ch / 2 };
+      rect = new DOMRect(box.left + spotted.x - 3, box.top + spotted.y - 3, 6, 6);
+    } else {
+      if (lit?.layer !== L || lit.slot !== slot) lit = { layer: L, slot: slot! };
+      const wide = L === lens.layer && slot === selected ? 0.86 : 0.62;
+      rect = new DOMRect(box.left + L * column + (column * (1 - wide)) / 2, box.top + PAD + slot! * pitch, column * wide, bar);
+    }
+    showTip(rect, content(L, slot ?? -1, unit));
   }
   function unpoint() {
     if (!pointed) return;
     pointed = null;
     lit = null;
+    spotted = null;
     hideTip();
   }
 
@@ -225,7 +302,7 @@
     }
     if (event.pointerType === "touch") return;
     hover = at.L;
-    if (!press?.moved) point(at.L, at.slot, at.along);
+    if (!press?.moved) point(at.L, at.slot, at.along, at.x, at.y);
   }
   function up(event: PointerEvent) {
     if (!press) return;
@@ -234,7 +311,7 @@
     if (moved) return;
     // A tap picks a layer: bars are too fine to aim at with a finger.
     const at = spot(event);
-    const unit = event.pointerType === "touch" || at.slot === null ? null : unitAt(at.L, at.slot, at.along);
+    const unit = event.pointerType === "touch" ? null : unitAt(at.L, at.slot, at.x, at.y);
     if (unit !== null) lens.open(lens.unit, at.L, unit);
     else goLayer(at.L);
   }
@@ -295,15 +372,22 @@
     {/each}
     {#key plot.key}
       <div class="bars" class:arrive={plot.arrive} in:plotIn={plot.arrive} out:fadeOut>
-        {#each columns as column, L}
-          <div class="stack" style:--c={depthColor(lens.model, L)} style:--L={L}>
-            {#each column as item, i}
-              <i class:sel={L === lens.layer && i === selected} class:lit={lit?.layer === L && lit.slot === i} style:--o={item.o}></i>
-            {/each}
-          </div>
-        {/each}
+        {#if mode === "all"}
+          <canvas class="field" bind:this={canvas} style:width="{width}px" style:height="{height}px" aria-hidden="true"></canvas>
+        {:else}
+          {#each columns as column, L}
+            <div class="stack" style:--c={depthColor(lens.model, L)} style:--L={L}>
+              {#each column as item, i}
+                <i class:sel={L === lens.layer && i === selected} class:lit={lit?.layer === L && lit.slot === i} style:--o={item.o}></i>
+              {/each}
+            </div>
+          {/each}
+        {/if}
       </div>
     {/key}
+    {#if pin}<span class="pin" style:width="{pin.w}px" style:transform="translate({pin.x}px, {pin.y}px)"></span>{/if}
+    {#if spotted && mode === "all"}<span class="spot" style:transform="translate({spotted.x}px, {spotted.y}px)"></span>{/if}
+    <span class="probe" bind:this={probe} aria-hidden="true"></span>
   </div>
   <Scale model={lens.model} layer={lens.layer} {hover} {width} dots={lens.unit === "heads"} />
 </div>
@@ -368,6 +452,35 @@
   .narrow .stack i { width: 70%; border-radius: 1px; }
   .narrow .stack i.sel { width: 100%; }
 
+  /* All mode: every neuron a cell. The field arrives as a wipe across the layers. */
+  .field { position: absolute; left: 0; top: 0; }
+  .arrive .field { animation: wipe calc(var(--count) * 16ms + var(--in)) var(--ease) backwards; }
+  @keyframes wipe { from { clip-path: inset(0 100% 0 0); } }
+  /* The selected neuron's row: an ink bar like a selected bar, gliding as the selection moves. */
+  .pin {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: var(--bar);
+    border-radius: 2px;
+    background: var(--ink);
+    pointer-events: none;
+    transition: transform var(--glide) var(--ease), width var(--glide) var(--ease);
+  }
+  /* The pointed neuron: a small ink dot over its cell. */
+  .spot {
+    position: absolute;
+    left: -3px;
+    top: -3px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ink);
+    pointer-events: none;
+    transition: transform var(--fast) var(--ease);
+  }
+  .probe { position: absolute; width: 0; height: 0; overflow: hidden; }
+
   /* Arriving: each column's bars fade in and grow from the left, 16 ms after the one before. */
   .arrive .stack i {
     transform-origin: left center;
@@ -379,7 +492,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .arrive .stack i { animation: fade var(--fast) var(--ease) backwards; animation-delay: 0ms; }
+    .arrive .stack i, .arrive .field { animation: fade var(--fast) var(--ease) backwards; animation-delay: 0ms; }
     @keyframes fade { from { opacity: 0; } }
   }
   @media (forced-colors: active) {
