@@ -15,12 +15,17 @@
   type Hosted = MediaDoc & { h: [number, number, number] };
 
   let docs = $state.raw<{ for: PoleMedia; list: (MediaDoc | null)[] } | null>(null);
+  // A load that lands after the side changed, or after this unmounted, is dropped (by the cleanup,
+  // not by reading the props again, which may belong to a unit already gone).
   $effect(() => {
     const asked = media;
     const id = model;
+    const kind = modality;
+    let live = true;
     loadIndex(id)
-      .then(({ docBlock }) => Promise.all(asked.top.map(([doc]) => loadMediaDoc(id, modality, doc, docBlock).catch(() => null))))
-      .then((list) => { if (media === asked) docs = { for: asked, list }; }, () => { if (media === asked) docs = { for: asked, list: [] }; });
+      .then(({ docBlock }) => Promise.all(asked.top.map(([doc]) => loadMediaDoc(id, kind, doc, docBlock).catch(() => null))))
+      .then((list) => { if (live) docs = { for: asked, list }; }, () => { if (live) docs = { for: asked, list: [] }; });
+    return () => { live = false; };
   });
   const list = $derived(docs?.for === media ? docs.list : null);
 
