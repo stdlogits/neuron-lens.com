@@ -131,6 +131,9 @@ Pages caps a site at 20,000 files (Free plan) and a file at 25 MiB; media packs 
 
 ## Testing
 
+CI (`.github/workflows/ci.yml`) runs `npm ci`, `check`, `build` and the e2e specs on every push to
+`main` and every pull request to it. It never deploys: deploys stay manual (below).
+
 - `npm run check` (svelte-check) must be clean.
 - `npm run test:e2e` runs the specs in `e2e/` against the dev server on port 5195, with every `/data`
   request answered from `e2e/fixtures/catalog` (`e2e/fixtures/catalog.mjs`, which also makes up
