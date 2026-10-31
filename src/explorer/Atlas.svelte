@@ -308,9 +308,9 @@
     const { moved } = press;
     press = null;
     if (moved) return;
-    // A tap picks a layer: bars are too fine to aim at with a finger.
+    // A click or tap opens the unit under it; off the bars, the layer.
     const at = spot(event);
-    const unit = event.pointerType === "touch" ? null : unitAt(at.L, at.slot, at.x, at.y);
+    const unit = unitAt(at.L, at.slot, at.x, at.y);
     if (unit !== null) lens.open(lens.unit, at.L, unit);
     else goLayer(at.L);
   }
