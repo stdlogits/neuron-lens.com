@@ -1,7 +1,13 @@
 # Design
 
-Neuron Lens is drawn in one language, "Ledger": white paper, two washes, three inks, one accent, no
+Ledger, the design language of Standard Logits: white paper, two washes, three inks, one accent, no
 lines.
+
+Every Standard Logits surface (standardlogits.com,
+neuron-lens.com, drowse.ai, the drowse dashboard) is drawn in it, and this site is its reference
+implementation: this file and `src/styles`, `src/ui` are the source of truth. The design system made
+from them (tokens for both themes, the fonts, a brand book with voice, states and contrast, and a card
+per piece) is https://claude.ai/artifact/EySC7fJPJAtVAmhFndggfx; re-sync it when this changes.
 
 ## Principles
 

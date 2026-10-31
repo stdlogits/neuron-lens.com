@@ -35,7 +35,8 @@ neuron of the layer), `/<model>/heads`, `/<model>/L<layer>/heads`, `/<model>/L<l
 
 ## Design
 
-`DESIGN.md` is the design: tokens, type, motion and pieces, in the "Ledger" direction. Follow it
+`DESIGN.md` is the design: tokens, type, motion and pieces, in Ledger, the design language of every
+Standard Logits product, which this site defines (a change here is a change to Ledger). Follow it
 exactly: flat and borderless, the depth tint as the one accent and only as fill, Wix Madefor only with
 tabular numbers, motion on one curve through the `motion.ts` actions and `Swap`/`MorphText`, show
 rather than tell (no explanatory paragraphs or provenance in the explorer; tips and the About page
