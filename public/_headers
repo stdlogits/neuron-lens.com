@@ -20,6 +20,20 @@
   X-Frame-Options: SAMEORIGIN
   Cache-Control: no-cache
 
+# The mark's images and the social card: the zone's browser cache TTL raises no-cache to four hours on
+# images, so they ask for that themselves. (Before /assets/*, which keeps its own.)
+/*.png
+  ! Cache-Control
+  Cache-Control: public, max-age=14400
+
+/*.svg
+  ! Cache-Control
+  Cache-Control: public, max-age=14400
+
+/*.ico
+  ! Cache-Control
+  Cache-Control: public, max-age=14400
+
 # Hashed by Vite: a new build has new names.
 /assets/*
   ! Cache-Control

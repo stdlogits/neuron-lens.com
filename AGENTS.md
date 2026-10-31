@@ -147,4 +147,5 @@ account first. Cloudflare Web Analytics is on (a9's choice): the CSP allows its 
 email obfuscation off: they add inline scripts the CSP blocks. The zone's security-headers transform
 sets `Referrer-Policy: same-origin` and `X-Frame-Options: SAMEORIGIN`, so `_headers` says the same
 (the CSP's `frame-ancestors 'none'` still forbids framing). Its Browser Cache TTL (4 hours) raises a
-shorter `max-age`, so `/data/*` asks for 4 hours itself.
+shorter `max-age` (and `no-cache` on images), so `/data/*` and the site's images ask for 4 hours
+themselves.
