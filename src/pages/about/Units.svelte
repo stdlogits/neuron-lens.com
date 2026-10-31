@@ -9,7 +9,8 @@
   // Two real units over five tokens, drawn in order of depth, each in its own depth's colour. A
   // stream rises from each token. At layer 8 the neuron is silent on four of them and fires on "owl",
   // and what it writes colours owl's stream from there up. At layer 20 the head at "and" looks back,
-  // in ribbons as wide as its attention (mostly at "she"), and what it copies colours and's stream.
+  // along ribbons as wide as its attention (mostly at "she") but never wider than a stream, each shading
+  // from the stream it leaves into the head's colour, and what it copies colours and's stream.
   // Beneath, the two units with what they copy and write; pointing at a part of either lights up its
   // part of the drawing.
   const TOKENS = ["she", "heard", "the", "owl", "and"];
@@ -49,39 +50,40 @@
     const head = { x: x(AT), y: wide ? 72 : 56, w: wide ? 72 : 46, h: wide ? 40 : 28 };
     const neuron = { x: x(FIRED), y: height - (wide ? 52 : 40), w: wide ? 84 : 50, h: wide ? 32 : 24 };
     const from = neuron.y - (wide ? 48 : 36);
-    const bundle = wide ? 24 : 16;
-    // The ribbons arrive stacked, farthest on top, and tuck under the head's rounded end.
+    const lane = wide ? 8 : 6;
+    // The widest ribbon is as wide as a stream. They arrive stacked, farthest on top, and tuck under
+    // the head's rounded end; each shades along the line from where it leaves to where it arrives.
+    const widths = LOOKS.map((share) => Math.max(1.5, (share / Math.max(...LOOKS)) * lane));
     const end = head.x - head.w / 2 + head.h / 2;
-    let top = head.y - bundle / 2;
-    const ribbons = LOOKS.map((share, i) => {
-      const w = Math.max(1.5, share * bundle);
-      const y = top + w / 2;
+    let top = head.y - widths.reduce((sum, w) => sum + w, 0) / 2;
+    const ribbons = widths.map((w, i) => {
+      const y = round(top + w / 2);
       top += w;
-      return { main: i === 0, d: ribbon(x(i), w, end, y, from) };
+      return { i, d: ribbon(x(i), w, end, y, from), x1: x(i), y1: from, x2: round(end), y2: y };
     });
-    return { wide, gutter, height, lane: wide ? 8 : 6, bead: wide ? { w: 28, h: 16 } : { w: 18, h: 12 }, x, head, neuron, ribbons };
+    return { wide, gutter, height, lane, bead: wide ? { w: 28, h: 16 } : { w: 18, h: 12 }, x, head, neuron, ribbons };
   }
 
   /** A ribbon w wide that leaves the lane at x upward from `from` and reaches (end, y) level: the band
-   * between two quarter-ellipses about (end, from), rooted in the lane by a half disc. */
+   * between two quarter-ellipses about (end, from). */
   function ribbon(x: number, w: number, end: number, y: number, from: number) {
     const k = 0.5523;
     const [ao, bo, ai, bi] = [end - x + w / 2, from - y + w / 2, end - x - w / 2, from - y - w / 2];
     const p = (...v: number[]) => v.map(round).join(" ");
     return `M${p(end - ao, from)}C${p(end - ao, from - k * bo, end - k * ao, from - bo, end, from - bo)}`
-      + `L${p(end, from - bi)}C${p(end - k * ai, from - bi, end - ai, from - k * bi, end - ai, from)}`
-      + `A${p(w / 2, w / 2)} 0 0 1 ${p(end - ao, from)}Z`;
+      + `L${p(end, from - bi)}C${p(end - k * ai, from - bi, end - ai, from - k * bi, end - ai, from)}Z`;
   }
 
   // Pointing at a unit, or at one of its terms, quiets every part of the drawing but its own.
   type Focus = "head" | "qk" | "ov" | "neuron" | "reads" | "writes";
-  type Piece = "ribbon" | "main" | "head" | "copy" | "looked" | "at" | "neuron" | "bead" | "write" | "fired";
+  // "fed" is owl's stream, which feeds the neuron. The silent neurons are parts of their streams.
+  type Piece = "lane" | "fed" | "ribbon" | "head" | "copy" | "looked" | "at" | "neuron" | "write" | "fired";
   const SHOWS: Record<Focus, Piece[]> = {
-    head: ["ribbon", "main", "head", "copy", "looked", "at"],
-    qk: ["ribbon", "main", "head", "looked", "at"],
-    ov: ["main", "head", "copy", "looked", "at"],
-    neuron: ["neuron", "bead", "write", "fired"],
-    reads: ["neuron", "bead", "fired"],
+    head: ["lane", "fed", "ribbon", "head", "copy", "looked", "at"],
+    qk: ["lane", "fed", "ribbon", "head", "looked", "at"],
+    ov: ["head", "copy", "looked", "at"],
+    neuron: ["fed", "neuron", "write", "fired"],
+    reads: ["fed", "neuron", "fired"],
     writes: ["neuron", "write"],
   };
   let focus = $state<Focus | null>(null);
@@ -127,15 +129,23 @@
       {#if width}
         <svg class="draw" width={width} height={g.height} aria-hidden="true">
           {#each TOKENS as _, i (i)}
-            <rect class="lane" x={g.x(i) - g.lane / 2} y="0" width={g.lane} height={g.height} rx={g.lane / 2} style:--i={i} />
+            <rect class="lane" class:quiet={quiet(i === FIRED ? "fed" : "lane")} x={g.x(i) - g.lane / 2} y="0" width={g.lane} height={g.height} rx={g.lane / 2} style:--i={i} />
           {/each}
           <rect class="write" class:quiet={quiet("write")} x={g.neuron.x - g.lane / 2} y="0" width={g.lane} height={g.neuron.y} rx={g.lane / 2} />
           <rect class="copy" class:quiet={quiet("copy")} x={g.head.x - g.lane / 2} y="0" width={g.lane} height={g.head.y} rx={g.lane / 2} />
           {#each TOKENS as _, i (i)}
-            {#if i !== FIRED}<rect class="bead" class:quiet={quiet("bead")} x={g.x(i) - g.bead.w / 2} y={g.neuron.y - g.bead.h / 2} width={g.bead.w} height={g.bead.h} rx={g.bead.h / 2} />{/if}
+            {#if i !== FIRED}<rect class="bead" class:quiet={quiet("lane")} x={g.x(i) - g.bead.w / 2} y={g.neuron.y - g.bead.h / 2} width={g.bead.w} height={g.bead.h} rx={g.bead.h / 2} />{/if}
           {/each}
-          {#each g.ribbons.toReversed() as ribbon, i (i)}
-            <path class="ribbon" class:main={ribbon.main} class:quiet={quiet(ribbon.main ? "main" : "ribbon")} d={ribbon.d} style:--i={i} />
+          <defs>
+            {#each g.ribbons as ribbon (ribbon.i)}
+              <linearGradient id="units-look-{ribbon.i}" gradientUnits="userSpaceOnUse" x1={ribbon.x1} y1={ribbon.y1} x2={ribbon.x2} y2={ribbon.y2}>
+                <stop class="leaves" class:fired={ribbon.i === FIRED} class:quiet={quiet(ribbon.i === FIRED ? "write" : "lane")} offset="0" />
+                <stop class="arrives" class:quiet={quiet("ribbon")} offset="1" />
+              </linearGradient>
+            {/each}
+          </defs>
+          {#each g.ribbons.toReversed() as ribbon, i (ribbon.i)}
+            <path class="ribbon" d={ribbon.d} fill="url(#units-look-{ribbon.i})" style:--i={i} />
           {/each}
         </svg>
         <span class="depth" style:top="{g.head.y}px" data-tip="Layer {SHE.layer}">L{SHE.layer}</span>
@@ -215,17 +225,17 @@
   /* ---------- the drawing: a gutter for depth, then five streams over their tokens */
   .layer { position: relative; display: grid; grid-template-columns: var(--g) repeat(5, minmax(0, 1fr)); grid-template-rows: var(--h) auto; row-gap: var(--s2); margin: 0; }
   .draw { grid-column: 1 / -1; grid-row: 1; overflow: visible; }
-  .lane { fill: var(--wash2); }
-  .bead { fill: var(--wash2); }
-  .write { fill: var(--neuron); }
-  .copy { fill: var(--head); }
-  .ribbon { fill: color-mix(in oklch, var(--head) 36%, var(--paper)); }
-  .ribbon.main { fill: var(--head); }
+  /* Each part's colour is --c. A ribbon starts in the colour its stream has there, lit or quiet (owl's
+   * carries the neuron's write), so it rises out of the stream without a seam, and ends in the head's. */
+  .lane, .bead, .leaves { --c: var(--wash2); }
+  .write, .leaves.fired, .node.neuron { --c: var(--neuron); }
+  .copy, .arrives, .node.head { --c: var(--head); }
+  .draw rect { fill: var(--c); }
+  stop { stop-color: var(--c); }
   .depth { position: absolute; left: 0; translate: 0 -50%; color: var(--ink3); font: var(--type-meta); font-variant-numeric: tabular-nums; cursor: help; }
   .node { position: absolute; display: grid; place-items: center; translate: -50% -50%; border-radius: var(--r-pill); color: var(--paper); font: var(--type-meta); }
   .wide .node { font: var(--type-control); }
-  .node.head { background: var(--head); }
-  .node.neuron { background: var(--neuron); }
+  .node { background: var(--c); }
   .word { grid-row: 2; justify-self: center; min-width: 0; }
   .chip { display: inline-block; max-width: 100%; padding: 2px var(--s1); border-radius: var(--r-chip); background: var(--wash); font: var(--type-small); overflow-wrap: anywhere; }
   .wide .chip { padding: var(--s1) var(--s3); font: var(--type-label); }
@@ -233,9 +243,14 @@
   .chip.at { background: color-mix(in oklch, var(--head) 22%, var(--paper)); }
   .chip.fired { background: color-mix(in oklch, var(--neuron) 22%, var(--paper)); }
 
-  .ribbon, .write, .copy, .bead, .node, .chip { transition: opacity var(--fast) var(--ease), background-color var(--fast) var(--ease); }
-  .quiet { opacity: 0.2; }
-  .chip.quiet { opacity: 1; background: var(--wash); }
+  /* A quiet part mixes its colour into the paper and stays solid, so nothing shows through it. In
+   * oklab: oklch drops the hue of two near-greys (the dark washes), which then turns red. */
+  .draw rect.quiet { fill: color-mix(in oklab, var(--c) 20%, var(--paper)); }
+  stop.quiet { stop-color: color-mix(in oklab, var(--c) 20%, var(--paper)); }
+  .node.quiet { background: color-mix(in oklab, var(--c) 20%, var(--paper)); }
+  .chip.quiet { background: var(--wash); }
+  .draw rect, .node, .chip { transition: fill var(--fast) var(--ease), background-color var(--fast) var(--ease); }
+  stop { transition: stop-color var(--fast) var(--ease); }
 
   /* Arriving, once, from the tokens up: the streams grow, the neuron fires and writes, the head looks
    * back and copies. */
@@ -260,7 +275,7 @@
   dt { display: inline-flex; align-items: center; gap: var(--s2); color: var(--ink); font-weight: 500; }
   /* Each term's mark is its part of the drawing in miniature. */
   .mark { flex: none; display: block; width: 12px; height: 12px; }
-  .mark.ribbon { height: 6px; border-radius: 3px 3px 0 0; background: var(--tint); }
+  .mark.ribbon { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--wash2), var(--tint)); }
   .mark.stream { width: 4px; margin: 0 4px; border-radius: 2px; background: var(--tint); }
   .mark.dot { width: 10px; height: 10px; margin: 1px; border-radius: 50%; background: var(--tint); }
   .says { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: baseline; gap: var(--s3); width: 100%; }
