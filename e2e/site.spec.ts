@@ -66,7 +66,35 @@ test("llms.txt and the sitemap are served", async ({ request }) => {
   expect(await (await request.get("/sitemap.xml")).text()).toContain("<loc>https://neuron-lens.com/about</loc>");
 });
 
-const TOUR = ["/", "/gemma-4-12b", "/qwen3-8b/L8/n344", "/qwen3-8b/L20/h17", "/gemma-4-12b/L33/n12225", "/gemma-4-12b/L28/heads", "/gemma-4-12b/L14/n8313?all", "/about", "/credits", "/no-such-page"];
+// With a light system: auto first, then dark, light (stored, though the same look) and auto again.
+test("the theme steps through dark, light and auto", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto("/about");
+  const button = page.getByRole("navigation", { name: "Site" }).locator("button.theme");
+  const root = page.locator("html");
+  const stored = () => page.evaluate(() => localStorage.getItem("neuron-lens.theme"));
+  await expect(button).toHaveAccessibleName("Use the dark theme");
+  await button.click();
+  await expect(root).toHaveAttribute("data-theme", "dark");
+  expect(await stored()).toBe("dark");
+  await expect(button).toHaveAccessibleName("Use the light theme");
+  await button.click();
+  await expect(root).toHaveAttribute("data-theme", "light");
+  expect(await stored()).toBe("light");
+  await expect(button).toHaveAccessibleName("Follow the system's theme");
+  await button.click();
+  await expect(root).not.toHaveAttribute("data-theme");
+  expect(await stored()).toBeNull();
+  await expect(button).toHaveAccessibleName("Use the dark theme");
+  // Auto follows the system as it changes.
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(button).toHaveAccessibleName("Use the light theme");
+  await page.reload();
+  await expect(root).not.toHaveAttribute("data-theme");
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(11, 13, 18)");
+});
+
+const TOUR = ["/","/gemma-4-12b", "/qwen3-8b/L8/n344", "/qwen3-8b/L20/h17", "/gemma-4-12b/L33/n12225", "/gemma-4-12b/L28/heads", "/gemma-4-12b/L14/n8313?all", "/about", "/credits", "/no-such-page"];
 
 test("no console errors anywhere on the tour", async ({ page }) => {
   const errors: string[] = [];

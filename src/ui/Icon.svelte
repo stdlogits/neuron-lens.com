@@ -12,17 +12,19 @@
     external: ["M7 17 17 7", "M8 7h9v9"],
     sun: ["M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M12 2.5v2", "M12 19.5v2", "m4.9 4.9 1.4 1.4", "m17.7 17.7 1.4 1.4", "M2.5 12h2", "M19.5 12h2", "m4.9 19.1 1.4-1.4", "m17.7 6.3 1.4-1.4"],
     moon: ["M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"],
+    auto: ["M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z", "M12 4a8 8 0 0 1 0 16Z"],
     play: ["M8 5.5v13l10.5-6.5Z"],
     pause: ["M8.5 5.5v13", "M15.5 5.5v13"],
   } as const;
   export type IconName = keyof typeof PATHS;
+  // Paths that are filled rather than stroked: the play triangle, auto's dark half.
+  const SOLID = new Set<string>([PATHS.play[0], PATHS.auto[1]]);
 </script>
 
 <script lang="ts">
   let { name, size = 16 }: { name: IconName; size?: number } = $props();
-  const fill = $derived(name === "play");
 </script>
 
-<svg width={size} height={size} viewBox="0 0 24 24" fill={fill ? "currentColor" : "none"} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-  {#each PATHS[name] as d (d)}<path {d} />{/each}
+<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  {#each PATHS[name] as d (d)}<path {d} fill={SOLID.has(d) ? "currentColor" : undefined} />{/each}
 </svg>

@@ -80,6 +80,8 @@ function contentFor(target: HTMLElement, refresh: () => void, mayLoad: boolean):
 export function tips(root: HTMLElement) {
   let linked: Element[] = [];
   let current: HTMLElement | null = null;
+  // A shown tip follows its target's words when they change under it (a button that toggles, say).
+  const words = new MutationObserver(() => { if (current) show(current, false); });
 
   function clearLinked() {
     for (const node of linked) node.classList.remove("linked");
@@ -105,9 +107,11 @@ export function tips(root: HTMLElement) {
       else linked = [];
     }
     show(target);
+    words.observe(target, { attributeFilter: ["data-tip", "data-tip-title", "data-tip-sub"] });
   }
 
   function leave(hide = true) {
+    words.disconnect();
     clearLinked();
     current?.removeAttribute("aria-describedby");
     current = null;

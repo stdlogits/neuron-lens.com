@@ -48,6 +48,10 @@ explorer's geometry. No sentences.
 | `--deep` | `#6A4FE0` | `#A08BFF` |
 | `--late` | `#0B87AD` | `#4FD8F5` |
 
+The theme is auto (the system's look, stored nowhere), light or dark. The header's one button steps
+auto → the system's opposite → the system's own look → auto, showing and naming the step it would
+take, so every step but the last changes the page.
+
 Tints of the accent, always mixed with `color-mix(in oklch, …)`: 9% (a token a head attended to),
 14% (a token two reads agree on), 22% (the token a unit fired on), 26% (variants of a hovered token).
 
