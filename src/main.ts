@@ -4,4 +4,7 @@ import "./styles/fonts.css";
 import "./styles/tokens.css";
 import "./styles/base.css";
 
-mount(App, { target: document.getElementById("app")! });
+const target = document.getElementById("app")!;
+// The summary for readers that run no script (scripts/site/meta.ts) gives way to the app.
+target.replaceChildren();
+mount(App, { target });

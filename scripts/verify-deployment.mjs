@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Checks a deployed neuron-lens.com: every path answers as Cloudflare Pages should serve this build,
-// with the headers public/_headers sets, and the explorer shows images and plays sounds under that CSP
-// (the dev server sends no CSP, so only a deployed site can fail that way).
+// with the headers public/_headers sets and the files the site serves about itself, and the explorer
+// shows images and plays sounds under that CSP (the dev server sends no CSP, so only a deployed site
+// can fail that way).
 //
 //   node scripts/verify-deployment.mjs [origin]      default https://neuron-lens.com
 //     --build dist     also require the live page to be this local build (scripts/deploy.sh passes it)
@@ -125,9 +126,13 @@ export async function checkHtml(origin, rules, buildDir) {
   assert.ok(html.includes('id="app"'), "/ is not the app's index.html");
   for (const [i, body] of bodies.entries()) assert.equal(body, html, `${paths[i]} serves another page than /`);
   // The CSP allows no inline script: anything injected into the page (Cloudflare's analytics beacon,
-  // Rocket Loader, email obfuscation) would be blocked, so the zone must leave HTML alone.
-  const inline = [...html.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>/gi)];
+  // Rocket Loader, email obfuscation) would be blocked, so the zone must leave HTML alone. The JSON-LD
+  // is a data block, which never runs.
+  const inline = [...html.matchAll(/<script\b(?![^>]*\bsrc=)(?![^>]*\btype="application\/ld\+json")[^>]*>/gi)];
   assert.equal(inline.length, 0, `/ has ${inline.length} inline script(s), which the CSP blocks`);
+  assert.ok(html.includes('<script type="application/ld+json">'), "/ has no JSON-LD");
+  const card = html.match(/<meta property="og:image" content="([^"]+)"/)?.[1];
+  assert.ok(card && SITE_FILES.some(([path]) => new URL(card).pathname === path), `/'s og:image (${card}) is none of the site's files`);
   const refs = assetRefs(html);
   assert.ok(refs.some((ref) => ref.endsWith(".js")), "/ references no /assets/*.js");
 
@@ -138,7 +143,22 @@ export async function checkHtml(origin, rules, buildDir) {
   return html;
 }
 
-export async function checkAssets(origin, rules, html) {
+// What the site serves about itself: the mark and the card (public/, drawn by scripts/site/render.mjs)
+// and what scripts/site/meta.ts writes into the build.
+const SITE_FILES = [
+  ["/favicon.svg", ["image/svg+xml"]],
+  ["/favicon.ico", ["image/x-icon", "image/vnd.microsoft.icon"]],
+  ["/apple-touch-icon.png", ["image/png"]],
+  ["/icon-192.png", ["image/png"]],
+  ["/icon-512.png", ["image/png"]],
+  ["/icon-maskable-512.png", ["image/png"]],
+  ["/card.png", ["image/png"]],
+  ["/manifest.webmanifest", ["application/manifest+json"]],
+  ["/llms.txt", ["text/plain", "text/markdown"]],
+  ["/sitemap.xml", ["application/xml", "text/xml"]],
+];
+
+export async function checkAssets(origin, rules, html, buildDir) {
   const refs = assetRefs(html);
   for (const ext of [".js", ".css"]) {
     const path = refs.find((ref) => ref.endsWith(ext));
@@ -158,6 +178,17 @@ export async function checkAssets(origin, rules, html) {
   const robots = await get(origin, "/robots.txt");
   assert.equal(robots.status, 200, `/robots.txt: HTTP ${robots.status}`);
   assert.equal(await robots.text(), await readFile(resolve(root, "public/robots.txt"), "utf8"), "/robots.txt differs from public/robots.txt");
+
+  for (const [path, types] of SITE_FILES) {
+    const response = await get(origin, path);
+    assert.equal(response.status, 200, `${path}: HTTP ${response.status}`);
+    assert.ok(types.includes(mime(response)), `${path}: ${mime(response)}`);
+    if (path.endsWith(".txt")) assert.match(response.headers.get("content-type") ?? "", /charset=utf-8/i, `${path}: not UTF-8`);
+    assertHeaders(response, rules, path);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (buildDir) assert.ok(bytes.equals(await readFile(resolve(buildDir, path.slice(1)))), `${path} differs from ${buildDir}`);
+    else assert.ok(bytes.length > 0, `${path} is empty`);
+  }
 }
 
 export async function checkData(origin, rules) {
@@ -324,7 +355,7 @@ async function main() {
   if (opts.http) {
     steps.push(
       ["HTML and its headers", async () => { html = await checkHtml(opts.origin, rules, opts.build); }],
-      ["assets, theme.js, robots.txt", () => checkAssets(opts.origin, rules, html)],
+      ["assets, theme.js, robots.txt, the site's files", () => checkAssets(opts.origin, rules, html, opts.build)],
       ["catalog JSON and missing data", () => checkData(opts.origin, rules)],
       ["media packs by range", () => checkMediaRanges(opts.origin, rules)],
     );

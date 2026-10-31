@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Neuron Lens social card</title>
+  <!-- The social card (public/card.png), drawn by scripts/site/render.mjs in the site's own type and
+       tokens: Qwen3-8B's atlas from the catalog, and L8·n344 as the explorer shows it. -->
+  <link rel="stylesheet" href="../../src/styles/fonts.css">
+  <link rel="stylesheet" href="../../src/styles/tokens.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; }
+    html, body { width: 1200px; height: 630px; overflow: hidden; }
+    body {
+      --tint: color-mix(in oklch, var(--deep) 77%, var(--late));
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      padding: 56px 64px;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--text);
+      font-synthesis: none;
+      -webkit-font-smoothing: antialiased;
+    }
+    .lockup { display: flex; align-items: center; gap: 14px; font: 600 32px/1 var(--display); letter-spacing: -0.02em; }
+    .lockup img { width: 40px; height: 40px; }
+    .unit { display: flex; align-items: center; gap: 48px; }
+    .id { font: 600 72px/1 var(--display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .id span { color: var(--ink3); }
+    .reads { display: grid; gap: 14px; justify-items: start; }
+    .ctx { padding: 10px 20px; border-radius: var(--r-box); background: var(--wash); color: var(--ink2); font: 400 24px/36px var(--text); }
+    mark { border-radius: 6px; color: var(--ink); background: color-mix(in oklch, var(--tint) 22%, transparent); box-shadow: 0 0 0 3px color-mix(in oklch, var(--tint) 22%, transparent); }
+    .toks { display: flex; flex-wrap: wrap; gap: 10px; }
+    .tok { padding: 3px 14px; border-radius: 9px; background: var(--wash); font: 400 24px/34px var(--text); }
+    .tok.agree { background: color-mix(in oklch, var(--tint) 14%, var(--paper)); }
+    .ws { color: var(--ink3); margin-right: 1px; }
+
+    /* The atlas at the explorer's own geometry, a little heavier: 4 px bars 2 px apart. */
+    .atlas { display: grid; grid-template-columns: repeat(36, minmax(0, 1fr)); }
+    .col { display: grid; align-content: start; justify-items: center; gap: 2px; padding: 8px 0; border-radius: var(--r-col); }
+    .col.here { background: var(--wash); }
+    .col i { display: block; width: 62%; height: 4px; border-radius: 2px; background: var(--c); opacity: var(--o); }
+    .col i.sel { width: 86%; background: var(--ink); opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="lockup"><img src="../../public/favicon.svg" alt="">Neuron Lens</div>
+  <div class="unit">
+    <div class="id">L8<span>·</span>n344</div>
+    <div class="reads">
+      <p class="ctx">hear the sound of the <mark>owl</mark>s</p>
+      <div class="toks">
+        <span class="tok agree"><span class="ws">·</span>owl</span>
+        <span class="tok"><span class="ws">·</span>noct</span>
+        <span class="tok"><span class="ws">·</span>night</span>
+        <span class="tok"><span class="ws">·</span>bedtime</span>
+      </div>
+    </div>
+  </div>
+  <div class="atlas" id="atlas"></div>
+  <script>
+    // columns: per layer, each bar's opacity, most readable first; here: the layer and bar to mark.
+    window.draw = ({ columns, here }) => {
+      const atlas = document.getElementById("atlas");
+      columns.forEach((bars, L) => {
+        const col = document.createElement("div");
+        col.className = L === here.layer ? "col here" : "col";
+        col.style.setProperty("--c", `color-mix(in oklch, var(--deep) ${Math.round(100 - (L / (columns.length - 1)) * 100)}%, var(--late))`);
+        bars.forEach((o, i) => {
+          const bar = document.createElement("i");
+          if (L === here.layer && i === here.slot) bar.className = "sel";
+          bar.style.setProperty("--o", o);
+          col.append(bar);
+        });
+        atlas.append(col);
+      });
+    };
+  </script>
+</body>
+</html>

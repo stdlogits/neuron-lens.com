@@ -1,3 +1,7 @@
+# Every crawler is welcome, search and AI alike. /data/ is only the explorer's working copy of the
+# catalog (JSON and media packs); the catalog itself is https://huggingface.co/datasets/stdlogits/neuron-lens.
 User-agent: *
 Allow: /
 Disallow: /data/
+
+Sitemap: https://neuron-lens.com/sitemap.xml

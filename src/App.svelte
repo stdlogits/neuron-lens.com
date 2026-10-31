@@ -6,7 +6,8 @@
   import About from "./pages/About.svelte";
   import Credits from "./pages/Credits.svelte";
   import NotFound from "./pages/NotFound.svelte";
-  import { router, startRouter } from "./lib/router.svelte";
+  import { href, router, startRouter } from "./lib/router.svelte";
+  import { ORIGIN } from "./lib/site";
   import { startTheme } from "./lib/theme.svelte";
   import { restoreTranslate } from "./lib/translate.svelte";
   import { tips } from "./lib/tips";
@@ -21,7 +22,14 @@
   });
 
   const page = $derived(router.route.page);
+  // Every view's address, without the ?all that only changes how much of a layer it lists. The
+  // missing page has none and asks not to be indexed (Pages answers it 200, as every path).
+  const canonical = $derived(page === "missing" ? null : ORIGIN + href(router.route).split("?")[0]);
 </script>
+
+<svelte:head>
+  {#if canonical}<link rel="canonical" href={canonical} />{:else}<meta name="robots" content="noindex" />{/if}
+</svelte:head>
 
 <a class="skip" href="#main">Skip to content</a>
 <div class="site" use:tips>

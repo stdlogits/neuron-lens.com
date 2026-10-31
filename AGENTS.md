@@ -17,15 +17,16 @@ files. It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now
   `search/`), `media/`.
 - `src/pages/`: About, Credits, the missing page.
 - `src/lib/`: `data.ts` (the catalog's types and loaders), `models.ts` (each model's shape and the
-  words for its depth bands), `router.svelte.ts` (every view is a path), `motion.ts`, `tips.ts`,
-  `translate.svelte.ts`, `media.ts`, `theme.svelte.ts`.
+  words for its depth bands), `router.svelte.ts` (every view is a path), `site.ts` (the name and
+  origin), `motion.ts`, `tips.ts`, `translate.svelte.ts`, `media.ts`, `theme.svelte.ts`.
 - `src/ui/`: the shared pieces (`Segmented`, `Tabs`, `Swap`, `MorphText`, `Icon`, …).
 - `src/styles/`: tokens, base styles, the Wix Madefor faces.
 - `public/`: copied into the build as is. `_headers` (CSP, security headers, caching), `robots.txt`,
   `theme.js` (applies the stored theme before first paint; a file, not inline, because the CSP allows
-  no inline script), `data/` (the catalog, gitignored except `data/404.html`).
-- `scripts/neurons/`: the catalog's build (below). `scripts/deploy.sh`, `scripts/verify-deployment.mjs`:
-  deploy and the live check.
+  no inline script), the mark (`favicon.svg`) and the images drawn from it and the card (below),
+  `data/` (the catalog, gitignored except `data/404.html`).
+- `scripts/neurons/`: the catalog's build (below). `scripts/site/`: what the site says about itself
+  (below). `scripts/deploy.sh`, `scripts/verify-deployment.mjs`: deploy and the live check.
 - `e2e/`: Playwright specs on a mock catalog (`e2e/fixtures/catalog`, committed: a few units cut from
   `public/data` by `e2e/fixtures/build.mjs`, ~0.5 MB).
 
@@ -42,6 +43,28 @@ tabular numbers, motion on one curve through the `motion.ts` actions and `Swap`/
 rather than tell (no explanatory paragraphs or provenance in the explorer; tips and the About page
 hold the words). The only credit in the explorer is "Labels by Claude Haiku 5.5". Phone widths down to
 320 px must not scroll sideways.
+
+## What the site says about itself
+
+Every address is served the same `index.html`, and the explorer draws each view in the browser, so
+crawlers, link previews and language models that run no script see only what the build writes into
+it. `scripts/site/meta.ts`, a Vite plugin, writes all of it, from `src/lib/models.ts` and
+`src/lib/site.ts`: the description, Open Graph and Twitter tags, icons and JSON-LD (the site, the
+explorer, the catalog as a schema.org `Dataset` with its Hub release as its id, a9lim under a9l.im's
+person id, treetown, Standard Logits); a short summary in `#app` for readers without script (hidden by
+`@media (scripting: enabled)` and cleared by `main.ts`); `/llms.txt` from `scripts/site/llms.md`;
+`/sitemap.xml`; and the web app manifest. `App.svelte` sets each view's canonical link (`?all`
+dropped) and marks the missing page `noindex`. There is no `og:url`: every address is served this
+page, so a static one would name the home page for all of them.
+
+The site describes the project and points at the Hub release; it never writes a unit's data as text
+or pages (a9's call: anyone who wants the data uses `stdlogits/neuron-lens`). `robots.txt` welcomes
+every crawler and keeps them out of `/data/`.
+
+`node scripts/site/render.mjs` draws the images into `public/`: the social card (`card.png`, from
+`scripts/site/card.html` in the site's own tokens: Qwen3-8B's atlas from the built catalog and
+L8·n344 as the explorer shows it) and, from `favicon.svg`, `favicon.ico`, `apple-touch-icon.png` and
+the manifest's icons. Rerun it when the mark, the card or Qwen3-8B's catalog changes.
 
 ## The catalog
 
@@ -98,7 +121,9 @@ Pages caps a site at 20,000 files (Free plan) and a file at 25 MiB; media packs 
   Specs test the address and the shell through roles and names; markup-level tests of the atlas, list
   and unit view are marked `test.fixme` until those parts settle.
 - `node scripts/verify-deployment.mjs <origin>` checks a deployed site: status codes, the headers from
-  `_headers`, catalog JSON, 404s for missing data, 206 ranges on media packs, immutable assets, then a
+  `_headers`, the JSON-LD and the files the site serves about itself (icons, card, manifest, llms.txt,
+  sitemap; byte for byte against `dist` when deploying), catalog JSON, 404s for missing data, 206
+  ranges on media packs, immutable assets, then a
   Chromium smoke that a Gemma neuron's images load and a sound plays with no CSP violation. Its
   selectors are constants at the top of its browser section.
 

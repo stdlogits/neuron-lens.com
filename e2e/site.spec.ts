@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { serveCatalog } from "./fixtures/catalog.mjs";
 
-// The site around the explorer: its pages, a clean console, and phone widths.
+// The site around the explorer: its pages, what it says about itself, a clean console, and phone widths.
 
 test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -30,6 +30,41 @@ for (const path of ["/no-such-page", "/qwen3-8b/L99", "/gemma-4-12b/L8/n99999"])
     expect(new URL(page.url()).pathname).toBe(path);
   });
 }
+
+for (const [path, canonical] of [["/", "/"], ["/qwen3-8b", "/"], ["/gemma-4-12b/L14/n8313?all", "/gemma-4-12b/L14/n8313"], ["/neurons?layer=20&head=17", "/qwen3-8b/L20/h17"], ["/about", "/about"]]) {
+  test(`${path} names its canonical address`, async ({ page }) => {
+    await page.goto(path);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `https://neuron-lens.com${canonical}`);
+    await expect(page.locator('meta[name="robots"][content="noindex"]')).toHaveCount(0);
+  });
+}
+
+test("the missing page asks not to be indexed", async ({ page }) => {
+  await page.goto("/no-such-page");
+  await expect(page.locator('meta[name="robots"][content="noindex"]')).toHaveCount(1);
+  await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
+});
+
+test("the summary is for readers that run no script", async ({ browser }) => {
+  const bare = await browser.newPage({ javaScriptEnabled: false });
+  await bare.goto("/qwen3-8b/L8/n344");
+  await expect(bare.getByRole("heading", { level: 1, name: "Neuron Lens" })).toBeVisible();
+  await expect(bare.getByRole("link", { name: "Neuron Lens for language models" })).toHaveAttribute("href", "/llms.txt");
+  await bare.close();
+  // With script, the app replaces it.
+  const page = await browser.newPage();
+  await page.goto("/about");
+  await expect(page.locator("main h1")).toBeVisible();
+  await expect(page.locator("#app > .summary")).toHaveCount(0);
+  await page.close();
+});
+
+test("llms.txt and the sitemap are served", async ({ request }) => {
+  const llms = await request.get("/llms.txt");
+  expect(llms.ok()).toBe(true);
+  expect(await llms.text()).toMatch(/^# Neuron Lens\n\n> What each neuron/);
+  expect(await (await request.get("/sitemap.xml")).text()).toContain("<loc>https://neuron-lens.com/about</loc>");
+});
 
 const TOUR = ["/", "/gemma-4-12b", "/qwen3-8b/L8/n344", "/qwen3-8b/L20/h17", "/gemma-4-12b/L33/n12225", "/gemma-4-12b/L28/heads", "/gemma-4-12b/L14/n8313?all", "/about", "/credits", "/no-such-page"];
 

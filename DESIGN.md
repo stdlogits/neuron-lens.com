@@ -25,6 +25,16 @@ per piece) is https://claude.ai/artifact/EySC7fJPJAtVAmhFndggfx; re-sync it when
 - **Motion everywhere, noticed nowhere.** Every change moves, quickly, on one curve. Nothing loops,
   pulses, sweeps or ripples.
 
+## The mark and the card
+
+The mark (`public/favicon.svg`) is a lens cut from the depth ramp: a tile rounded at a quarter of its
+side, filled left to right from `--deep` to `--late` through their oklch mix (the one place the whole
+ramp is a single gradient), with an upright biconvex lens in the paper's colour, white in light and
+`#0B0D12` in dark, each theme on its own ramp. Where a platform rounds or masks icons itself, the
+tile goes full bleed. The social card (`scripts/site/card.html`) is the explorer in miniature: the
+mark and name, one unit's ID, a firing on a wash and its writes as chips, over the model's atlas at the
+explorer's geometry. No sentences.
+
 ## Tokens (`src/styles/tokens.css`)
 
 | | light | dark |
