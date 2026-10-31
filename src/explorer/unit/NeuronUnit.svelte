@@ -1,13 +1,11 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import Swap from "../../ui/Swap.svelte";
-  import Context from "../../ui/Context.svelte";
-  import Expander from "../../ui/Expander.svelte";
+  import { Context, Expander, Swap, stem } from "@stdlogits/ledger";
   import NeuronMedia from "../media/NeuronMedia.svelte";
   import Faces from "./Faces.svelte";
   import Group from "./Group.svelte";
   import NeuronMore from "./NeuronMore.svelte";
-  import { LENSES, stem, type NeuronDetail } from "../../lib/data";
+  import { LENSES, type NeuronDetail } from "../../lib/data";
   import { moreEvidence } from "./more.svelte";
   import { SHOWN, agreement, flagged, primaryRead } from "./evidence";
 

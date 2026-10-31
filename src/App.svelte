@@ -8,14 +8,14 @@
   import NotFound from "./pages/NotFound.svelte";
   import { href, router, startRouter } from "./lib/router.svelte";
   import { ORIGIN } from "./lib/site";
-  import { startTheme } from "./lib/theme.svelte";
+  import { theme } from "./lib/theme";
   import { restoreTranslate } from "./lib/translate.svelte";
-  import { tips } from "./lib/tips";
+  import { tips } from "@stdlogits/ledger";
 
   let ready = $state(false);
   onMount(() => {
     const stopRouter = startRouter();
-    const stopTheme = startTheme();
+    const stopTheme = theme.start();
     restoreTranslate();
     ready = true;
     return () => { stopRouter(); stopTheme(); };

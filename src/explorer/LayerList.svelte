@@ -1,8 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import MorphText from "../ui/MorphText.svelte";
+  import { MorphText, fadeOut } from "@stdlogits/ledger";
   import LayerItems, { type ListItem } from "./unit/LayerItems.svelte";
-  import { fadeOut } from "../lib/motion";
   import { matchKey, useLens } from "./lens.svelte";
   import type { HeadRow } from "../lib/data";
 

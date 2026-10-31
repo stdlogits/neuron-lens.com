@@ -1,11 +1,7 @@
 <script lang="ts">
   import Part from "../Part.svelte";
   import UnitLink from "./UnitLink.svelte";
-  import Swap from "../../ui/Swap.svelte";
-  import Switch from "../../ui/Switch.svelte";
-  import Token from "../../ui/Token.svelte";
-  import Context from "../../ui/Context.svelte";
-  import LabelText from "../../ui/LabelText.svelte";
+  import { Context, LabelText, Swap, Switch, Token } from "@stdlogits/ledger";
   import { headline, loadNeuron, type Pole } from "../../lib/data";
   import { MODELS, depthColor } from "../../lib/models";
   import { setTranslate, translation } from "../../lib/translate.svelte";

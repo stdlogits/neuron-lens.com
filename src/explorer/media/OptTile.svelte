@@ -1,6 +1,6 @@
 <script lang="ts">
-  import Icon from "../../ui/Icon.svelte";
-  import { formatValue, type Optimised } from "../../lib/data";
+  import { Icon, formatValue } from "@stdlogits/ledger";
+  import type { Optimised } from "../../lib/data";
   import { MODALITY_NAMES, type Modality } from "../../lib/models";
   import { framePath, frameWav, play } from "./sound";
 

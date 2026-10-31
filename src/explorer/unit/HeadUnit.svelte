@@ -1,12 +1,11 @@
 <script lang="ts">
-  import Context from "../../ui/Context.svelte";
-  import Expander from "../../ui/Expander.svelte";
+  import { Context, Expander, stem } from "@stdlogits/ledger";
   import HeadMedia from "../media/HeadMedia.svelte";
   import Faces from "./Faces.svelte";
   import Group from "./Group.svelte";
   import HeadMore from "./HeadMore.svelte";
   import Pattern from "./Pattern.svelte";
-  import { LENSES, stem, type HeadDetail } from "../../lib/data";
+  import { LENSES, type HeadDetail } from "../../lib/data";
   import type { ModelInfo } from "../../lib/models";
   import { moreEvidence } from "./more.svelte";
   import { SHOWN, agreement, flagged, headWrites } from "./evidence";

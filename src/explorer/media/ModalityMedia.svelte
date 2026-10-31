@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Token from "../../ui/Token.svelte";
+  import { Token } from "@stdlogits/ledger";
   import MediaTile from "./MediaTile.svelte";
   import OptTile from "./OptTile.svelte";
   import { loadIndex, loadMediaDoc, type MediaDoc, type PoleMedia } from "../../lib/data";

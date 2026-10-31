@@ -170,9 +170,9 @@ export async function checkAssets(origin, rules, html, buildDir) {
     assertHeaders(response, rules, path);
     assert.ok((await response.arrayBuffer()).byteLength > 0, `${path} is empty`);
   }
-  const theme = await get(origin, "/theme.js");
-  assert.equal(theme.status, 200, `/theme.js: HTTP ${theme.status}`);
-  assert.ok(["text/javascript", "application/javascript"].includes(mime(theme)), `/theme.js: ${mime(theme)}`);
+  const theme = await get(origin, "/theme-preflight.js");
+  assert.equal(theme.status, 200, `/theme-preflight.js: HTTP ${theme.status}`);
+  assert.ok(["text/javascript", "application/javascript"].includes(mime(theme)), `/theme-preflight.js: ${mime(theme)}`);
   await theme.body?.cancel();
 
   const robots = await get(origin, "/robots.txt");
@@ -355,7 +355,7 @@ async function main() {
   if (opts.http) {
     steps.push(
       ["HTML and its headers", async () => { html = await checkHtml(opts.origin, rules, opts.build); }],
-      ["assets, theme.js, robots.txt, the site's files", () => checkAssets(opts.origin, rules, html, opts.build)],
+      ["assets, theme-preflight.js, robots.txt, the site's files", () => checkAssets(opts.origin, rules, html, opts.build)],
       ["catalog JSON and missing data", () => checkData(opts.origin, rules)],
       ["media packs by range", () => checkMediaRanges(opts.origin, rules)],
     );

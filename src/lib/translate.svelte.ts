@@ -1,6 +1,8 @@
 // English for text in other languages, machine-translated by Claude Haiku 5.5 when the data is built
 // (scripts/neurons/translate.py). Tokens and quoted terms come from terms.json, loaded on first need;
-// whole contexts carry their translation in the detail files.
+// whole contexts carry their translation in the detail files. Ledger draws the English (Token,
+// LabelText, Context, the tip); `translator` gives it these, installed in main.ts before the app mounts.
+import { FOREIGN, languageName, type Translator } from "@stdlogits/ledger";
 import { loadTerms, type Terms } from "./data";
 import { DEFAULT_MODEL, type ModelId } from "./models";
 
@@ -46,31 +48,24 @@ export function restoreTranslate() {
   try { if (localStorage.getItem(KEY) === "1") setTranslate(true); } catch { /* storage blocked */ }
 }
 
-/** Letters outside the Latin script: worth a lookup even before the terms have loaded. */
-export const FOREIGN = /[^\P{L}\p{Script=Latin}]/u;
-/** Runs of such letters (with their combining marks) inside running text, such as a label's quoted examples. */
-export const FOREIGN_RUN = /(?:[^\P{L}\p{Script=Latin}]\p{M}*)+/gu;
-
 export const termFor = (text: string) => translation.terms?.[text.trim()];
 
-/** Whether a token or term may have a translation: non-Latin letters, or a known entry once loaded. */
-export const maybeForeign = (text: string) => FOREIGN.test(text) || termFor(text) !== undefined;
-
-/** The English to show inline in place of a term, short enough for a chip. */
-export function inlineEnglish(text: string): string {
-  if (!translation.on) return "";
-  const entry = termFor(text);
-  if (!entry?.[0]) return "";
-  const english = entry[0];
-  return english.length > 28 ? `${english.slice(0, 27)}…` : english;
-}
-
-let names: Intl.DisplayNames | null = null;
-export function languageName(code: string): string {
-  try {
-    names ??= new Intl.DisplayNames(["en"], { type: "language" });
-    return (code && names.of(code)) || code;
-  } catch {
-    return code;
-  }
-}
+export const translator: Translator = {
+  get on() { return translation.on; },
+  /** Non-Latin letters, or a known entry once loaded. */
+  maybe: (text) => FOREIGN.test(text) || termFor(text) !== undefined,
+  /** Short enough for a chip. */
+  inline(text) {
+    if (!translation.on) return "";
+    const entry = termFor(text);
+    if (!entry?.[0]) return "";
+    const english = entry[0];
+    return english.length > 28 ? `${english.slice(0, 27)}…` : english;
+  },
+  tip(term, refresh, mayLoad) {
+    if (!termsReady() && mayLoad) void ensureTerms().then(refresh);
+    const entry = termFor(term);
+    if (!entry) return { title: term, sub: termsReady() || (translation.failed && !mayLoad) ? "No translation" : "Translating…" };
+    return { title: term, lang: entry[2], roman: entry[1] || undefined, body: entry[0], sub: languageName(entry[2]) };
+  },
+};

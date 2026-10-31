@@ -1,9 +1,7 @@
 <script lang="ts">
   import Part from "../Part.svelte";
   import UnitLink from "./UnitLink.svelte";
-  import Swap from "../../ui/Swap.svelte";
-  import Context from "../../ui/Context.svelte";
-  import LabelText from "../../ui/LabelText.svelte";
+  import { Context, LabelText, Swap } from "@stdlogits/ledger";
   import { PATTERN_NAMES, PATTERN_THRESHOLDS, ROLES, describeRole, loadHeadLayer, type HeadDetail } from "../../lib/data";
   import { MODELS, depthColor } from "../../lib/models";
   import { INDUCTION } from "./specimens";

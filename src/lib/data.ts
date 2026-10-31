@@ -1,6 +1,7 @@
 // The catalog the explorer reads. The files are prebuilt by scripts/neurons/build-neuron-catalog.py
 // from the neuron-lens catalogs and served as static JSON under /data.
 
+import type { ContextLine } from "@stdlogits/ledger";
 import type { ModelId, ModelInfo, Modality } from "./models";
 
 export const DATA_BASE = "/data";
@@ -28,8 +29,6 @@ export interface LensRead extends ReadInfo {
   pct: number;
   tokens: LensToken[];
 }
-/** A top firing: the text with the token marked ⟦ ⟧ (and, for heads, the attended token ⟪ ⟫), then its English and language when translated. */
-export type Context = [text: string, en?: string, lang?: string];
 
 export type NeuronSide = "read_S" | "read_R" | "write_S" | "write_R";
 export interface NeuronLabel { fires: string; fc: number; writes: string; wc: number; note: string }
@@ -44,7 +43,8 @@ export interface Pole {
   /** Typical and largest firing, the share of tokens it fires on (overall, then web, Chinese, code, chat), and the share of firings past position 0. */
   act: { top: number; max: number; rate: number; slices: [number, number, number, number]; pos: number };
   peaks: [string, number][];
-  contexts: Context[];
+  /** Top firings: the text with the token marked ⟦ ⟧, then its English and language when translated. */
+  contexts: ContextLine[];
   drivers: [string, number][];
   /** Each side's q-value at the pole's own top firings: under 0.05, the read holds. */
   legible: Record<NeuronSide, number>;
@@ -96,7 +96,8 @@ export interface HeadDetail {
   keys: [string, number][];
   peaks: [string, number][];
   sources: [string, number][];
-  contexts: Context[];
+  /** Top firings: the text with the token marked ⟦ ⟧ and the attended token ⟪ ⟫, then its English and language when translated. */
+  contexts: ContextLine[];
   legible: { ov_R: number; ov_copy: number; ov_S: number; qk_S: number };
   /** Share of top firings on one query token, and on one attended token. */
   modes: [number, number];
@@ -417,29 +418,6 @@ export function parseRef(query: string, model: ModelInfo): UnitRef | null {
 
 // ---------- tokens and text
 
-export interface TokenParts { lead: boolean; text: string; trail: boolean; byte: boolean; empty: boolean }
-
-/** Splits a token for display: a leading space marks a word start, byte pieces are marked, whitespace is made visible. */
-export function tokenParts(raw: string): TokenParts {
-  if (raw.startsWith("\u0001")) return { lead: false, text: raw.slice(1), trail: false, byte: true, empty: false };
-  const lead = raw.startsWith(" ");
-  const trail = raw.length > 1 && raw.endsWith(" ") && raw.trim() !== "";
-  let text = raw.trim() === "" ? raw : raw.slice(lead ? 1 : 0, trail ? -1 : undefined);
-  text = text.replace(/\n/g, "⏎").replace(/\r/g, "␍").replace(/\t/g, "⇥");
-  if (text.trim() === "" && text.length) text = text.replace(/ /g, "␣");
-  return { lead, text, trail, byte: false, empty: text === "" };
-}
-
-/** Variant key, matching the builder's stem(): case, leading punctuation and common English suffixes removed. */
-export function stem(token: string): string {
-  if (token.startsWith("\u0001")) return token;
-  let key = token.trim().toLowerCase().replace(/^[_\-.]+/, "").replace(/^[/([]+/, "");
-  for (const suffix of ["ing", "ed", "es", "s", "ly"]) {
-    if (key.endsWith(suffix) && key.length - suffix.length >= 4) { key = key.slice(0, -suffix.length); break; }
-  }
-  return key.endsWith("e") && key.length > 4 ? key.slice(0, -1) : key;
-}
-
 /** A token worth showing as a word: not a byte piece, whitespace or bare punctuation. */
 export const wordy = (token: string) => !token.startsWith("\u0001") && /[\p{L}\p{N}]/u.test(token);
 
@@ -447,22 +425,6 @@ export const wordy = (token: string) => !token.startsWith("\u0001") && /[\p{L}\p
 export function headline<T extends [string, ...unknown[]]>(list: T[], count = 5): T[] {
   const words = list.filter(([token]) => wordy(token));
   return (words.length ? words : list.filter(([token]) => !token.startsWith("\u0001"))).slice(0, count);
-}
-
-export interface Segment { text: string; mark: "hit" | "src" | null }
-
-/** A context split at its markers: ⟦ ⟧ the token where the unit fired, ⟪ ⟫ the token a head attended to. */
-export function segments(text: string): Segment[] {
-  const out: Segment[] = [];
-  let last = 0;
-  for (const match of text.matchAll(/⟦([^⟧]*)⟧|⟪([^⟫]*)⟫/g)) {
-    const at = match.index ?? 0;
-    if (at > last) out.push({ text: text.slice(last, at), mark: null });
-    out.push({ text: match[1] ?? match[2] ?? "", mark: match[1] !== undefined ? "hit" : "src" });
-    last = at + match[0].length;
-  }
-  if (last < text.length) out.push({ text: text.slice(last), mark: null });
-  return out;
 }
 
 export function percent(value: number | undefined, digits = 0): string {
@@ -477,7 +439,3 @@ export function percent(value: number | undefined, digits = 0): string {
 
 /** A count with thousands separators. */
 export const formatCount = (value: number) => value.toLocaleString("en-US");
-
-/** A token's measured value, to two or three significant figures. */
-export const formatValue = (value: number) =>
-  Math.abs(value) >= 10 ? value.toFixed(0) : Math.abs(value) >= 1 ? value.toFixed(1) : value.toPrecision(2);

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Swap from "../ui/Swap.svelte";
+  import { Swap } from "@stdlogits/ledger";
   import UnitBar from "./unit/UnitBar.svelte";
   import NeuronUnit from "./unit/NeuronUnit.svelte";
   import HeadUnit from "./unit/HeadUnit.svelte";

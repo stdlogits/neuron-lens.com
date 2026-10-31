@@ -13,8 +13,7 @@
 
 <script lang="ts">
   import { untrack } from "svelte";
-  import LabelText from "../../ui/LabelText.svelte";
-  import { expand, glide, reducedMotion } from "../../lib/motion";
+  import { LabelText, expand, glide, reducedMotion } from "@stdlogits/ledger";
 
   // One layer's units as a column of links, the chosen one on a wash that glides along the list.
   // About a dozen show; the rest open below in pages, with the opening motion. The chosen unit is

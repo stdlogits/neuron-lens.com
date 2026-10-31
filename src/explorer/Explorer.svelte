@@ -1,8 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import Segmented from "../ui/Segmented.svelte";
-  import Tabs from "../ui/Tabs.svelte";
-  import MorphText from "../ui/MorphText.svelte";
+  import { MorphText, Segmented, Tabs } from "@stdlogits/ledger";
   import Search from "./Search.svelte";
   import Atlas from "./Atlas.svelte";
   import LayerList from "./LayerList.svelte";

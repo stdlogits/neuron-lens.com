@@ -1,9 +1,6 @@
 <script lang="ts">
   import Part from "../Part.svelte";
-  import Segmented from "../../ui/Segmented.svelte";
-  import Tabs from "../../ui/Tabs.svelte";
-  import Swap from "../../ui/Swap.svelte";
-  import { glide } from "../../lib/motion";
+  import { Segmented, Swap, Tabs, glide } from "@stdlogits/ledger";
   import { loadIndex, percent, type LayerMeta } from "../../lib/data";
   import { MODELS, MODEL_ORDER, bandOf, bandRange, depthColor, type ModelId } from "../../lib/models";
 

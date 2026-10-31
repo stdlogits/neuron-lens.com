@@ -1,11 +1,9 @@
 <script lang="ts">
-  import Context from "../../ui/Context.svelte";
-  import LabelText from "../../ui/LabelText.svelte";
-  import Token from "../../ui/Token.svelte";
+  import { Context, LabelText, Token, formatValue } from "@stdlogits/ledger";
   import Facts, { type Fact } from "./Facts.svelte";
   import Reads from "./Reads.svelte";
   import Row from "./Row.svelte";
-  import { LENSES, formatValue, percent, type NeuronSide, type Pole, type ReadColumn } from "../../lib/data";
+  import { LENSES, percent, type NeuronSide, type Pole, type ReadColumn } from "../../lib/data";
   import { stat } from "./evidence";
 
   // The rest of one side, compact and quiet: the labeller's note, how often and how hard it fires,

@@ -1,7 +1,6 @@
 <script lang="ts">
   import Part from "../Part.svelte";
-  import Token from "../../ui/Token.svelte";
-  import Context from "../../ui/Context.svelte";
+  import { Context, Token } from "@stdlogits/ledger";
   import { headline, loadNeuron, neuronId, type Pole } from "../../lib/data";
   import { MODELS, depthColor } from "../../lib/models";
   import { GALLERY } from "./specimens";

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Icon from "../../ui/Icon.svelte";
+  import { Icon } from "@stdlogits/ledger";
   import { MODELS, bandOf, type ModelId } from "../../lib/models";
   import { headId, neuronId } from "../../lib/data";
 

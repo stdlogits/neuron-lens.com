@@ -2,10 +2,10 @@
 // forms (stemmed words from the curated neurons' poles and every head, lib/data.ts SearchFile); an ID
 // such as "L33 12225" or "L28h6" resolves to its unit directly. A query in another script is also
 // looked up in its English, so 熊猫 finds what panda finds.
+import { FOREIGN, stem } from "@stdlogits/ledger";
 import { matchKey, type Matches } from "../lens.svelte";
-import { parseRef, stem, type CatalogIndex, type HeadRow, type SearchFile, type Terms, type Unit } from "../../lib/data";
+import { parseRef, type CatalogIndex, type HeadRow, type SearchFile, type Terms, type Unit } from "../../lib/data";
 import type { ModelInfo } from "../../lib/models";
-import { FOREIGN } from "../../lib/translate.svelte";
 
 export interface Result {
   unit: Unit;

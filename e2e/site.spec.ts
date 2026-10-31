@@ -94,6 +94,17 @@ test("the theme steps through dark, light and auto", async ({ page }) => {
   expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(11, 13, 18)");
 });
 
+// Ledger's theme-preflight.js applies a stored choice before first paint, under the key index.html
+// gives it; the theme button reads the same key.
+test("a stored theme applies on load", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.addInitScript(() => localStorage.setItem("neuron-lens.theme", "dark"));
+  await page.goto("/about");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(11, 13, 18)");
+  await expect(page.getByRole("navigation", { name: "Site" }).locator("button.theme")).toHaveAccessibleName("Use the light theme");
+});
+
 const TOUR = ["/","/gemma-4-12b", "/qwen3-8b/L8/n344", "/qwen3-8b/L20/h17", "/gemma-4-12b/L33/n12225", "/gemma-4-12b/L28/heads", "/gemma-4-12b/L14/n8313?all", "/about", "/credits", "/no-such-page"];
 
 test("no console errors anywhere on the tour", async ({ page }) => {

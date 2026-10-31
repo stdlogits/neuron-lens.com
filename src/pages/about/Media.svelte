@@ -1,10 +1,7 @@
 <script lang="ts">
   import Part from "../Part.svelte";
   import UnitLink from "./UnitLink.svelte";
-  import Swap from "../../ui/Swap.svelte";
-  import Token from "../../ui/Token.svelte";
-  import Icon from "../../ui/Icon.svelte";
-  import LabelText from "../../ui/LabelText.svelte";
+  import { Icon, LabelText, Swap, Token } from "@stdlogits/ledger";
   import { headline, loadIndex, loadMediaDoc, loadNeuron, mediaUrl, releaseMedia, type MediaDoc, type Pole } from "../../lib/data";
   import { MODELS, depthColor, type Modality } from "../../lib/models";
   import { playOnly, sourceName } from "../../lib/media";

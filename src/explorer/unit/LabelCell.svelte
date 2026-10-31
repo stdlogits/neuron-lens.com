@@ -1,5 +1,5 @@
 <script lang="ts">
-  import LabelText from "../../ui/LabelText.svelte";
+  import { LabelText } from "@stdlogits/ledger";
 
   // One label of the faces table over its confidence. Under a quarter, the label fades to the
   // softest ink. On a narrow pane, where the columns stack, the cell names its column.

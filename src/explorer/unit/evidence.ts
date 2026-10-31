@@ -1,7 +1,8 @@
 // What a unit's view shows, chosen from its detail: the reads its depth trusts, the tokens two of the
 // shown lists agree on, and the wording of its figures.
+import { stem } from "@stdlogits/ledger";
 import {
-  FLAG_AUDIO, FLAG_DETECTOR, FLAG_IMAGE, FLAG_PREDICTS, FLAG_SUPPRESSES, LENSES, stem,
+  FLAG_AUDIO, FLAG_DETECTOR, FLAG_IMAGE, FLAG_PREDICTS, FLAG_SUPPRESSES, LENSES,
   type HeadDetail, type LensRead, type LensToken, type ReadColumn,
 } from "../../lib/data";
 

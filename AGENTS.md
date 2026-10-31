@@ -16,15 +16,18 @@ files. It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now
   are its parts: `Atlas` (and `atlas/`), `LayerList`, `UnitView` (and `unit/`), `Search` (and
   `search/`), `media/`.
 - `src/pages/`: About, Credits, the missing page.
-- `src/lib/`: `data.ts` (the catalog's types and loaders), `models.ts` (each model's shape and the
-  words for its depth bands), `router.svelte.ts` (every view is a path), `site.ts` (the name and
-  origin), `motion.ts`, `tips.ts`, `translate.svelte.ts`, `media.ts`, `theme.svelte.ts`.
-- `src/ui/`: the shared pieces (`Segmented`, `Tabs`, `Swap`, `MorphText`, `Icon`, …).
-- `src/styles/`: tokens, base styles, the Wix Madefor faces.
+- `src/lib/`: `data.ts` (the catalog's types and loaders), `models.ts` (each model's shape, its depth
+  ramp and the words for its depth bands), `router.svelte.ts` (every view is a path), `site.ts` (the
+  name and origin), `translate.svelte.ts` (the translations, and the site's `Translator` for Ledger),
+  `theme.ts` (the theme, from Ledger's `createTheme`), `media.ts`.
+- `src/styles/site.css`: the site's own rules over Ledger's (the no-script summary).
+- `@stdlogits/ledger` (below, "Design"): the tokens, faces and base styles, motion, the tip, the
+  theme and the shared pieces (`Segmented`, `Tabs`, `Token`, `Swap`, `MorphText`, `Icon`, …).
 - `public/`: copied into the build as is. `_headers` (CSP, security headers, caching), `robots.txt`,
-  `theme.js` (applies the stored theme before first paint; a file, not inline, because the CSP allows
-  no inline script), the mark (`favicon.svg`) and the images drawn from it and the card (below),
-  `data/` (the catalog, gitignored except `data/404.html`).
+  the mark (`favicon.svg`) and the images drawn from it and the card (below), `data/` (the catalog,
+  gitignored except `data/404.html`). `vite.config.ts` serves Ledger's `theme-preflight.js` beside them
+  (it applies the stored theme before first paint; a file, not inline, because the CSP allows no inline
+  script); `index.html` gives it the theme's key.
 - `scripts/neurons/`: the catalog's build (below). `scripts/site/`: what the site says about itself
   (below). `scripts/deploy.sh`, `scripts/verify-deployment.mjs`: deploy and the live check.
 - `e2e/`: Playwright specs on a mock catalog (`e2e/fixtures/catalog`, committed: a few units cut from
@@ -36,13 +39,25 @@ neuron of the layer), `/<model>/heads`, `/<model>/L<layer>/heads`, `/<model>/L<l
 
 ## Design
 
-`DESIGN.md` is the design: tokens, type, motion and pieces, in Ledger, the design language of every
-Standard Logits product, which this site defines (a change here is a change to Ledger). Follow it
-exactly: flat and borderless, the depth tint as the one accent and only as fill, Wix Madefor only with
-tabular numbers, motion on one curve through the `motion.ts` actions and `Swap`/`MorphText`, show
+The site is drawn in Ledger, the design language of every Standard Logits product, which lives in
+[`stdlogits/ledger`](https://github.com/stdlogits/ledger): the package `@stdlogits/ledger`, pinned in
+`package.json` to a tag. Its `DESIGN.md` (`node_modules/@stdlogits/ledger/DESIGN.md` at the pinned
+version) is the design, and its tokens, faces, motion, tip, theme and pieces are the only ones the site
+uses. A change to Ledger lands in that repository first, as a new tag, and reaches the site as a pin
+bump; never copy a piece into the site to change it. This repository's `DESIGN.md` lists what the site
+draws for itself.
+
+Follow Ledger exactly: flat and borderless, the depth tint as the one accent and only as fill, Wix
+Madefor only with tabular numbers, motion on one curve through its actions and `Swap`/`MorphText`, show
 rather than tell (no explanatory paragraphs or provenance in the explorer; tips and the About page
 hold the words). The only credit in the explorer is "Labels by Claude Haiku 5.5". Phone widths down to
 320 px must not scroll sideways.
+
+`main.ts` loads `@stdlogits/ledger/ledger.css`, then `site.css`, and installs `translator` with
+`setTranslator` before mounting. The dev server serves Ledger as source rather than pre-bundling it
+(`optimizeDeps.exclude`), because vite-plugin-svelte's pre-bundling hands its `.svelte.ts` modules to
+Svelte with their types still in; that also needs vite-plugin-svelte 7.3.1 or newer, which finds a
+`node_modules` component's CSS under Vite's `?v=` query.
 
 ## What the site says about itself
 
@@ -94,7 +109,9 @@ Labels come from neuron-lens's `scripts/10_labels.py`, per model. The builder al
 titles then fall back to a unit's media label or its peak tokens.
 
 The types in `src/lib/data.ts` mirror the builder's output. Change both together, then regenerate the
-e2e mock catalog (`node e2e/fixtures/build.mjs`) so the specs see the new shape.
+e2e mock catalog (`node e2e/fixtures/build.mjs`) so the specs see the new shape. The builder's `stem()`
+keys the search file and the variants a unit agrees on; the explorer computes the same keys with
+Ledger's `stem()`, so the two must stay the same.
 
 `public/data/404.html` makes a missing data file answer 404 rather than the app. There must be no
 top-level `404.html`: Pages serves `index.html` for every path without a file only while there isn't

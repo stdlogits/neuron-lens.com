@@ -1,0 +1,8 @@
+/* The site's own rules, over Ledger's (@stdlogits/ledger/ledger.css). */
+
+/* The summary index.html carries for readers that run no script (crawlers, link previews, language
+ * models fetching a page; scripts/site/meta.ts). A browser that runs the app never shows it, and
+ * main.ts removes it as the app mounts. */
+#app > .summary { display: grid; gap: var(--s4); max-width: 640px; margin: 0 auto; padding: var(--s8) var(--gutter); color: var(--ink2); }
+#app > .summary h1 { color: var(--ink); font: var(--type-title); }
+@media (scripting: enabled) { #app > .summary { display: none; } }

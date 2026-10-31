@@ -1,6 +1,5 @@
 <script lang="ts">
-  import Token from "../../ui/Token.svelte";
-  import Meter from "../../ui/Meter.svelte";
+  import { Meter, Token } from "@stdlogits/ledger";
   import { LENSES, type LensRead } from "../../lib/data";
   import { nth, readTip } from "./evidence";
 

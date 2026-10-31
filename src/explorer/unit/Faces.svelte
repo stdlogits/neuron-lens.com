@@ -3,7 +3,7 @@
 </script>
 
 <script lang="ts">
-  import { glide } from "../../lib/motion";
+  import { glide } from "@stdlogits/ledger";
   import LabelCell from "./LabelCell.svelte";
 
   // The faces table: a sign column, then one column per label ("Fires on", "Writes"; heads add

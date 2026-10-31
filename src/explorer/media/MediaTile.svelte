@@ -1,10 +1,9 @@
 <script lang="ts">
-  import Icon from "../../ui/Icon.svelte";
-  import Swap from "../../ui/Swap.svelte";
-  import { formatValue, mediaUrl, releaseMedia, type MediaDoc } from "../../lib/data";
+  import { Icon, Swap, formatValue, languageName } from "@stdlogits/ledger";
+  import { mediaUrl, releaseMedia, type MediaDoc } from "../../lib/data";
   import { sourceName } from "../../lib/media";
   import type { Modality, ModelId } from "../../lib/models";
-  import { languageName, translation } from "../../lib/translate.svelte";
+  import { translation } from "../../lib/translate.svelte";
   import { clipSeconds, play } from "./sound";
 
   // One image or sound a side fires on, as the model saw or heard it: a square of wash the picture

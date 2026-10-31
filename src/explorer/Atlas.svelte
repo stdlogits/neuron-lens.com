@@ -3,11 +3,10 @@
   import Scale from "./atlas/Scale.svelte";
   import { matchKey, useLens } from "./lens.svelte";
   import { ALL_ROWS, SHADES, byteShades, field, shadeScale } from "./atlas/levels";
-  import { IN, ease, fadeOut, glide } from "../lib/motion";
-  import { hideTip, showTip, type TipContent } from "../lib/tips";
+  import { IN, ease, fadeOut, glide, hideTip, showTip, type TipContent } from "@stdlogits/ledger";
   import { headId, loadLayerIndex, neuronId, type HeadRow, type IndexRow } from "../lib/data";
   import { depthColor } from "../lib/models";
-  import { theme } from "../lib/theme.svelte";
+  import { theme } from "../lib/theme";
 
   // The map of every layer: a column a layer, a short bar a unit, the most readable at the top, each
   // shaded by how readable it is. Neurons (the easiest 40 a layer) and heads share one look; All mode

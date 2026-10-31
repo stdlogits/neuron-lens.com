@@ -1,12 +1,9 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import MorphText from "../../ui/MorphText.svelte";
-  import IconButton from "../../ui/IconButton.svelte";
-  import Switch from "../../ui/Switch.svelte";
+  import { IconButton, MorphText, Switch, fadeIn } from "@stdlogits/ledger";
   import { useLens } from "../lens.svelte";
   import { describeRole, formatCount, rolesOf } from "../../lib/data";
   import { setTranslate, translation } from "../../lib/translate.svelte";
-  import { fadeIn } from "../../lib/motion";
   import { neuronTags } from "./evidence";
 
   // The top of the unit: its ID over its depth and tags, then the tools: English, where it sits in

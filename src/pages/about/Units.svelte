@@ -1,7 +1,7 @@
 <script lang="ts">
   import Part from "../Part.svelte";
   import UnitLink from "./UnitLink.svelte";
-  import Token from "../../ui/Token.svelte";
+  import { Token } from "@stdlogits/ledger";
   import { headId, headline, loadHeadLayer, loadNeuron, neuronId, type LensToken } from "../../lib/data";
   import { MODELS, depthColor } from "../../lib/models";
   import { OWL, SHE } from "./specimens";

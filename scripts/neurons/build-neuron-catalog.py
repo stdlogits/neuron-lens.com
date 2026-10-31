@@ -126,7 +126,8 @@ TOKS = [decode(i) for i in range(VOCAB)]
 
 
 def stem(t):
-    """Variant key: case, leading punctuation and common English suffixes removed (release, Released, -releases)."""
+    """Variant key: case, leading punctuation and common English suffixes removed (release, Released, -releases).
+    The explorer keys search and variant links with Ledger's stem() (@stdlogits/ledger, src/lib/tokens.ts): keep the two the same."""
     if t.startswith("\u0001"):
         return t
     k = t.strip().lower().lstrip("_-.").lstrip("/([")

@@ -4,8 +4,7 @@
 </script>
 
 <script lang="ts">
-  import Token from "../../ui/Token.svelte";
-  import Meter from "../../ui/Meter.svelte";
+  import { Meter, Token } from "@stdlogits/ledger";
   import { nth } from "./evidence";
 
   // A titled run of tokens: what the unit fires on in real text, or what a read of its weights names,

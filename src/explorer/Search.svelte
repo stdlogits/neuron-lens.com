@@ -1,12 +1,10 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import Icon from "../ui/Icon.svelte";
-  import LabelText from "../ui/LabelText.svelte";
+  import { FOREIGN, Icon, LabelText, expand, glide, reducedMotion } from "@stdlogits/ledger";
   import { useLens } from "./lens.svelte";
   import { findId, findWords, type Found, type Result } from "./search/engine";
   import { headId, loadSearch, neuronId, parseRef, type SearchFile } from "../lib/data";
-  import { expand, glide, reducedMotion } from "../lib/motion";
-  import { FOREIGN, ensureTerms, termFor, translation } from "../lib/translate.svelte";
+  import { ensureTerms, termFor, translation } from "../lib/translate.svelte";
 
   // The search under the intro: a word finds the curated neurons' poles and the heads it names, an ID
   // opens its unit. The results open below the field as part of the same wash box, and every match

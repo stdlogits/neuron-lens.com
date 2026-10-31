@@ -2,7 +2,7 @@
 // sequence (24 ms apart, 160 ms at most) when the block first comes into view: at once for what is on
 // screen when the page arrives, later for what is scrolled to. `near` calls back once a block is
 // within a screen or so of the viewport, so a specimen fetches its data only when it will be seen.
-import { reducedMotion } from "../lib/motion";
+import { reducedMotion } from "@stdlogits/ledger";
 
 export function reveal(node: HTMLElement) {
   if (reducedMotion() || typeof IntersectionObserver !== "function") return;

@@ -41,7 +41,8 @@ in with `CLOUDFLARE_API_TOKEN` if set, else with `wrangler login`; `--dry-run` s
 ## Credits
 
 By a9lim, treetown and Claude. Images and sounds are shown under their collections' licences, listed
-on the site's Credits page. Wix Madefor is under the SIL Open Font License (`src/assets/fonts`).
+on the site's Credits page. The design is Ledger ([`stdlogits/ledger`](https://github.com/stdlogits/ledger)),
+whose Wix Madefor faces are under the SIL Open Font License.
 
 ## License
 
