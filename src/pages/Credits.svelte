@@ -39,9 +39,8 @@
     title: "Models studied",
     lines: [
       { name: ext(MODELS["qwen3-8b"].name, "https://huggingface.co/Qwen/Qwen3-8B"), detail: [ext("Qwen team, Alibaba Cloud")], licence: ext("Apache 2.0", "https://www.apache.org/licenses/LICENSE-2.0") },
-      { name: ext(MODELS["gemma-4-12b"].name, "https://ai.google.dev/gemma"), detail: [ext("Google")], licence: ext("Gemma Terms of Use", "https://ai.google.dev/gemma/terms") },
+      { name: ext(MODELS["gemma-4-12b"].name, "https://huggingface.co/google/gemma-4-12B"), detail: [ext("Google")], licence: ext("Apache 2.0", "https://ai.google.dev/gemma/docs/gemma_4_license") },
     ],
-    note: "Gemma is provided under and subject to the Gemma Terms of Use found at ai.google.dev/gemma/terms.",
   };
 
   const software: Group = {
