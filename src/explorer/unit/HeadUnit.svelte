@@ -11,9 +11,10 @@
   import { agreement, family, sideReads, signed, stat } from "./evidence";
 
   // An attention head, in the neuron's shape: one row of labels (what it fires on, what it attends
-  // to, what it writes), its firings with the token it looked at, its figures (how often and how hard
-  // it fires, where it looks, how it attends, how much it copies), then the rest of its evidence under
-  // each column: what it does in real text, then every read of its weights on that side with its test.
+  // to, what it writes), how it handles images and sound, its firings with the token it looked at,
+  // its evidence under each column (what it does in real text, then every read of its weights on that
+  // side with its test), and last its figures: how often and how hard it fires, where it looks, how
+  // it attends, how much it copies.
   let { head, model, labelled, groupSize }: { head: HeadDetail; model: ModelInfo; labelled: boolean; groupSize: number } = $props();
 
   // Two lists agree on a token when two read families, or a read and what it does in real text, name it.
@@ -80,6 +81,8 @@
 <div class="unit" data-link-scope>
   <Faces columns={["Fires on", "Attends to", "Writes"]} {rows} {labelled} note={head.label.note} />
 
+  <HeadMedia {head} />
+
   <section class="fires">
     <div class="fh">
       <h3 class="head">Where it fires</h3>
@@ -88,14 +91,6 @@
     </div>
     {#each head.contexts as context, i (i)}<Context {context} {i} />{:else}<p class="meta none">No firings recorded</p>{/each}
   </section>
-
-  <div class="figures">
-    <Group title="How often"><Facts facts={often} /></Group>
-    <Group title="How hard"><Facts facts={strength} /></Group>
-    <div class="pattern"><Group title="Pattern"><Pattern pattern={head.pattern} /></Group></div>
-    <Group title="How it attends"><Facts facts={attending} /></Group>
-    <Group title="Copying" tip="How much it copies, read from its weights and tested at its top firings"><Facts facts={copying} /></Group>
-  </div>
 
   <div class="ev">
     <span aria-hidden="true"></span>
@@ -126,7 +121,13 @@
     </div>
   </div>
 
-  <HeadMedia {head} />
+  <div class="figures">
+    <Group title="How often"><Facts facts={often} /></Group>
+    <Group title="How hard"><Facts facts={strength} /></Group>
+    <div class="pattern"><Group title="Pattern"><Pattern pattern={head.pattern} /></Group></div>
+    <Group title="How it attends"><Facts facts={attending} /></Group>
+    <Group title="Copying" tip="How much it copies, read from its weights and tested at its top firings"><Facts facts={copying} /></Group>
+  </div>
 </div>
 
 <style>

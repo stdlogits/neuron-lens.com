@@ -52,9 +52,9 @@ Madefor only with tabular numbers, motion on one curve through its actions and `
 rather than tell (no explanatory paragraphs or provenance in the explorer; tips and the About page
 hold the words). The only credit in the explorer is "Labels by Claude Haiku 5.5"; above it sits the
 labeller's note on the chosen labels, which is evidence for them, not an explanation of the site. A
-unit's view shows all of its evidence, with nothing behind a "more" button: its firings, then its
-figures, then every read the labeller saw (with its test) and what it does in real text under the
-column it bears on. Phone widths down to 320 px must
+unit's view shows all of its evidence, with nothing behind a "more" button: its images and
+sounds, its firings, every read the labeller saw (with its test) and what it does in real text under
+the column it bears on, then its figures. Phone widths down to 320 px must
 not scroll sideways.
 
 `main.ts` loads `@stdlogits/ledger/ledger.css`, then `site.css`, and installs `translator` with

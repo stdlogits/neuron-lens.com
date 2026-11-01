@@ -10,9 +10,9 @@
   import { sideReads, stat } from "./evidence";
 
   // A neuron: its two sides as the rows of the faces table (what each fires on, what it writes), then
-  // all of the chosen side's evidence: its firings, how often and how hard it fires, and under each
-  // column every read of its weights on that side with its test (then, under Fires on, what it fires
-  // on in real text); then its images and sounds. Switching sides crossfades everything below the table.
+  // all of the chosen side's evidence: its images and sounds, its firings, under each column every
+  // read of its weights on that side with its test (then, under Fires on, what it fires on in real
+  // text), and how often and how hard it fires. Switching sides crossfades everything below the table.
   let { detail, layer, labelled }: { detail: NeuronDetail; layer: number; labelled: boolean } = $props();
 
   // Open on the clearer side. The view is made anew for each neuron, so its first value is enough.
@@ -62,15 +62,12 @@
   <div class="side" id={panel} role="tabpanel" aria-label={rows[side].name}>
     <Swap key={side}>
       <div class="stack">
+        <NeuronMedia {pole} {layer} neuron={detail.n} />
+
         <section class="fires">
           <h3 class="head">Where it fires</h3>
           {#each pole.contexts as context, i (i)}<Context {context} {i} />{:else}<p class="meta none">No firings recorded</p>{/each}
         </section>
-
-        <div class="figures">
-          <Group title="How often"><Facts facts={often} /></Group>
-          <Group title="How hard"><Facts facts={strength} /></Group>
-        </div>
 
         <div class="ev">
           <span aria-hidden="true"></span>
@@ -86,7 +83,10 @@
           </div>
         </div>
 
-        <NeuronMedia {pole} {layer} neuron={detail.n} />
+        <div class="figures">
+          <Group title="How often"><Facts facts={often} /></Group>
+          <Group title="How hard"><Facts facts={strength} /></Group>
+        </div>
       </div>
     </Swap>
   </div>
