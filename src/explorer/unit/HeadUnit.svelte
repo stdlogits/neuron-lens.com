@@ -11,9 +11,9 @@
   import { agreement, family, sideReads, signed, stat } from "./evidence";
 
   // An attention head, in the neuron's shape: one row of labels (what it fires on, what it attends
-  // to, what it writes), its firings with the token it looked at, and all of its evidence under each
-  // column: what it does in real text first, then its figures, then every read of its weights on
-  // that side with its test.
+  // to, what it writes), its firings with the token it looked at, its figures (how often and how hard
+  // it fires, where it looks, how it attends, how much it copies), then the rest of its evidence under
+  // each column: what it does in real text, then every read of its weights on that side with its test.
   let { head, model, labelled, groupSize }: { head: HeadDetail; model: ModelInfo; labelled: boolean; groupSize: number } = $props();
 
   // Two lists agree on a token when two read families, or a read and what it does in real text, name it.
@@ -89,6 +89,14 @@
     {#each head.contexts as context, i (i)}<Context {context} {i} />{:else}<p class="meta none">No firings recorded</p>{/each}
   </section>
 
+  <div class="figures">
+    <Group title="How often"><Facts facts={often} /></Group>
+    <Group title="How hard"><Facts facts={strength} /></Group>
+    <div class="pattern"><Group title="Pattern"><Pattern pattern={head.pattern} /></Group></div>
+    <Group title="How it attends"><Facts facts={attending} /></Group>
+    <Group title="Copying" tip="How much it copies, read from its weights and tested at its top firings"><Facts facts={copying} /></Group>
+  </div>
+
   <div class="ev">
     <span aria-hidden="true"></span>
     <div class="col">
@@ -98,8 +106,6 @@
         <Group title="Peaks on" tip="The query tokens of its top firings, and how many of them" items={counted(head.peaks)}
           share={{ value: head.modes[0], label: `${percent(head.modes[0])} of its top firings on one query token` }} />
       {/if}
-      <Group title="How often"><Facts facts={often} /></Group>
-      <Group title="How hard"><Facts facts={strength} /></Group>
     </div>
     <div class="col">
       <h3 class="col-head head">Attends to</h3>
@@ -108,8 +114,6 @@
         <Group title="Looked at" tip="The tokens it attended to at its top firings, and how many of them" items={counted(head.sources)}
           share={{ value: head.modes[1], label: `${percent(head.modes[1])} of its top firings look at one token` }} />
       {/if}
-      <Group title="Pattern"><Pattern pattern={head.pattern} /></Group>
-      <Group title="How it attends"><Facts facts={attending} /></Group>
       {#if inputs.length}<Group title="From its weights" tip={WEIGHTS}><Reads reads={inputs} all={head.reads} {tests} {agree} scope="all heads" /></Group>{/if}
     </div>
     <div class="col">
@@ -118,7 +122,6 @@
         <Group title="In real text" tip="What its output at its top firings pushes the model to say, against the layer's other heads (R-lens, z)"
           items={head.outRz.map(([token, count]) => ({ token, count, flags: lit(token) }))} />
       {/if}
-      <Group title="Copying" tip="How much it copies, read from its weights and tested at its top firings"><Facts facts={copying} /></Group>
       {#if outputs.length}<Group title="From its weights" tip={WEIGHTS}><Reads reads={outputs} all={head.reads} {tests} {agree} scope="all heads" /></Group>{/if}
     </div>
   </div>
@@ -134,6 +137,8 @@
   .key::before { content: ""; width: 12px; height: 8px; border-radius: 2px; background: color-mix(in oklch, var(--tint) 22%, transparent); }
   .key.src::before { background: color-mix(in oklch, var(--tint) 9%, transparent); }
   .none { font-weight: 400; }
+  .figures { display: flex; flex-wrap: wrap; align-items: start; gap: var(--s5) var(--s7); min-width: 0; }
+  .pattern { flex: 0 1 240px; min-width: 200px; }
   .ev { display: grid; grid-template-columns: 32px repeat(3, minmax(0, 1fr)); column-gap: var(--s5); row-gap: var(--s6); min-width: 0; }
   .col { display: grid; gap: var(--s5); align-content: start; min-width: 0; }
   .col-head { display: none; }

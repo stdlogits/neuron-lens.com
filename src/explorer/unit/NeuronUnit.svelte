@@ -10,9 +10,9 @@
   import { sideReads, stat } from "./evidence";
 
   // A neuron: its two sides as the rows of the faces table (what each fires on, what it writes), then
-  // all of the chosen side's evidence: its firings, and under each column what it fires on in real
-  // text, how often and how hard, and every read of its weights on that side with its test; then its
-  // images and sounds. Switching sides crossfades everything below the table.
+  // all of the chosen side's evidence: its firings, how often and how hard it fires, and under each
+  // column every read of its weights on that side with its test (then, under Fires on, what it fires
+  // on in real text); then its images and sounds. Switching sides crossfades everything below the table.
   let { detail, layer, labelled }: { detail: NeuronDetail; layer: number; labelled: boolean } = $props();
 
   // Open on the clearer side. The view is made anew for each neuron, so its first value is enough.
@@ -67,15 +67,18 @@
           {#each pole.contexts as context, i (i)}<Context {context} {i} />{:else}<p class="meta none">No firings recorded</p>{/each}
         </section>
 
+        <div class="figures">
+          <Group title="How often"><Facts facts={often} /></Group>
+          <Group title="How hard"><Facts facts={strength} /></Group>
+        </div>
+
         <div class="ev">
           <span aria-hidden="true"></span>
           <div class="col">
             <h3 class="col-head head">Fires on</h3>
+            {#if inputs.length}<Group title="From its weights" tip={WEIGHTS}><Reads reads={inputs} all={pole.reads} {tests} /></Group>{/if}
             <Group title="In real text" tip="Tokens that most make it fire, measured in real documents" items={drivers} />
             {#if peaks.length}<Group title="Peaks on" tip="The tokens its top firings land on, and how many of them" items={peaks} />{/if}
-            <Group title="How often"><Facts facts={often} /></Group>
-            <Group title="How hard"><Facts facts={strength} /></Group>
-            {#if inputs.length}<Group title="From its weights" tip={WEIGHTS}><Reads reads={inputs} all={pole.reads} {tests} /></Group>{/if}
           </div>
           <div class="col">
             <h3 class="col-head head">Writes</h3>
@@ -94,6 +97,7 @@
   .stack { display: grid; gap: var(--s6); min-width: 0; }
   .fires { display: grid; gap: var(--s3); min-width: 0; }
   .none { font-weight: 400; }
+  .figures { display: flex; flex-wrap: wrap; align-items: start; gap: var(--s5) var(--s7); min-width: 0; }
   .ev { display: grid; grid-template-columns: 32px repeat(2, minmax(0, 1fr)); column-gap: var(--s5); row-gap: var(--s6); min-width: 0; }
   .col { display: grid; gap: var(--s5); align-content: start; min-width: 0; }
   .col-head { display: none; }
