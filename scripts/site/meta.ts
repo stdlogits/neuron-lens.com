@@ -7,7 +7,7 @@
 /// <reference types="node" />
 import { readFileSync } from "node:fs";
 import type { HtmlTagDescriptor, Plugin } from "vite";
-import { DEFAULT_MODEL, MODELS, MODEL_ORDER, bandRange, type LabelCheck, type ModelId } from "../../src/lib/models.ts";
+import { DEFAULT_MODEL, MODELS, MODEL_ORDER, bandRange, type ModelId } from "../../src/lib/models.ts";
 import { ORIGIN, SITE_NAME } from "../../src/lib/site.ts";
 
 const DESCRIPTION = `What each neuron and attention head inside ${MODELS["qwen3-8b"].name} and ${MODELS["gemma-4-12b"].name} responds to, and what it makes the model say.`;
@@ -88,7 +88,7 @@ function jsonLd() {
         creditText: CREDIT,
         isBasedOn: models.map((m) => MODEL_PAGES[m.id]),
         citation: RESEARCH,
-        measurementTechnique: ["R-lens and S-lens reads of weights", "activation statistics over 15M tokens", "exact token drivers by substitution", "labels by Claude Haiku 5.5, checked blind"],
+        measurementTechnique: ["R-lens and S-lens reads of weights", "activation statistics over 15M tokens", "exact token drivers by substitution", "labels by Claude Haiku 5.5"],
         variableMeasured: ["weight-only lens reads", "activations and top contexts", "exact token drivers", "legibility tests", "labels"],
         distribution: [{ "@type": "DataDownload", contentUrl: CATALOG, encodingFormat: "application/vnd.apache.parquet" }],
         isPartOf: { "@type": "CreativeWork", url: RESEARCH, name: "neuron-lens" },
@@ -140,7 +140,7 @@ function summary() {
         <p>${DESCRIPTION}</p>
         <p>Every address names a view: /qwen3-8b/L8/n344 is neuron 344 of layer 8 in Qwen3-8B, and /gemma-4-12b/L35/h14 head 14 of layer 35 in Gemma 4 12B. The explorer draws them in the browser, with JavaScript.</p>
         <ul>
-          <li><a class="prose-link" href="/llms.txt">Neuron Lens for language models</a>: the models, the lenses, the evidence, the labels and the findings</li>
+          <li><a class="prose-link" href="/llms.txt">Neuron Lens for language models</a>: the method and the findings</li>
           <li><a class="prose-link" href="${CATALOG}">The catalog</a> on Hugging Face, every unit's data</li>
           <li><a class="prose-link" href="${RESEARCH}">Research and findings</a></li>
           <li><a class="prose-link" href="/about">About</a> and <a class="prose-link" href="/credits">Credits</a></li>
@@ -149,12 +149,6 @@ function summary() {
 }
 
 // ---------- llms.txt
-
-function check(what: string, c: LabelCheck | null, kind: string) {
-  if (!c) return `- ${what}: not checked yet.`;
-  const note = c.note ? ` ${c.note}` : "";
-  return `- ${what} (${c.count} ${kind}): firing labels pick out held-out top firings at AUROC ${c.fires[0].toFixed(2)} (another unit's label: ${c.fires[1].toFixed(2)}); a judge picks the write label out of four ${Math.round(c.writes[0] * 100)}% of the time (chance ${Math.round(c.writes[1] * 100)}%).${note}`;
-}
 
 function llms() {
   const models = MODEL_ORDER.map((id) => MODELS[id]);
@@ -165,7 +159,6 @@ function llms() {
       "| --- | --- | --- | --- | --- | --- |",
       ...models.map((m) => `| [${m.name}](${MODEL_PAGES[m.id]}) | ${m.layers} | ${count(m.mlp)} | ${m.heads} | ${count(neurons(m.id))} | ${count(heads(m.id))} |`),
     ].join("\n"),
-    checks: models.flatMap((m) => [check(`${m.name} neurons`, m.labelChecks.neurons, "poles"), check(`${m.name} heads`, m.labelChecks.heads, "heads")]).join("\n"),
     depth: models
       .map((m) => [`- ${m.name}, ${m.layers} layers:`, ...m.bands.map((b) => `  - ${bandRange(b)}, ${b.name.toLowerCase()}: ${b.summary} ${b.reading}`)].join("\n"))
       .join("\n"),

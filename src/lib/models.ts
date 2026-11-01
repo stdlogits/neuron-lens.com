@@ -18,16 +18,6 @@ export interface BandInfo {
   dark?: boolean;
 }
 
-export interface LabelCheck {
-  /** Sides (for neurons) or heads checked. */
-  count: number;
-  /** AUROC of the firing label at picking out held-out top firings, and of another unit's label. */
-  fires: [number, number];
-  /** How often a judge picked the write label out of four from what the unit does, and chance. */
-  writes: [number, number];
-  note?: string;
-}
-
 export interface ModelInfo {
   id: ModelId;
   name: string;
@@ -49,8 +39,6 @@ export interface ModelInfo {
   media: Modality[];
   examples: string[];
   start: { neurons: number; heads: number };
-  /** What the blind checks of Haiku's labels found (neuron-lens findings §8, §12, §13); null where not yet checked. */
-  labelChecks: { neurons: LabelCheck | null; heads: LabelCheck | null };
   /** The two labels a head's card in the layer strip shows: the ones that held up when checked blind. */
   headCard: ["fires" | "attends" | "writes", "fires" | "attends" | "writes"];
 }
@@ -113,10 +101,6 @@ export const MODELS: Record<ModelId, ModelInfo> = {
     media: [],
     examples: ["owl", "Bible", "she", "money", "圣经", "L20h17"],
     start: { neurons: 8, heads: 20 },
-    labelChecks: {
-      neurons: { count: 100, fires: [0.82, 0.56], writes: [0.61, 0.25] },
-      heads: { count: 100, fires: [0.71, 0.51], writes: [0.49, 0.25] },
-    },
     headCard: ["attends", "writes"],
   },
   "gemma-4-12b": {
@@ -160,10 +144,6 @@ export const MODELS: Record<ModelId, ModelInfo> = {
     media: ["image", "audio"],
     examples: ["panda", "mosque", "Arabic", "rain", "熊猫", "L28h6"],
     start: { neurons: 23, heads: 28 },
-    labelChecks: {
-      neurons: null,
-      heads: { count: 80, fires: [0.71, 0.47], writes: [0.22, 0.25], note: "Read the write labels as guesses." },
-    },
     headCard: ["fires", "attends"],
   },
 };
