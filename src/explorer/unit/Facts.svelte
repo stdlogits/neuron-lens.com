@@ -1,9 +1,6 @@
-<script lang="ts" module>
-  /** A figure: its name over its value. Off figures (a test that fails) draw in the softest ink. */
-  export interface Fact { k: string; v: string; tip?: string; off?: boolean; lang?: string }
-</script>
-
 <script lang="ts">
+  import type { Fact } from "./evidence";
+
   // A row of figures, each a quiet name over a tabular value, with no rules between them.
   let { facts }: { facts: Fact[] } = $props();
 </script>

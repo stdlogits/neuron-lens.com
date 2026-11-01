@@ -1,12 +1,7 @@
-<script lang="ts" module>
-  /** A family's test: its value as shown ("q 0.005"), whether it fails, and what it tests. */
-  export interface Test { v: string; off: boolean; tip: string }
-</script>
-
 <script lang="ts">
   import { Meter, Token, stem } from "@stdlogits/ledger";
   import { LENSES, type LensRead } from "../../lib/data";
-  import { family, nth, readTip } from "./evidence";
+  import { family, nth, readTip, type Test } from "./evidence";
 
   // One side's reads of the unit's weights, in the order its depth trusts them: each its plain name
   // (the lens and what it measures in a tip), its strength among its peers, its family's test where
