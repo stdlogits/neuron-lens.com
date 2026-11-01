@@ -3,17 +3,20 @@
 </script>
 
 <script lang="ts">
-  import { glide } from "@stdlogits/ledger";
+  import { LabelText, Swap, glide } from "@stdlogits/ledger";
   import LabelCell from "./LabelCell.svelte";
 
   // The faces table: a sign column, then one column per label ("Fires on", "Writes"; heads add
   // "Attends to"). A neuron's two sides are tabs, the chosen one on a wash that glides between them;
-  // a head's single row simply sits on the wash. Labels are Haiku's, credited once beneath.
-  let { columns, rows, selected = $bindable(0), labelled = true, panel }: {
+  // a head's single row simply sits on the wash. Labels are Haiku's: its note on the chosen row
+  // beneath, crossfading as the row changes, then the credit.
+  let { columns, rows, selected = $bindable(0), labelled = true, note = "", panel }: {
     columns: string[];
     rows: FaceRow[];
     selected?: number;
     labelled?: boolean;
+    /** The labeller's note on the chosen row. */
+    note?: string;
     /** The tab panel the rows control, when they are tabs. */
     panel?: string;
   } = $props();
@@ -50,7 +53,12 @@
       {/if}
     {/each}
   </div>
-  {#if labelled}<p class="credit meta">Labels by Claude Haiku 5.5</p>{/if}
+  {#if labelled}
+    <div class="byline">
+      <Swap key={note}>{#if note}<p class="note"><LabelText text={note} interactive /></p>{/if}</Swap>
+      <p class="meta">Labels by Claude Haiku 5.5</p>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -84,14 +92,16 @@
   @media (hover: hover) { .tab[aria-selected="false"]:hover { background: var(--wash); } }
   .still { background: var(--wash); }
   .sign { justify-self: center; font: var(--type-lead); font-family: var(--display); font-weight: 600; }
-  .credit { padding-left: calc(32px + var(--s5)); font-weight: 400; }
+  .byline { display: grid; gap: var(--s1); padding-left: calc(32px + var(--s5)); }
+  .byline > .meta { font-weight: 400; }
+  .note { color: var(--ink2); font: var(--type-small); text-wrap: pretty; }
   @container unit (max-width: 600px) {
     .faces { grid-template-columns: 32px minmax(0, 1fr); column-gap: var(--s2); }
     .th { display: none; }
     .face { grid-template-columns: 32px minmax(0, 1fr); row-gap: var(--s4); padding-right: var(--s4); }
     .face > :global(.lab) { grid-column: 2; }
     .face > .sign { grid-row: 1; }
-    .credit { padding-left: calc(32px + var(--s2)); }
+    .byline { padding-left: calc(32px + var(--s2)); }
   }
   @media (forced-colors: active) { .tab[aria-selected="true"] { outline: 2px solid Highlight; } }
 </style>

@@ -1,38 +1,23 @@
-// What a unit's view shows, chosen from its detail: the reads its depth trusts, the tokens two of the
-// shown lists agree on, and the wording of its figures.
+// What a unit's view shows, chosen from its detail: the reads on each side of it, the tokens its
+// lists agree on, and the wording of its figures.
 import { stem } from "@stdlogits/ledger";
 import {
   FLAG_AUDIO, FLAG_DETECTOR, FLAG_IMAGE, FLAG_PREDICTS, FLAG_SUPPRESSES, LENSES,
-  type HeadDetail, type LensRead, type LensToken, type ReadColumn,
+  type LensRead, type ReadColumn,
 } from "../../lib/data";
 
-/** How many tokens a list shows before More evidence. */
-export const SHOWN = 10;
+/** A side's reads (input under Fires on or Attends to, output under Writes), in the order its depth trusts them. */
+export const sideReads = (reads: LensRead[], side: "input" | "output") => reads.filter((read) => LENSES[read.col].side === side);
 
-/** The read a pole's depth trusts most on one side (every layer names a primary read for each). */
-export const primaryRead = (reads: LensRead[], side: "input" | "output") =>
-  reads.find((read) => read.trust === "primary" && LENSES[read.col].side === side)
-  ?? reads.find((read) => read.trust === "trusted" && LENSES[read.col].side === side);
+/** A read's family: the read and its z twin share one, and one test. */
+export const family = (col: ReadColumn) => col.replace(/_z$/, "");
 
-/** A head's write: its primary OV read (OV·R at every depth so far) and the same family's negative read. */
-export function headWrites(head: HeadDetail): { copies?: LensRead; pushes?: LensRead } {
-  const copies = head.reads.find((read) => read.trust === "primary" && read.col.startsWith("ov_") && !read.col.includes("neg") && !read.twin)
-    ?? head.reads.find((read) => read.col === "ov_R");
-  const family = (copies?.col ?? "ov_R").replace(/_z$/, "");
-  const pushes = head.reads.find((read) => read.col === (`${family}_neg` as ReadColumn));
-  return { copies, pushes };
-}
-
-/** Stems named by two or more of the lists shown together: those tokens get flag 1 (two reads agree). */
+/** Stems named by two or more lists: those tokens get flag 1 (two reads agree). */
 export function agreement(lists: string[][]): Set<string> {
   const seen = new Map<string, number>();
   for (const list of lists) for (const key of new Set(list.map(stem))) seen.set(key, (seen.get(key) ?? 0) + 1);
   return new Set([...seen].filter(([key, n]) => n > 1 && key !== "").map(([key]) => key));
 }
-
-/** A read's tokens with the agreement flag added. */
-export const flagged = (tokens: LensToken[], agree: Set<string>): LensToken[] =>
-  tokens.map(([token, count, flags]) => [token, count, agree.has(stem(token)) ? flags | 1 : flags]);
 
 /** "94th" */
 const ordinal = new Intl.PluralRules("en", { type: "ordinal" });
@@ -56,12 +41,10 @@ export const stat = (value: number) => (value < 0.001 ? "< 0.001" : value.toFixe
 /** A signed score, two decimals. */
 export const signed = (value: number) => `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(2)}`;
 
-/** Read names for More evidence: the plain name, its lens's short name and meaning in a tip. */
+/** A read's name in a tip: its lens's short name and meaning. */
 export function readTip(read: LensRead, reads: LensRead[]): string {
   const info = LENSES[read.col];
   if (!read.twin) return `${info.short}. ${info.describe}`;
-  const family = read.col.replace(/_z$/, "");
-  const first = reads.find((other) => other !== read && other.col.replace(/_z$/, "") === family);
+  const first = reads.find((other) => other !== read && family(other.col) === family(read.col));
   return `${info.short}. ${info.describe} Only what ${first ? LENSES[first.col].short : "the read above"} doesn't already list.`;
 }
-

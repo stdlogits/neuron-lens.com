@@ -50,8 +50,11 @@ draws for itself.
 Follow Ledger exactly: flat and borderless, the depth tint as the one accent and only as fill, Wix
 Madefor only with tabular numbers, motion on one curve through its actions and `Swap`/`MorphText`, show
 rather than tell (no explanatory paragraphs or provenance in the explorer; tips and the About page
-hold the words). The only credit in the explorer is "Labels by Claude Haiku 5.5". Phone widths down to
-320 px must not scroll sideways.
+hold the words). The only credit in the explorer is "Labels by Claude Haiku 5.5"; above it sits the
+labeller's note on the chosen labels, which is evidence for them, not an explanation of the site. A
+unit's view shows all of its evidence (every read the labeller saw, its tests, figures and firings)
+under the column it bears on, with nothing behind a "more" button. Phone widths down to 320 px must
+not scroll sideways.
 
 `main.ts` loads `@stdlogits/ledger/ledger.css`, then `site.css`, and installs `translator` with
 `setTranslator` before mounting. The dev server serves Ledger as source rather than pre-bundling it

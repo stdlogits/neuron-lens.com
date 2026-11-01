@@ -1,17 +1,18 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { Context, Expander, Swap, stem } from "@stdlogits/ledger";
+  import { Context, Swap, formatValue, stem } from "@stdlogits/ledger";
   import NeuronMedia from "../media/NeuronMedia.svelte";
   import Faces from "./Faces.svelte";
+  import Facts, { type Fact } from "./Facts.svelte";
   import Group from "./Group.svelte";
-  import NeuronMore from "./NeuronMore.svelte";
-  import { LENSES, type NeuronDetail } from "../../lib/data";
-  import { moreEvidence } from "./more.svelte";
-  import { SHOWN, agreement, flagged, primaryRead } from "./evidence";
+  import Reads, { type Test } from "./Reads.svelte";
+  import { LENSES, percent, type NeuronDetail, type NeuronSide } from "../../lib/data";
+  import { sideReads, stat } from "./evidence";
 
-  // A neuron: its two sides as the rows of the faces table (what each fires on, what it writes),
-  // then the chosen side's firings and the evidence under each column, its images and sounds, and
-  // the rest under More evidence. Switching sides crossfades everything below the table.
+  // A neuron: its two sides as the rows of the faces table (what each fires on, what it writes), then
+  // all of the chosen side's evidence: its firings, and under each column what it fires on in real
+  // text, how often and how hard, and every read of its weights on that side with its test; then its
+  // images and sounds. Switching sides crossfades everything below the table.
   let { detail, layer, labelled }: { detail: NeuronDetail; layer: number; labelled: boolean } = $props();
 
   // Open on the clearer side. The view is made anew for each neuron, so its first value is enough.
@@ -19,15 +20,30 @@
   let side = $state(clearer(untrack(() => detail.poles)));
   const pole = $derived(detail.poles[side]);
 
-  const input = $derived(primaryRead(pole.reads, "input"));
-  const output = $derived(primaryRead(pole.reads, "output"));
-  const drivers = $derived(pole.drivers.slice(0, SHOWN));
-  const inputTokens = $derived(input?.tokens.slice(0, SHOWN) ?? []);
-  const outputTokens = $derived(output?.tokens.slice(0, SHOWN) ?? []);
-  const agree = $derived(agreement([drivers.map(([t]) => t), inputTokens.map(([t]) => t), outputTokens.map(([t]) => t)]));
+  // A measured token is tinted when a read names it too (the catalog's measured keys); the reads carry their own flags.
   const measured = $derived(new Set(pole.measured));
-  const driverItems = $derived(drivers.map(([token, value]) => ({ token, value, flags: agree.has(stem(token)) || measured.has(stem(token)) ? 1 : 0 })));
-  const readItems = (tokens: typeof inputTokens) => flagged(tokens, agree).map(([token, count, flags]) => ({ token, count, flags }));
+  const drivers = $derived(pole.drivers.map(([token, value]) => ({ token, value, flags: measured.has(stem(token)) ? 1 : 0 })));
+  const peaks = $derived(pole.peaks.map(([token, times]) => ({ token, times, flags: measured.has(stem(token)) ? 1 : 0 })));
+  const inputs = $derived(sideReads(pole.reads, "input"));
+  const outputs = $derived(sideReads(pole.reads, "output"));
+
+  const SLICES = ["Web", "Chinese", "Code", "Chat"];
+  const often = $derived<Fact[]>([
+    { k: "All text", v: percent(pole.act.rate), tip: "Share of tokens it fires on" },
+    ...pole.act.slices.map((rate, i) => ({ k: SLICES[i], v: percent(rate), tip: `Share of tokens it fires on in ${SLICES[i].toLowerCase()} text` })),
+  ]);
+  const strength = $derived<Fact[]>([
+    { k: "Typical peak", v: formatValue(pole.act.top), tip: "Its typical value at its top firings" },
+    { k: "Top", v: formatValue(pole.act.max), tip: "The largest value seen" },
+    { k: "Past the first token", v: percent(pole.act.pos), tip: "Share of its top firings after the first position, where many units fire regardless" },
+  ]);
+  // Each side of the neuron's weights, read through each lens, is tested against the pole's own top firings.
+  const SIDES: NeuronSide[] = ["read_S", "read_R", "write_S", "write_R"];
+  const tests = $derived<Record<string, Test>>(pole.silent ? {} : Object.fromEntries(SIDES.map((s) => {
+    const q = pole.legible[s];
+    return [s, { v: `q ${stat(q)}`, off: !(q <= 0.05), tip: `Whether ${LENSES[s].short} predicts this side's own top firings. It holds under 0.05.` }];
+  })));
+  const WEIGHTS = "What each lens reads from its weights, in the order this depth trusts them";
 
   const rows = $derived(detail.poles.map((p) => ({
     sign: p.pole > 0 ? "+" : "−",
@@ -41,26 +57,29 @@
 </script>
 
 <div class="unit" data-link-scope>
-  <Faces columns={["Fires on", "Writes"]} {rows} bind:selected={side} {labelled} {panel} />
+  <Faces columns={["Fires on", "Writes"]} {rows} bind:selected={side} {labelled} note={pole.label.note} {panel} />
 
   <div class="side" id={panel} role="tabpanel" aria-label={rows[side].name}>
     <Swap key={side}>
       <div class="stack">
         <section class="fires">
           <h3 class="head">Where it fires</h3>
-          {#each pole.contexts.slice(0, 3) as context, i (i)}<Context {context} {i} />{:else}<p class="meta none">No firings recorded</p>{/each}
+          {#each pole.contexts as context, i (i)}<Context {context} {i} />{:else}<p class="meta none">No firings recorded</p>{/each}
         </section>
 
-        <div class="ev cols-2">
+        <div class="ev">
           <span aria-hidden="true"></span>
           <div class="col">
             <h3 class="col-head head">Fires on</h3>
-            <Group title="In real text" tip="Tokens that most make it fire, measured in real documents" items={driverItems} />
-            {#if input}<Group title="From its weights" tip={`${LENSES[input.col].name} (${LENSES[input.col].short})`} items={readItems(inputTokens)} pct={input.pct} />{/if}
+            <Group title="In real text" tip="Tokens that most make it fire, measured in real documents" items={drivers} />
+            {#if peaks.length}<Group title="Peaks on" tip="The tokens its top firings land on, and how many of them" items={peaks} />{/if}
+            <Group title="How often"><Facts facts={often} /></Group>
+            <Group title="How hard"><Facts facts={strength} /></Group>
+            {#if inputs.length}<Group title="From its weights" tip={WEIGHTS}><Reads reads={inputs} all={pole.reads} {tests} /></Group>{/if}
           </div>
           <div class="col">
             <h3 class="col-head head">Writes</h3>
-            {#if output}<Group title="From its weights" tip={`${LENSES[output.col].name} (${LENSES[output.col].short})`} items={readItems(outputTokens)} pct={output.pct} />{/if}
+            {#if outputs.length}<Group title="From its weights" tip={WEIGHTS}><Reads reads={outputs} all={pole.reads} {tests} /></Group>{/if}
           </div>
         </div>
 
@@ -68,10 +87,6 @@
       </div>
     </Swap>
   </div>
-
-  <Expander label="More evidence" openLabel="Less evidence" bind:open={moreEvidence.open}>
-    <Swap key={side}><NeuronMore {pole} shown={[input?.col, output?.col]} /></Swap>
-  </Expander>
 </div>
 
 <style>
