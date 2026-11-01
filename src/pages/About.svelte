@@ -1,22 +1,24 @@
 <script lang="ts">
   import "./pages.css";
   import Units from "./about/Units.svelte";
-  import Sides from "./about/Sides.svelte";
-  import Lenses from "./about/Lenses.svelte";
-  import Evidence from "./about/Evidence.svelte";
-  import Depth from "./about/Depth.svelte";
-  import Heads from "./about/Heads.svelte";
+  import Labels from "./about/Labels.svelte";
   import Media from "./about/Media.svelte";
-  import Checks from "./about/Checks.svelte";
+  import Firings from "./about/Firings.svelte";
+  import Lenses from "./about/Lenses.svelte";
+  import Columns from "./about/Columns.svelte";
+  import Numbers from "./about/Numbers.svelte";
+  import Depth from "./about/Depth.svelte";
   import Languages from "./about/Languages.svelte";
   import { reveal } from "./reveal";
   import { MODELS, MODEL_ORDER } from "../lib/models";
   import { formatCount } from "../lib/data";
   import { ensureTerms, translation } from "../lib/translate.svelte";
 
-  // What Neuron Lens shows and how far to trust it, told through real units from the catalog: what
-  // neurons and heads are, a pole's two halves, the lenses, three ways to read, depth, heads, images
-  // and sound, the blind checks of the labels, and other languages. Each specimen opens in the explorer.
+  // What Neuron Lens shows and how far to trust it, for a reader who knows AI but not interpretability,
+  // told through real units from the catalog. First what neurons and heads are, then a walk down a
+  // unit's view in the explorer's order, drawn with the explorer's own pieces: labels, images and
+  // sound, firings, the lenses that read the weights, the evidence in its columns, numbers. Then how
+  // far to trust it: depth, and other languages. Each specimen opens in the explorer.
   const neurons = MODEL_ORDER.reduce((sum, id) => sum + MODELS[id].layers * MODELS[id].mlp, 0);
   const heads = MODEL_ORDER.reduce((sum, id) => sum + MODELS[id].layers * MODELS[id].heads, 0);
   const figures = [
@@ -35,18 +37,18 @@
 <article class="pg">
   <header class="pg-hero" use:reveal>
     <h1>About</h1>
-    <p class="pg-lead">Neuron Lens shows what each neuron and attention head inside {MODELS["qwen3-8b"].name} and {MODELS["gemma-4-12b"].name} responds to, and what it makes the model say.</p>
+    <p class="pg-lead">Neuron Lens shows what each neuron and attention head inside {MODELS["qwen3-8b"].name} and {MODELS["gemma-4-12b"].name} responds to and what it makes the model say. This page explains how they work.</p>
     <p class="figures">{#each figures as figure (figure.label)}<span><b>{figure.value}</b> {figure.label}</span>{/each}</p>
   </header>
 
   <Units />
-  <Sides />
-  <Lenses />
-  <Evidence />
-  <Depth />
-  <Heads />
+  <Labels />
   <Media />
-  <Checks />
+  <Firings />
+  <Lenses />
+  <Columns />
+  <Numbers />
+  <Depth />
   <Languages />
 
   <footer class="end" use:reveal>

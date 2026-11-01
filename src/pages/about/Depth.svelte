@@ -53,7 +53,10 @@
 
 <Part id="depth" title="Depth" onnear={() => (wanted = true)}>
   {#snippet caption()}
-    <p>Each bar: how much of a layer its weights explain.</p>
+    <p>No one kind of evidence works everywhere.</p>
+    <p>In early  layers, the stream is mostly the input token, so the S-lens works well.</p>
+    <p>In late layers, the stream is mostly the output token, so the R-lens works well instead.</p>
+    <p>In between, most units respond to more opaque meaning so neither lens is as explanatory. There, firings are more important.</p>
   {/snippet}
   <div class="spec">
     <Segmented options={models} value={modelId} onchange={(id) => (modelId = id)} label="Model" />

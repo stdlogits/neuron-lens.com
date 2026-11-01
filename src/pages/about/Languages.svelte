@@ -19,7 +19,7 @@
 
 <Part id="languages" title="Other languages" onnear={load} tint={depthColor(MODELS[OWL.model], OWL.layer)}>
   {#snippet caption()}
-    <p>Machine translations by Claude Haiku 5.5.</p>
+    <p>A lot of the text is in Chinese, and many units fire on the same idea in several languages: for example, the owl neuron's negative side reads rot and rust in Chinese just as much as it does in English. We had Claude Haiku 5.5 translate all of the tokens, labels and examples.</p>
   {/snippet}
   <div class="spec">
     <div class="top">

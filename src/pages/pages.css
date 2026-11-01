@@ -108,3 +108,12 @@
     opacity: 1;
   }
 }
+
+/* A piece of the explorer drawn on a reading page: its container queries answer to this width, as
+ * they do to the unit view's. */
+.pg-unit {
+  container: unit / inline-size;
+  display: grid;
+  gap: var(--s4);
+  min-width: 0;
+}

@@ -96,7 +96,8 @@
 
 <Part id="media" title="Images and sound" onnear={load} tint={depthColor(model, APPLE.layer)}>
   {#snippet caption()}
-    <p>{model.name} also reads 50,000 images and 47,000 sounds.</p>
+    <p>{model.name} can process images and sounds in addition to text, so its units can be multimodal. We ran it on 50,000 images and 47,000 sounds.</p>
+    <p>Many of the neurons reliably fire on the same concept across mediums. This one fires on not just the word apple, but also images of apples and speech recordings of the word.</p>
   {/snippet}
   <div class="spec">
     <UnitLink model={APPLE.model} layer={APPLE.layer} neuron={APPLE.n} />
@@ -124,7 +125,6 @@
                   </li>
                 {/each}
               </ul>
-              <p class="meta">Drawn ones are shown under their licences; the rest link out. <a class="prose-link" href="/credits">Credits</a></p>
             </div>
           {/if}
 

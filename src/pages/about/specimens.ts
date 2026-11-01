@@ -7,14 +7,9 @@ export const OWL = { model: "qwen3-8b" as ModelId, layer: 8, n: 344 };
 export const APPLE = { model: "gemma-4-12b" as ModelId, layer: 33, n: 12225 };
 /** Gemma 4 12B L35·h14: an induction head, the strongest in the set. */
 export const INDUCTION = { model: "gemma-4-12b" as ModelId, layer: 35, h: 14 };
-/** Qwen3-8B L20·h17: copies "she" forward and pushes against "he" (and the reverse). */
-export const SHE = { model: "qwen3-8b" as ModelId, layer: 20, h: 17 };
-/** The README's Qwen3-8B gallery: one pole each, read three ways. */
-export const GALLERY: { layer: number; n: number; pole: 1 | -1; note?: string }[] = [
-  { layer: 1, n: 11672, pole: -1 },
-  { layer: 8, n: 344, pole: 1 },
-  { layer: 8, n: 1931, pole: 1 },
-  { layer: 28, n: 8868, pole: -1 },
-  { layer: 30, n: 1034, pole: 1 },
-  { layer: 35, n: 9510, pole: 1, note: "None: it sets the output's temperature" },
-];
+/** Gemma 4 12B L27·h4: at a word for a group ("both", "respectively", "three religions"), it looks back at the
+ * members just listed, and writes "each" and "respectively". `firings` are the top firings that show it, by
+ * place in the catalog's list: "两位" looking at 余, "The dorms" at Jane, "three religions … as" at Islam. */
+export const GROUPS = { model: "gemma-4-12b" as ModelId, layer: 27, h: 4, firings: [1, 2, 4] };
+/** Qwen3-8B L31·h0: copies British spellings (realised, colour, organised), one of the clearest heads through the lenses. */
+export const BRITISH = { model: "qwen3-8b" as ModelId, layer: 31, h: 0 };

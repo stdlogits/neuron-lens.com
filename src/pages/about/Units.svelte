@@ -4,31 +4,34 @@
   import { Token } from "@stdlogits/ledger";
   import { headId, headline, loadHeadLayer, loadNeuron, neuronId, type LensToken } from "../../lib/data";
   import { MODELS, depthColor } from "../../lib/models";
-  import { OWL, SHE } from "./specimens";
+  import { GROUPS, OWL } from "./specimens";
 
-  // Two real units over five tokens, drawn in order of depth, each in its own depth's colour. A
-  // stream rises from each token. At layer 8 the neuron is silent on four of them and fires on "owl",
-  // and what it writes colours owl's stream from there up. At layer 20 the head at "and" looks back,
-  // along ribbons as wide as its attention (mostly at "she") but never wider than a stream, each shading
-  // from the stream it leaves into the head's colour, and what it copies colours and's stream.
-  // Beneath, the two units with what they copy and write; pointing at a part of either lights up its
-  // part of the drawing.
-  const TOKENS = ["she", "heard", "the", "owl", "and"];
-  const FIRED = 3;
+  // Two real units over five tokens, drawn in order of depth, each in its own depth's colour: an
+  // illustration, since the neuron is Qwen3-8B's and the head Gemma 4 12B's. A stream rises from each
+  // token. Low down the owl neuron is silent on four of them and fires on "owl", and what it writes
+  // colours owl's stream from there up. Higher, the groups head at "both" looks back along ribbons as
+  // wide as its attention (to "owl" and "hawk", the pair it groups) but never wider than a stream, each
+  // shading from the stream it leaves into the head's colour, and what it writes colours both's stream.
+  // Beneath, the two units under the explorer's column names: what each fires on and (the head) attends
+  // to in the drawing, and what each writes, measured (the head) or read from its weights (the neuron).
+  // Pointing at a part of either lights up its part of the drawing.
+  const TOKENS = ["the", "owl", "and", "hawk", "both"];
+  const FIRED = 1;
   const AT = 4;
-  // How the head at "and" shares its attention among the tokens before it: drawn, not measured.
-  const LOOKS = [0.6, 0.12, 0.08, 0.2];
+  const LOOKED = [1, 3];
+  // How the head at "both" shares its attention among the tokens before it: drawn, not measured.
+  const LOOKS = [0.06, 0.42, 0.08, 0.44];
 
-  const qwen = MODELS["qwen3-8b"];
-  const headTint = depthColor(qwen, SHE.layer);
+  const qwen = MODELS[OWL.model];
+  const gemma = MODELS[GROUPS.model];
+  const headTint = depthColor(gemma, GROUPS.layer);
   const neuronTint = depthColor(qwen, OWL.layer);
 
   let copies = $state<LensToken[]>([]);
   let writes = $state<LensToken[]>([]);
   function load() {
-    loadHeadLayer(SHE.model, SHE.layer).then((heads) => {
-      const head = heads.find((h) => h.h === SHE.h);
-      copies = headline(head?.reads.find((r) => r.col === "ov_R")?.tokens ?? [], 5);
+    loadHeadLayer(GROUPS.model, GROUPS.layer).then((heads) => {
+      copies = headline(heads.find((h) => h.h === GROUPS.h)?.outRz ?? [], 5);
     }, () => undefined);
     loadNeuron(OWL.model, OWL.layer, OWL.n).then((detail) => {
       const side = detail?.poles.find((p) => p.pole === 1);
@@ -88,6 +91,11 @@
   };
   let focus = $state<Focus | null>(null);
   const quiet = (piece: Piece) => focus !== null && !SHOWS[focus].includes(piece);
+  // A token chip is quiet when every part it plays is: "owl" is both fired on and looked at.
+  function chipQuiet(i: number) {
+    const parts: Piece[] = [...(LOOKED.includes(i) ? ["looked" as const] : []), ...(i === AT ? ["at" as const] : []), ...(i === FIRED ? ["fired" as const] : [])];
+    return parts.length > 0 && parts.every(quiet);
+  }
 
   const KINDS = [
     {
@@ -113,7 +121,10 @@
 
 <Part id="units" title="Neurons and heads" onnear={load}>
   {#snippet caption()}
-    <p>Two units of {qwen.name} at work on five tokens.</p>
+    <p>A language model reads text as tokens (words or pieces of words) and processes them by converting them to a stream of numbers that then go through a stack of layers: {qwen.layers} in {qwen.name} and {gemma.layers} in {gemma.name}. There are two kinds of processing units.</p>
+    <p>An <b>attention head</b> moves information between tokens: it looks back at earlier ones and copies data forward.</p>
+    <p>A <b>neuron</b> works on one token at a time: when the token's stream points a certain way, it fires and contributes its own direction.</p>
+    <p>This is an illustration of both of them on five tokens. This is just an example: the neuron is from {qwen.name} and the head is from {gemma.name}.</p>
   {/snippet}
   <div class="spec">
     <figure
@@ -124,7 +135,7 @@
       style:--h="{g.height}px"
       style:--head={headTint}
       style:--neuron={neuronTint}
-      aria-label="The tokens she, heard, the, owl, and. At layer 8 a neuron fires on “owl” and writes into its stream; at layer 20 a head at “and” looks back, mostly at “she”, and copies from there."
+      aria-label="An illustration with two units from different models. The tokens the, owl, and, hawk, both. Low down a neuron fires on “owl” and writes into its stream; higher, a head at “both” looks back at “owl” and “hawk” and writes from there."
     >
       {#if width}
         <svg class="draw" width={width} height={g.height} aria-hidden="true">
@@ -148,8 +159,8 @@
             <path class="ribbon" d={ribbon.d} fill="url(#units-look-{ribbon.i})" style:--i={i} />
           {/each}
         </svg>
-        <span class="depth" style:top="{g.head.y}px" data-tip="Layer {SHE.layer}">L{SHE.layer}</span>
-        <span class="depth" style:top="{g.neuron.y}px" data-tip="Layer {OWL.layer}">L{OWL.layer}</span>
+        <span class="depth" style:top="{g.head.y}px" data-tip="Layer {GROUPS.layer} of {gemma.name}">L{GROUPS.layer}</span>
+        <span class="depth" style:top="{g.neuron.y}px" data-tip="Layer {OWL.layer} of {qwen.name}">L{OWL.layer}</span>
         <a
           class="node neuron"
           class:quiet={quiet("neuron")}
@@ -167,14 +178,14 @@
         <a
           class="node head"
           class:quiet={quiet("head")}
-          href="/{SHE.model}/L{SHE.layer}/h{SHE.h}"
+          href="/{GROUPS.model}/L{GROUPS.layer}/h{GROUPS.h}"
           tabindex="-1"
           style:left="{g.head.x}px"
           style:top="{g.head.y}px"
           style:width="{g.head.w}px"
           style:height="{g.head.h}px"
-          data-tip-title={headId(SHE.layer, SHE.h)}
-          data-tip="At “and”, looks back at “she” and copies her forward"
+          data-tip-title={headId(GROUPS.layer, GROUPS.h)}
+          data-tip="At “both”, looks back at the pair it groups"
           onpointerenter={() => (focus = "head")}
           onpointerleave={() => (focus = null)}
         >head</a>
@@ -183,10 +194,10 @@
         <span class="word" style:grid-column={i + 2}>
           <span
             class="chip"
-            class:looked={i === 0}
+            class:looked={LOOKED.includes(i)}
             class:at={i === AT}
             class:fired={i === FIRED}
-            class:quiet={(i === 0 && quiet("looked")) || (i === AT && quiet("at")) || (i === FIRED && quiet("fired"))}
+            class:quiet={chipQuiet(i)}
           >{token}</span>
         </span>
       {/each}
@@ -205,13 +216,14 @@
             {/each}
           </dl>
           {#if kind.kind === "head"}
-            <UnitLink model={SHE.model} layer={SHE.layer} head={SHE.h} />
-            <p class="says"><span class="verb">copies</span><span class="toks">{#each copies as [token, count, flags], i (i)}<Token {token} {count} {flags} {i} />{/each}</span></p>
-            <p class="says"><span class="verb">pushes against</span><span class="toks"><Token token=" he" /><Token token=" himself" i={1} /></span></p>
+            <UnitLink model={GROUPS.model} layer={GROUPS.layer} head={GROUPS.h} />
+            <p class="says"><span class="verb">Fires on</span><span class="toks"><Token token=" both" /></span></p>
+            <p class="says"><span class="verb">Attends to</span><span class="toks"><Token token=" owl" /><Token token=" hawk" i={1} /></span></p>
+            <p class="says"><span class="verb">Writes</span><span class="toks">{#each copies as [token, count, flags], i (i)}<Token {token} {count} {flags} {i} />{/each}</span></p>
           {:else}
             <UnitLink model={OWL.model} layer={OWL.layer} neuron={OWL.n} />
-            <p class="says"><span class="verb">+ fires on</span><span class="toks"><Token token=" owl" /></span></p>
-            <p class="says"><span class="verb">writes</span><span class="toks">{#each writes as [token, count, flags], i (i)}<Token {token} {count} {flags} {i} />{/each}</span></p>
+            <p class="says"><span class="verb">Fires on</span><span class="toks"><Token token=" owl" /></span></p>
+            <p class="says"><span class="verb">Writes</span><span class="toks">{#each writes as [token, count, flags], i (i)}<Token {token} {count} {flags} {i} />{/each}</span></p>
           {/if}
         </div>
       {/each}
