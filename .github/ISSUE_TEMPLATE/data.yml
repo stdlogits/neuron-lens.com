@@ -1,0 +1,19 @@
+name: A label or translation looks wrong
+description: A unit's label doesn't match its evidence, or a translation is off
+labels: [data]
+body:
+  - type: input
+    id: address
+    attributes:
+      label: The unit's address
+      placeholder: https://neuron-lens.com/gemma-4-12b/L35/h14
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-looks-wrong
+    attributes:
+      label: What looks wrong?
+      description: Which label or translation, and what the unit's evidence (its firings, its reads, what it does) shows instead.
+    validations:
+      required: true

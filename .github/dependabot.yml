@@ -1,0 +1,9 @@
+version: 2
+updates:
+  # The workflow's actions. npm is pinned by hand (exact versions, Ledger at a tag); Dependabot's
+  # security updates, on in the repository's settings, still cover it.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

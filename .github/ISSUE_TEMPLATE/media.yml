@@ -1,0 +1,32 @@
+name: An image or sound
+description: An image or sound shown on the site, or its credit or licence
+labels: [media]
+body:
+  - type: input
+    id: address
+    attributes:
+      label: Where it's shown
+      description: The unit's address, or the Credits page if the issue is about a whole collection.
+      placeholder: https://neuron-lens.com/gemma-4-12b/L35/h14
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What's wrong?
+      options:
+        - The credit or licence is wrong
+        - It shouldn't be shown here
+        - It doesn't load or play
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: If you hold the rights to it, say so, and what you'd like done.
+    validations:
+      required: true

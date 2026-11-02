@@ -32,6 +32,10 @@ files. It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now
   (below). `scripts/deploy.sh`, `scripts/verify-deployment.mjs`: deploy and the live check.
 - `e2e/`: Playwright specs on a mock catalog (`e2e/fixtures/catalog`, committed: a few units cut from
   `public/data` by `e2e/fixtures/build.mjs`, ~0.5 MB).
+- `CONTRIBUTING.md`, `SECURITY.md`, `.github/` (CI, the issue forms, Dependabot for CI's actions): what
+  the repository tells people outside it. CONTRIBUTING repeats this file's rules that CI can't check,
+  so change it with them. Security reports go through private advisories only, with no email. The
+  issue forms send the analysis to `stdlogits/neuron-lens` and the design to `stdlogits/ledger`.
 
 Addresses: `/`, `/<model>`, `/<model>/L<layer>`, `/<model>/L<layer>/n<neuron>` (`?all` lists every
 neuron of the layer), `/<model>/heads`, `/<model>/L<layer>/heads`, `/<model>/L<layer>/h<head>`,

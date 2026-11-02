@@ -1,0 +1,33 @@
+name: Something on the site
+description: A view that breaks, looks wrong, or doesn't load
+labels: [bug]
+body:
+  - type: input
+    id: address
+    attributes:
+      label: Address
+      description: The page's address. Every view has one, so it is usually enough to show the problem.
+      placeholder: https://neuron-lens.com/qwen3-8b/L8/n344
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and device
+      placeholder: Safari 26 on an iPhone
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console errors
+      description: Anything in the browser's console, if you looked.
+      render: shell
