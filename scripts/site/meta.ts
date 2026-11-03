@@ -33,9 +33,11 @@ const heads = (id: ModelId) => MODELS[id].layers * MODELS[id].heads;
 
 // ---------- JSON-LD
 
+// The people and Standard Logits under the ids standardlogits.com gives them, so the two sites name
+// the same organisation and members.
 const A9LIM = { "@type": "Person", "@id": "https://a9l.im/#person", name: "a9lim", url: "https://a9l.im/", sameAs: ["https://github.com/a9lim", "https://x.com/_a9lim"] };
-const TREETOWN = { "@type": "Person", "@id": `${ORIGIN}/#treetown`, name: "treetown", url: "https://logits.ml", sameAs: ["https://x.com/treetowntree"] };
-const STDLOGITS = { "@type": "Organization", "@id": `${ORIGIN}/#stdlogits`, name: "Standard Logits", url: "https://github.com/stdlogits", sameAs: ["https://huggingface.co/stdlogits"] };
+const TREETOWN = { "@type": "Person", "@id": "https://standardlogits.com/#treetown", name: "treetown", url: "https://logits.ml", sameAs: ["https://x.com/treetowntree"] };
+const STDLOGITS = { "@type": "Organization", "@id": "https://standardlogits.com/#organization", name: "Standard Logits", url: "https://standardlogits.com/", sameAs: ["https://github.com/stdlogits", "https://huggingface.co/stdlogits"] };
 const CREDIT = "Made by a9lim and treetown with Claude (Anthropic). Labels and translations by Claude Haiku 5.5.";
 const creators = [{ "@id": A9LIM["@id"] }, { "@id": TREETOWN["@id"] }];
 

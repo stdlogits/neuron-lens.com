@@ -74,7 +74,7 @@ crawlers, link previews and language models that run no script see only what the
 it. `scripts/site/meta.ts`, a Vite plugin, writes all of it, from `src/lib/models.ts` and
 `src/lib/site.ts`: the description, Open Graph and Twitter tags, icons and JSON-LD (the site, the
 explorer, the catalog as a schema.org `Dataset` with its Hub release as its id, a9lim under a9l.im's
-person id, treetown, Standard Logits); a short summary in `#app` for readers without script (hidden by
+person id, and treetown and Standard Logits under standardlogits.com's); a short summary in `#app` for readers without script (hidden by
 `@media (scripting: enabled)` and cleared by `main.ts`); `/llms.txt` from `scripts/site/llms.md`;
 `/sitemap.xml`; and the web app manifest. `App.svelte` sets each view's canonical link (`?all`
 dropped) and marks the missing page `noindex`. There is no `og:url`: every address is served this
