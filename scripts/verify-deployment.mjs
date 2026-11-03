@@ -173,10 +173,12 @@ export async function checkAssets(origin, rules, html, buildDir) {
   const theme = await get(origin, "/theme-preflight.js");
   assert.equal(theme.status, 200, `/theme-preflight.js: HTTP ${theme.status}`);
   assert.ok(["text/javascript", "application/javascript"].includes(mime(theme)), `/theme-preflight.js: ${mime(theme)}`);
+  assertHeaders(theme, rules, "/theme-preflight.js");
   await theme.body?.cancel();
 
   const robots = await get(origin, "/robots.txt");
   assert.equal(robots.status, 200, `/robots.txt: HTTP ${robots.status}`);
+  assertHeaders(robots, rules, "/robots.txt");
   assert.equal(await robots.text(), await readFile(resolve(root, "public/robots.txt"), "utf8"), "/robots.txt differs from public/robots.txt");
 
   for (const [path, types] of SITE_FILES) {

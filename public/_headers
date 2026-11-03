@@ -20,8 +20,9 @@
   X-Frame-Options: SAMEORIGIN
   Cache-Control: no-cache
 
-# The mark's images and the social card: the zone's browser cache TTL raises no-cache to four hours on
-# images, so they ask for that themselves. (Before /assets/*, which keeps its own.)
+# The zone's browser cache TTL raises no-cache to four hours on what Cloudflare caches (images,
+# scripts, robots.txt), so those ask for that themselves: the mark's images, the social card,
+# theme-preflight.js and robots.txt. (Before /assets/*, which keeps its own.)
 /*.png
   ! Cache-Control
   Cache-Control: public, max-age=14400
@@ -31,6 +32,14 @@
   Cache-Control: public, max-age=14400
 
 /*.ico
+  ! Cache-Control
+  Cache-Control: public, max-age=14400
+
+/theme-preflight.js
+  ! Cache-Control
+  Cache-Control: public, max-age=14400
+
+/robots.txt
   ! Cache-Control
   Cache-Control: public, max-age=14400
 
