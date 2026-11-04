@@ -175,6 +175,7 @@ account first. Cloudflare Web Analytics is on (a9's choice): the CSP allows its 
 email obfuscation off: they add inline scripts the CSP blocks. The zone's security-headers transform
 sets `Referrer-Policy: same-origin` and `X-Frame-Options: SAMEORIGIN`, so `_headers` says the same
 (the CSP's `frame-ancestors 'none'` still forbids framing), and its HSTS setting (a9's) replaces the
-header with `max-age=15552000; includeSubDomains; preload`, which `_headers` repeats. Its Browser Cache TTL (4 hours) raises a
+header with `max-age=31536000; includeSubDomains; preload`, which `_headers` repeats (a year is the
+least the preload list accepts). Its Browser Cache TTL (4 hours) raises a
 shorter `max-age` (and `no-cache` on images), so `/data/*` and the site's images ask for 4 hours
 themselves.
