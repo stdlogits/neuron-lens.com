@@ -88,13 +88,18 @@ function jsonLd() {
         creator: creators,
         publisher: { "@id": STDLOGITS["@id"] },
         creditText: CREDIT,
-        isBasedOn: models.map((m) => MODEL_PAGES[m.id]),
+        // The weight reads are made through the lenses, so the catalog is based on them as on the
+        // models. Google takes only a Dataset or a URL in a Dataset's isPartOf and hasPart, and
+        // neither the lenses (a model release) nor the research code is a dataset, so neither is
+        // named there.
+        isBasedOn: [
+          ...models.map((m) => MODEL_PAGES[m.id]),
+          { "@type": "CreativeWork", "@id": LENSES, url: LENSES, name: "rs-lenses", description: "The R-lens and S-lens for both models", license: "https://creativecommons.org/licenses/by/4.0/" },
+        ],
         citation: RESEARCH,
         measurementTechnique: ["R-lens and S-lens reads of weights", "activation statistics over 15M tokens", "exact token drivers by substitution", "labels by Claude Haiku 5.5"],
         variableMeasured: ["weight-only lens reads", "activations and top contexts", "exact token drivers", "legibility tests", "labels"],
         distribution: [{ "@type": "DataDownload", contentUrl: CATALOG, encodingFormat: "application/vnd.apache.parquet" }],
-        isPartOf: { "@type": "CreativeWork", url: RESEARCH, name: "neuron-lens" },
-        hasPart: [{ "@type": "CreativeWork", url: LENSES, name: "rs-lenses", description: "The R-lens and S-lens for both models", license: "https://creativecommons.org/licenses/by/4.0/" }],
       },
       A9LIM,
       TREETOWN,
