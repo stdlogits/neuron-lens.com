@@ -7,7 +7,7 @@
   // (the lens and what it measures in a tip), its strength among its peers, its family's test where
   // one applies, and all its tokens. Reads weak at this depth, or whose test fails, are quieter and
   // weak ones come last. A token two lists agree on is tinted.
-  let { reads, all, tests = {}, agree, scope = "the layer" }: {
+  let { reads, all, tests = {}, agree, scope = "the layer", skipEmpty = false }: {
     reads: LensRead[];
     /** Every read of the unit, to name a twin's family. */
     all: LensRead[];
@@ -16,9 +16,12 @@
     /** Stems the unit's lists agree on, beyond the flags the catalog gives. */
     agree?: Set<string>;
     scope?: string;
+    /** Leave out a read with nothing to list, rather than saying so. */
+    skipEmpty?: boolean;
   } = $props();
 
-  const ordered = $derived([...reads.filter((read) => read.trust !== "weak"), ...reads.filter((read) => read.trust === "weak")]);
+  const kept = $derived(skipEmpty ? reads.filter((read) => read.tokens.length) : reads);
+  const ordered = $derived([...kept.filter((read) => read.trust !== "weak"), ...kept.filter((read) => read.trust === "weak")]);
   const lit = (token: string, flags: number) => ((flags & 3) !== 0 || agree?.has(stem(token)) ? 1 : 0);
 </script>
 

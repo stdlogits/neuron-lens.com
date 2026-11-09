@@ -13,8 +13,9 @@ files. It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now
 - `src/main.ts`, `src/App.svelte`: the shell (header, footer, page switch).
 - `src/explorer/`: the explorer. `lens.svelte.ts` is its state (get it with `useLens()`): it reads the
   address, loads what that place needs and changes place only by going to another address. The rest
-  are its parts: `Atlas` (and `atlas/`), `LayerList`, `UnitView` (and `unit/`), `Search` (and
-  `search/`), `media/`.
+  are its parts: `Atlas` (and `atlas/`), `graph/` (the unit's connections: `trace.ts` walks them,
+  `layout.ts` places them, `Graph` draws them, `Connections` is the rail), `UnitView` (and `unit/`), `Search`
+  (and `search/`), `media/`.
 - `src/pages/`: About, Credits, the missing page.
 - `src/lib/`: `data.ts` (the catalog's types and loaders), `models.ts` (each model's shape, its depth
   ramp and the words for its depth bands), `router.svelte.ts` (every view is a path), `site.ts` (the
@@ -56,10 +57,15 @@ Madefor only with tabular numbers, motion on one curve through its actions and `
 rather than tell (no explanatory paragraphs or provenance in the explorer; tips and the About page
 hold the words). The only credit in the explorer is "Labels by Claude Haiku 5.5"; above it sits the
 labeller's note on the chosen labels, which is evidence for them, not an explanation of the site. A
-unit's view shows all of its evidence, with nothing behind a "more" button: its images and
-sounds, its firings, every read the labeller saw (with its test) and what it does in real text under
-the column it bears on, then its figures. Phone widths down to 320 px must
-not scroll sideways.
+unit's view shows all of its evidence on one page, with nothing behind a "more" button, sorted into
+baskets under a bar that stays in reach: Firings (its images and sounds, its firings, what it does in real
+text, how often and how hard), Weights (every read the labeller saw, with its test, and what it adds
+beyond what it reads) and Stream (what the residual holds where it fires, which never reached the labeller).
+Left is always what comes in and right what goes out. Beside them the rail holds its connections: a
+directed graph at true depth, and its strongest links in words. Wired to, driven by and fires with are
+three relations and stay three views (findings §17). A link's sign has no colour of its own, since the one
+hue is depth: a link that pushes against is grey and dashed. Phone widths down to 320 px must not scroll
+sideways.
 
 `main.ts` loads `@stdlogits/ledger/ledger.css`, then `site.css`, and installs `translator` with
 `setTranslator` before mounting. The dev server serves Ledger as source rather than pre-bundling it
@@ -115,6 +121,13 @@ has the full invocation):
 
 Labels come from neuron-lens's `scripts/10_labels.py`, per model. The builder also works without them:
 titles then fall back to a unit's media label or its peak tokens.
+
+Each layer's neurons are two kinds of file, both read by HTTP range. `graph.bin` holds a fixed-width
+record per pole (`WIRE` in the builder, 704 bytes): its title, where its detail is, and its 16 strongest
+links per relation, ids and half-floats, so a pole's record costs one small request and the graph can follow
+links as far as it likes. `units-<pack>.bin` holds each neuron's detail as deflated JSON, end to end, in
+packs under 25 MiB. The builder inverts every `sources` table for what each pole and head drives (the
+catalog lists only what drives a pole). `heads/graph.bin` holds a record per head.
 
 The types in `src/lib/data.ts` mirror the builder's output. Change both together, then regenerate the
 e2e mock catalog (`node e2e/fixtures/build.mjs`) so the specs see the new shape. The builder's `stem()`

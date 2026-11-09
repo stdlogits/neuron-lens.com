@@ -3,7 +3,7 @@
   import { MorphText, Segmented, Tabs } from "@stdlogits/ledger";
   import Search from "./Search.svelte";
   import Atlas from "./Atlas.svelte";
-  import LayerList from "./LayerList.svelte";
+  import Connections from "./graph/Connections.svelte";
   import UnitView from "./UnitView.svelte";
   import { Lens, provideLens } from "./lens.svelte";
   import { MODELS, MODEL_ORDER } from "../lib/models";
@@ -60,7 +60,7 @@
     <p class="notice" role="alert">The catalog didn't load. Check your connection and reload the page.</p>
   {:else}
     <section class="panes" id="layer">
-      <LayerList />
+      <Connections />
       <UnitView />
     </section>
   {/if}
@@ -84,8 +84,8 @@
   .left { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s5); }
   .filters { min-width: 0; max-width: 100%; }
   .panes { display: flex; flex-wrap: wrap; align-items: start; gap: var(--s7); scroll-margin-top: var(--s5); }
-  /* On a phone the chosen unit comes first, under the atlas; the layer's list follows it. */
-  @media (max-width: 720px) { .panes > :global(nav.layer) { order: 2; } }
+  /* On a phone the chosen unit comes first, under the atlas; its connections follow it. */
+  @media (max-width: 720px) { .panes > :global(aside.rail) { order: 2; } }
   .notice { color: var(--ink2); }
   .foot { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); }
   kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 var(--s1); border-radius: var(--r-chip); background: var(--wash); color: var(--ink2); font: var(--type-meta); }

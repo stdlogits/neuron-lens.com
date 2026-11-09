@@ -17,6 +17,27 @@ export const sideReads = (reads: LensRead[], side: "input" | "output") => reads.
 /** The tip on every "From its weights". */
 export const WEIGHTS = "What each lens reads from its weights, in the order this depth trusts them";
 
+/** The tip on "Beyond what it reads". */
+export const ORTH = "What its write says with everything it reads taken out: what it adds of its own";
+
+/** Its write against what it reads, from its weights. */
+export const weightFacts = (pole: Pole): Fact[] => {
+  const [gate, up] = pole.cos;
+  return [
+    ...(gate === null ? [] : [{ k: "Toward its gate", v: signed(gate), tip: "The cosine of its write with the gate side of what it reads" }]),
+    ...(up === null ? [] : [{ k: "Toward its up side", v: signed(up), tip: "The cosine of its write with the up side of what it reads" }]),
+  ];
+};
+
+/** Its write against what it reads, at its firings. */
+export const streamFacts = (pole: Pole): Fact[] => {
+  const [parallel, orthogonal] = pole.flow ?? [null, null];
+  return [
+    ...(parallel === null ? [] : [{ k: parallel >= 0 ? "Amplifies what it reads" : "Suppresses what it reads", v: `×${Math.abs(parallel).toFixed(2)}`, tip: "Its write along what it reads, as a multiple of that part of the stream, mean over its firings" }]),
+    ...(orthogonal === null ? [] : [{ k: "Adds off it", v: `×${orthogonal.toFixed(2)}`, tip: "How much it writes off that direction, on the same scale" }]),
+  ];
+};
+
 /** A read's family: the read and its z twin share one, and one test. */
 export const family = (col: ReadColumn) => col.replace(/_z$/, "");
 

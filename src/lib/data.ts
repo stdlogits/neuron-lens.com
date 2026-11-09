@@ -14,7 +14,15 @@ export type NeuronColumn =
 export type HeadColumn =
   | "ov_R" | "ov_R_z" | "ov_R_neg" | "ov_R_neg_z" | "ov_S" | "ov_S_z" | "ov_S_neg" | "ov_S_neg_z"
   | "qk_S" | "qk_S_z" | "qk_S_neg" | "qk_S_neg_z" | "qk_self_S" | "qk_self_S_z";
-export type ReadColumn = NeuronColumn | HeadColumn;
+/** What a pole adds beyond what it reads: the write's reads with its gate and up rows removed (findings §18). */
+export type OrthColumn = "write_orth_R" | "write_orth_R_z" | "write_orth_S" | "write_orth_S_z";
+/** What the stream holds at a pole's firings: entering its MLP, written by its layer, leaving the layer, and the model's next word. */
+export type StreamColumn =
+  | "before_R" | "before_R_z" | "before_S" | "before_S_z"
+  | "mlp_R" | "mlp_R_z" | "mlp_S" | "mlp_S_z"
+  | "after_R" | "after_R_z" | "after_S" | "after_S_z"
+  | "pred" | "pred_z";
+export type ReadColumn = NeuronColumn | HeadColumn | OrthColumn | StreamColumn;
 
 /** [token, variants merged into it, flags: 1 another lens names it too, 2 confirmed by measurement]. */
 export type LensToken = [string, number, number];
@@ -43,9 +51,19 @@ export interface Pole {
   /** Typical and largest firing, the share of tokens it fires on (overall, then web, Chinese, code, chat), and the share of firings past position 0. */
   act: { top: number; max: number; rate: number; slices: [number, number, number, number]; pos: number };
   peaks: [string, number][];
+  /** The tokens that come right after its top firings, and how many times. */
+  next: [string, number][];
   /** Top firings: the text with the token marked ⟦ ⟧, then its English and language when translated. */
   contexts: ContextLine[];
   drivers: [string, number][];
+  /** Its write with what it reads removed. */
+  orth: LensRead[];
+  /** The stream at its firings; absent where the model has no `firings` table yet. */
+  stream?: LensRead[];
+  /** How much its write amplifies what it reads, how much it adds off it, and over how many firings. */
+  flow?: [number | null, number | null, number];
+  /** The cosine of its write with the gate and up sides of what it reads. */
+  cos: [number | null, number | null];
   /** Each side's q-value at the pole's own top firings: under 0.05, the read holds. */
   legible: Record<NeuronSide, number>;
   silent: boolean;
@@ -133,6 +151,10 @@ export interface LayerMeta {
   global?: boolean;
   count?: number;
   stats?: { silent: number; detector: number; legible: number; dark: number; image?: number; audio?: number };
+  /** The reads every neuron of the layer lists, in order. */
+  reads?: ReadInfo[];
+  orth?: ReadInfo[];
+  stream?: ReadInfo[];
 }
 
 export interface CatalogIndex {
@@ -144,7 +166,10 @@ export interface CatalogIndex {
   layers: number;
   neuronsPerLayer: number;
   headsPerLayer: number;
-  chunk: number;
+  /** Bytes in a pole's or head's record of a graph.bin file. */
+  wire: number;
+  /** Connections each record keeps per relation. */
+  connections: number;
   layerMeta: LayerMeta[];
   /** The easiest neurons to read, by legibility and label confidence. */
   neurons: IndexRow[];
@@ -186,7 +211,7 @@ type RawToken = number | [number, number, number];
 type RawRead = [number, RawToken[]];
 type RawPairs = [number, number][];
 type RawMedia = Omit<PoleMedia, "write" | "writeZ"> & { write: RawToken[]; writeZ: RawToken[] };
-type RawPole = Omit<Pole, "reads" | "drivers" | "media"> & { reads: RawRead[]; drivers: RawPairs; media?: Partial<Record<Modality, RawMedia>> };
+type RawPole = Omit<Pole, "reads" | "orth" | "stream" | "drivers" | "media"> & { reads: RawRead[]; orth: RawRead[]; stream?: RawRead[]; drivers: RawPairs; media?: Partial<Record<Modality, RawMedia>> };
 type RawHead = Omit<HeadDetail, "reads" | "drivers" | "keys" | "outRz"> & { reads: RawRead[]; drivers: RawPairs; keys: RawPairs; outRz: RawToken[] };
 
 // Details name tokens by id; vocab.json decodes every id once.
@@ -215,22 +240,132 @@ export const loadLayerIndex = (model: ModelId, layer: number) => memo(`${model}/
 export const loadScores = (model: ModelId) => memo(`${model}/scores`, async () => (await load<{ layers: string[] }>(model, "scores.json")).layers.map(decodeScores));
 export const loadHeadIndex = (model: ModelId) => memo(`${model}/heads`, async () => (await load<{ heads: HeadRow[] }>(model, "heads/index.json")).heads);
 
-export const chunkOf = (neuron: number, size: number) => Math.floor(neuron / size);
-/** One neuron's detail. The chunk size comes from the model's index, so this waits for it. */
-export async function loadNeuron(model: ModelId, layer: number, neuron: number): Promise<NeuronDetail | null> {
-  const { chunk } = await loadIndex(model);
-  const neurons = await loadNeuronChunk(model, layer, chunkOf(neuron, chunk));
-  return neurons.find((n) => n.n === neuron) ?? null;
+// ---------- ranges: every unit's record is read out of a larger file
+
+const MAX_RANGES = 16;
+let active = 0;
+const waiting: (() => void)[] = [];
+
+async function range(url: string, offset: number, length: number): Promise<ArrayBuffer> {
+  if (active >= MAX_RANGES) await new Promise<void>((go) => waiting.push(go));
+  active += 1;
+  try {
+    const response = await fetch(url, { headers: { Range: `bytes=${offset}-${offset + length - 1}` } });
+    if (!response.ok) throw new Error(`${url}: ${response.status}`);
+    const buffer = await response.arrayBuffer();
+    return response.status === 206 ? buffer : buffer.slice(offset, offset + length);
+  } finally {
+    active -= 1;
+    waiting.shift()?.();
+  }
 }
-export const loadNeuronChunk = (model: ModelId, layer: number, chunk: number) => memo(`${model}/chunk:${layer}:${chunk}`, async () => {
-  const [file, vocab] = await Promise.all([
-    load<{ layer: number; reads: ReadInfo[]; neurons: { n: number; poles: [RawPole, RawPole] }[] }>(model, `neurons/L${pad(layer)}/c${pad(chunk, 3)}.json`),
-    loadVocab(model),
-  ]);
-  return file.neurons.map((neuron): NeuronDetail => ({
-    n: neuron.n,
-    poles: neuron.poles.map((pole) => ({ ...pole, reads: readsOf(file.reads, pole.reads, vocab), drivers: pairsOf(pole.drivers, vocab), media: mediaOf(pole.media, vocab) })) as [Pole, Pole],
-  }));
+
+const inflated = (bytes: ArrayBuffer) => new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate"))).text();
+
+// ---------- connections: a fixed-width record per pole (graph.bin, see WIRE in the builder)
+
+export type Relation = "in" | "out" | "driven" | "drives" | "heads" | "with";
+const RELATIONS: Relation[] = ["in", "out", "driven", "drives", "heads", "with"];
+/** One connection: the other unit's id and its value (a push, a share, or the share of firings in common). */
+export type Link = [number, number];
+export interface Wire {
+  /** The unit's clearest label, shortened, and its confidence 0–100. */
+  title: string;
+  conf: number;
+  /** The title is what it writes, not what it fires on. */
+  writes: boolean;
+  silent: boolean;
+  /** The share of its activation from neurons, heads and the embedding. */
+  mix: [number, number, number];
+  links: Record<Relation, Link[]>;
+  /** Where its neuron's detail is: a units pack, an offset and a length. */
+  detail: [number, number, number];
+}
+
+const NO_LINK = 0xffffffff;
+const TITLE_START = 18;
+const TITLE_BYTES = 110;
+const LINKS_START = 128;
+const ENTRY_BYTES = 6;
+
+/** A half-precision float, which DataView can't read everywhere yet. */
+function half(bits: number): number {
+  const sign = bits & 0x8000 ? -1 : 1;
+  const exponent = (bits >> 10) & 31;
+  const fraction = bits & 1023;
+  if (exponent === 0) return sign * fraction * 2 ** -24;
+  if (exponent === 31) return fraction ? NaN : sign * Infinity;
+  return sign * (1 + fraction / 1024) * 2 ** (exponent - 15);
+}
+
+const utf8 = new TextDecoder();
+
+function wireOf(buffer: ArrayBuffer, perRelation: number): Wire {
+  const view = new DataView(buffer);
+  const bytes = new Uint8Array(buffer);
+  let end = TITLE_START;
+  while (end < TITLE_START + TITLE_BYTES && bytes[end] !== 0) end += 1;
+  const links = {} as Record<Relation, Link[]>;
+  RELATIONS.forEach((relation, r) => {
+    const list: Link[] = [];
+    for (let i = 0; i < perRelation; i += 1) {
+      const at = LINKS_START + (r * perRelation + i) * ENTRY_BYTES;
+      const id = view.getUint32(at, true);
+      if (id === NO_LINK) break;
+      list.push([id, half(view.getUint16(at + 4, true))]);
+    }
+    links[relation] = list;
+  });
+  return {
+    title: utf8.decode(bytes.subarray(TITLE_START, end)),
+    conf: bytes[0],
+    writes: (bytes[1] & 1) !== 0,
+    silent: (bytes[1] & 2) !== 0,
+    mix: [half(view.getUint16(12, true)), half(view.getUint16(14, true)), half(view.getUint16(16, true))],
+    links,
+    detail: [bytes[2], view.getUint32(4, true), view.getUint32(8, true)],
+  };
+}
+
+/** A pole's id across the model, as its links name it. */
+export const poleId = (mlp: number, layer: number, neuron: number, pole: number) => layer * 2 * mlp + neuron + (pole < 0 ? mlp : 0);
+export const poleOf = (mlp: number, id: number) => {
+  const inLayer = id % (2 * mlp);
+  return { layer: Math.floor(id / (2 * mlp)), neuron: inLayer % mlp, pole: inLayer >= mlp ? (-1 as const) : (1 as const) };
+};
+export const headKey = (heads: number, layer: number, head: number) => layer * heads + head;
+export const headOf = (heads: number, id: number) => ({ layer: Math.floor(id / heads), head: id % heads });
+
+/** A pole's record: its title, where its detail is, and its connections. */
+export const loadPoleWire = (model: ModelId, id: number) => memo(`${model}/wire:${id}`, async () => {
+  const { wire, neuronsPerLayer: mlp, connections } = await loadIndex(model);
+  const { layer, neuron, pole } = poleOf(mlp, id);
+  return wireOf(await range(`${DATA_BASE}/${model}/neurons/L${pad(layer)}/graph.bin`, (neuron + (pole < 0 ? mlp : 0)) * wire, wire), connections);
+});
+export const loadHeadWire = (model: ModelId, id: number) => memo(`${model}/head-wire:${id}`, async () => {
+  const { wire, connections } = await loadIndex(model);
+  return wireOf(await range(`${DATA_BASE}/${model}/heads/graph.bin`, id * wire, wire), connections);
+});
+
+/** One neuron's detail, from where its record says it is. */
+export const loadNeuron = (model: ModelId, layer: number, neuron: number): Promise<NeuronDetail | null> => memo(`${model}/neuron:${layer}:${neuron}`, async () => {
+  const index = await loadIndex(model);
+  const [wire, vocab] = await Promise.all([loadPoleWire(model, poleId(index.neuronsPerLayer, layer, neuron, 1)), loadVocab(model)]);
+  const [pack, offset, length] = wire.detail;
+  if (!length) return null;
+  const raw = JSON.parse(await inflated(await range(`${DATA_BASE}/${model}/neurons/L${pad(layer)}/units-${pad(pack)}.bin`, offset, length))) as { n: number; poles: [RawPole, RawPole] };
+  const { reads = [], orth = [], stream = [] } = index.layerMeta[layer];
+  return {
+    n: raw.n,
+    poles: raw.poles.map((pole) => ({
+      ...pole,
+      reads: readsOf(reads, pole.reads, vocab),
+      orth: readsOf(orth, pole.orth, vocab),
+      stream: pole.stream ? readsOf(stream, pole.stream, vocab) : undefined,
+      drivers: pairsOf(pole.drivers, vocab),
+      media: mediaOf(pole.media, vocab),
+    })) as [Pole, Pole],
+  };
 });
 export const loadHeadLayer = (model: ModelId, layer: number) => memo(`${model}/heads:${layer}`, async () => {
   const [file, vocab] = await Promise.all([load<{ layer: number; reads: ReadInfo[]; heads: RawHead[] }>(model, `heads/L${pad(layer)}.json`), loadVocab(model)]);
@@ -340,6 +475,24 @@ export const LENSES: Record<ReadColumn, LensInfo> = {
   write_S_z: { short: "out·S z", name: "Distinctive words it acts like", side: "output", describe: "The same, scored against the layer's other neurons." },
   write_R: { short: "out·R", name: "Pushes the model to say", side: "output", describe: "What its push makes the model say (the R-lens on its write)." },
   write_R_z: { short: "out·R z", name: "Distinctive words it pushes the model to say", side: "output", describe: "What's specific to this neuron's push, with tokens every neuron promotes removed." },
+  write_orth_R: { short: "orth·R", name: "Adds beyond what it reads", side: "output", describe: "What its push makes the model say once everything it reads is removed from it." },
+  write_orth_R_z: { short: "orth·R z", name: "Distinctively adds beyond what it reads", side: "output", describe: "The same, scored against the layer's other neurons." },
+  write_orth_S: { short: "orth·S", name: "Footprints it adds beyond what it reads", side: "output", describe: "The input tokens its push imitates once everything it reads is removed from it." },
+  write_orth_S_z: { short: "orth·S z", name: "Distinctive footprints it adds", side: "output", describe: "The same, scored against the layer's other neurons." },
+  before_R: { short: "before·R", name: "Ideas in the stream", side: "input", describe: "The residual entering its MLP where it fires, averaged over its top firings: what the model is getting ready to say there." },
+  before_R_z: { short: "before·R z", name: "Distinctive ideas in the stream", side: "input", describe: "The same, scored against what the layer's other poles see where they fire." },
+  before_S: { short: "before·S", name: "Words that put them there", side: "input", describe: "The input tokens that the residual entering its MLP looks like, where it fires." },
+  before_S_z: { short: "before·S z", name: "Distinctive words that put them there", side: "input", describe: "The same, scored against what the layer's other poles see where they fire." },
+  mlp_R: { short: "mlp·R", name: "Its layer writes", side: "output", describe: "What the whole MLP layer writes where this pole fires: this pole and the neurons firing with it." },
+  mlp_R_z: { short: "mlp·R z", name: "Its layer distinctively writes", side: "output", describe: "The same, scored against what the layer writes where its other poles fire." },
+  mlp_S: { short: "mlp·S", name: "Footprints its layer writes", side: "output", describe: "The input tokens the layer's output imitates where this pole fires." },
+  mlp_S_z: { short: "mlp·S z", name: "Distinctive footprints its layer writes", side: "output", describe: "The same, scored against what the layer writes where its other poles fire." },
+  after_R: { short: "after·R", name: "The stream after its layer", side: "output", describe: "The residual leaving the layer where it fires: what the model is then getting ready to say." },
+  after_R_z: { short: "after·R z", name: "Distinctive ideas after its layer", side: "output", describe: "The same, scored against the layer's other poles." },
+  after_S: { short: "after·S", name: "Footprints after its layer", side: "output", describe: "The input tokens the residual looks like when it leaves the layer." },
+  after_S_z: { short: "after·S z", name: "Distinctive footprints after its layer", side: "output", describe: "The same, scored against the layer's other poles." },
+  pred: { short: "pred", name: "The model says next", side: "output", describe: "The model's own mean logit where it fires." },
+  pred_z: { short: "pred z", name: "The model distinctively says next", side: "output", describe: "The same, scored against what the model says where the layer's other poles fire." },
   ov_R: { short: "OV·R", name: "Copies", side: "output", describe: "Reading a token, what the head makes the model say: each token's place in its own column of the OV map." },
   ov_R_z: { short: "OV·R z", name: "Distinctively copies", side: "output", describe: "The same, scored against the layer's other heads." },
   ov_R_neg: { short: "OV·R −", name: "Suppresses", side: "output", describe: "Reading a token, what the head pushes the model away from saying." },

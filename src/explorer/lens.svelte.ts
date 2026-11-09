@@ -108,6 +108,14 @@ export class Lens {
   readonly headDetail = $derived<HeadDetail | null>(
     this.unit === "heads" && this.selected !== null && this.headLayer?.model === this.modelId && this.headLayer.layer === this.layer ? this.headLayer.heads.find((head) => head.h === this.selected) ?? null : null,
   );
+  /** The side of the selected neuron being read: the viewer's choice for this neuron, or else its clearer side. */
+  private chosenSide = $state<{ key: string | null; side: 0 | 1 } | null>(null);
+  readonly side = $derived.by<0 | 1>(() => {
+    if (this.chosenSide && this.chosenSide.key === this.neuronKey) return this.chosenSide.side;
+    const poles = this.neuronDetail?.poles;
+    return poles && poles[1].score > poles[0].score && !poles[1].silent ? 1 : 0;
+  });
+  setSide = (side: 0 | 1) => { this.chosenSide = { key: this.neuronKey, side }; };
   /** Query heads sharing the selected head's key-value head (all 16 on Gemma 4's global layers). */
   readonly groupSize = $derived(this.headDetail ? this.headRows.filter((row) => row[2] === this.headDetail!.kv).length : 1);
 
@@ -122,10 +130,6 @@ export class Lens {
       : (this.all && this.failures.includes(this.rowsKey)) || (this.neuronKey !== null && this.failures.includes(this.neuronKey)),
   );
 
-  /** The layer's list failed to load (every neuron in All mode, or the heads' index). */
-  readonly listFailed = $derived(
-    this.unit === "heads" ? !this.heads && this.failures.includes(this.headIndexKey) : this.all && this.failures.includes(this.rowsKey),
-  );
 
   readonly totals = $derived({ neurons: this.model.layers * this.model.mlp, heads: this.model.layers * this.model.heads, easiest: this.index?.id === this.modelId ? this.index.neurons.length : null });
   readonly title = $derived(this.route.index !== null && this.selectedId ? `${this.selectedId} · ${this.model.name} · Neuron Lens` : this.route.layer !== null || this.modelId !== DEFAULT_MODEL ? `${this.model.name} · Neuron Lens` : "Neuron Lens");

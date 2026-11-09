@@ -1,23 +1,23 @@
 <script lang="ts">
-  import { untrack } from "svelte";
   import { Context, Swap } from "@stdlogits/ledger";
   import NeuronMedia from "../media/NeuronMedia.svelte";
+  import BasketBar from "./BasketBar.svelte";
   import Faces from "./Faces.svelte";
   import Facts from "./Facts.svelte";
   import Group from "./Group.svelte";
   import NeuronColumns from "./NeuronColumns.svelte";
+  import RealText from "./RealText.svelte";
+  import Stream from "./Stream.svelte";
+  import { useLens } from "../lens.svelte";
   import type { NeuronDetail } from "../../lib/data";
   import { neuronStrength, oftenFacts } from "./evidence";
 
-  // A neuron: its two sides as the rows of the faces table (what each fires on, what it writes), then
-  // all of the chosen side's evidence: its images and sounds, its firings, its two columns (every read
-  // of its weights with its test, and what it fires on in real text), and how often and how hard it
-  // fires. Switching sides crossfades everything below the table.
+  // A neuron: its two sides as the rows of the faces table, then the chosen side's evidence in three
+  // baskets. Firings: where and how it fires. Weights: what the lenses read of its wiring. Stream:
+  // what the residual holds where it fires. The side is the lens's, so the graph beside it follows.
   let { detail, layer, labelled }: { detail: NeuronDetail; layer: number; labelled: boolean } = $props();
-
-  // Open on the clearer side. The view is made anew for each neuron, so its first value is enough.
-  const clearer = (poles: NeuronDetail["poles"]): 0 | 1 => (poles[1].score > poles[0].score && !poles[1].silent ? 1 : 0);
-  let side = $state(clearer(untrack(() => detail.poles)));
+  const lens = useLens();
+  const side = $derived(lens.side);
   const pole = $derived(detail.poles[side]);
 
   const rows = $derived(detail.poles.map((p) => ({
@@ -29,36 +29,57 @@
     ],
   })));
   const panel = $props.id();
+  const baskets = $derived([
+    { value: "firings", label: "Firings" },
+    { value: "weights", label: "Weights" },
+    ...(pole.stream ? [{ value: "stream", label: "Stream" }] : []),
+  ]);
 </script>
 
 <div class="unit" data-link-scope>
-  <Faces columns={["Fires on", "Writes"]} {rows} bind:selected={side} {labelled} note={pole.label.note} {panel} />
+  <Faces columns={["Fires on", "Writes"]} {rows} bind:selected={() => lens.side, (next) => lens.setSide(next as 0 | 1)} {labelled} note={pole.label.note} {panel} />
+  <BasketBar {baskets} />
 
   <div class="side" id={panel} role="tabpanel" aria-label={rows[side].name}>
     <Swap key={side}>
       <div class="stack">
-        <NeuronMedia {pole} {layer} neuron={detail.n} />
-
-        <section class="fires">
-          <h3 class="head">Where it fires</h3>
-          {#each pole.contexts as context, i (i)}<Context {context} {i} />{:else}<p class="meta none">No firings recorded</p>{/each}
+        <section id="firings" class="basket">
+          <h3 class="title">Firings</h3>
+          <NeuronMedia {pole} {layer} neuron={detail.n} />
+          <div class="fires">
+            {#each pole.contexts as context, i (i)}<Context {context} {i} />{:else}<p class="meta none">No firings recorded</p>{/each}
+          </div>
+          <div class="measured"><RealText {pole} /></div>
+          <div class="figures">
+            <Group title="How often"><Facts facts={oftenFacts(pole.act, "it fires on")} /></Group>
+            <Group title="How hard"><Facts facts={neuronStrength(pole)} /></Group>
+          </div>
         </section>
 
-        <NeuronColumns {pole} />
+        <section id="weights" class="basket">
+          <h3 class="title">Weights</h3>
+          <NeuronColumns {pole} measured={false} />
+        </section>
 
-        <div class="figures">
-          <Group title="How often"><Facts facts={oftenFacts(pole.act, "it fires on")} /></Group>
-          <Group title="How hard"><Facts facts={neuronStrength(pole)} /></Group>
-        </div>
+        {#if pole.stream}
+          <section id="stream" class="basket">
+            <h3 class="title">Stream</h3>
+            <Stream {pole} reads={pole.stream} />
+          </section>
+        {/if}
       </div>
     </Swap>
   </div>
 </div>
 
 <style>
-  .unit { display: grid; gap: var(--s6); min-width: 0; }
-  .stack { display: grid; gap: var(--s6); min-width: 0; }
+  .unit { display: grid; gap: var(--s4); min-width: 0; }
+  .stack { display: grid; gap: var(--s7); min-width: 0; }
+  .basket { display: grid; gap: var(--s4); min-width: 0; scroll-margin-top: var(--s8); }
+  .title { font: var(--type-lead); font-family: var(--display); font-weight: 600; letter-spacing: -0.01em; }
   .fires { display: grid; gap: var(--s3); min-width: 0; }
+  .measured { display: flex; flex-wrap: wrap; align-items: start; gap: var(--s5) var(--s7); min-width: 0; }
+  .measured :global(.group) { flex: 1 1 200px; }
   .none { font-weight: 400; }
   .figures { display: flex; flex-wrap: wrap; align-items: start; gap: var(--s5) var(--s7); min-width: 0; }
 </style>
