@@ -15,8 +15,8 @@ What the site draws for itself, in Ledger:
   Ledger's DESIGN.md.
 - The header's placement of `ThemeButton`, and the no-script summary's rules (`src/styles/site.css`).
 - The translations Ledger draws (`src/lib/translate.svelte.ts`, installed with `setTranslator`).
-- The connections graph (`src/explorer/graph/`): a band per layer down the page, a bar per neuron side as
-  the atlas draws units, a dot per head, both in the depth colour of their layer. A link is as heavy as its
+- The connections graph (`src/explorer/graph/`): a band per layer down the page, a dot per neuron side
+  and a bar per head, both in the depth colour of their layer. A link is as heavy as its
   flow, in the depth colour of its source, or grey and dashed where it pushes against: the one hue is depth.
 
 The explorer's one credit is "Labels by Claude Haiku 5.5".

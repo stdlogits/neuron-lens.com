@@ -3,14 +3,16 @@
   import Group from "./Group.svelte";
   import Reads from "./Reads.svelte";
   import type { LensRead, Pole } from "../../lib/data";
-  import { sideReads, streamFacts } from "./evidence";
+  import { reading } from "../../lib/reading.svelte";
+  import { oneOfEach, sideReads, streamFacts } from "./evidence";
 
   // What the stream holds where a side fires, averaged over its top firings, under the same two
   // columns as its weights: what reaches it, then what its layer writes, what leaves the layer and
   // what the model says next. Each list reads the residual itself, so none of it reached the labeller.
   let { pole, reads }: { pole: Pole; reads: LensRead[] } = $props();
-  const inputs = $derived(sideReads(reads, "input"));
-  const outputs = $derived(sideReads(reads, "output"));
+  const shown = $derived(oneOfEach(reads, reading.distinctive));
+  const inputs = $derived(sideReads(shown, "input"));
+  const outputs = $derived(sideReads(shown, "output"));
   const facts = $derived(streamFacts(pole));
   const firings = $derived(pole.flow?.[2] ?? 0);
 </script>
@@ -19,11 +21,11 @@
   <span aria-hidden="true"></span>
   <div class="col">
     <h4 class="col-head head">What reaches it</h4>
-    <Group title="Where it fires" tip={`The residual entering its MLP, averaged over ${firings} top firings`}><Reads reads={inputs} all={reads} skipEmpty /></Group>
+    <Group title="Where it fires" tip={`The residual entering its MLP, averaged over ${firings} top firings`}><Reads reads={inputs} skipEmpty /></Group>
   </div>
   <div class="col">
     <h4 class="col-head head">What leaves it</h4>
-    <Group title="Where it fires" tip={`Its layer's output and what follows it, averaged over ${firings} top firings`}><Reads reads={outputs} all={reads} skipEmpty /></Group>
+    <Group title="Where it fires" tip={`Its layer's output and what follows it, averaged over ${firings} top firings`}><Reads reads={outputs} skipEmpty /></Group>
     {#if facts.length}<Group title="Against what it reads"><Facts {facts} /></Group>{/if}
   </div>
 </div>

@@ -7,10 +7,8 @@
   // (the lens and what it measures in a tip), its strength among its peers, its family's test where
   // one applies, and all its tokens. Reads weak at this depth, or whose test fails, are quieter and
   // weak ones come last. A token two lists agree on is tinted.
-  let { reads, all, tests = {}, agree, scope = "the layer", skipEmpty = false }: {
+  let { reads, tests = {}, agree, scope = "the layer", skipEmpty = false }: {
     reads: LensRead[];
-    /** Every read of the unit, to name a twin's family. */
-    all: LensRead[];
     /** Tests by family. */
     tests?: Record<string, Test>;
     /** Stems the unit's lists agree on, beyond the flags the catalog gives. */
@@ -30,14 +28,14 @@
     {@const test = tests[family(read.col)]}
     <div class="read" class:quiet={read.trust === "weak" || test?.off}>
       <div class="rh">
-        <span class="name" data-tip={readTip(read, all) + (read.trust === "weak" ? " Weak at this depth." : "")}>{LENSES[read.col].name}</span>
+        <span class="name" data-tip={readTip(read) + (read.trust === "weak" ? " Weak at this depth." : "")}>{LENSES[read.col].name}</span>
         <Meter value={read.pct / 100} label={`${nth(read.pct)} percentile of ${scope}`} />
-        {#if test && !read.twin}<span class="q" class:off={test.off} data-tip={test.tip}>{test.v}</span>{/if}
+        {#if test}<span class="q" class:off={test.off} data-tip={test.tip}>{test.v}</span>{/if}
       </div>
       {#if read.tokens.length}
         <div class="toks">{#each read.tokens as [token, count, flags], i (i)}<Token {token} {count} flags={lit(token, flags)} {i} />{/each}</div>
       {:else}
-        <p class="meta empty">{read.twin ? "Nothing beyond the read above" : "Only tokens every unit shares"}</p>
+        <p class="meta empty">Only tokens every unit shares</p>
       {/if}
     </div>
   {/each}

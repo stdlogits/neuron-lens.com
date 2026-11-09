@@ -37,8 +37,8 @@
   let head = $state<Row[] | null>(null);
   let failed = $state(false);
 
-  // Each half through each lens: the raw read, or its layer-contrastive twin when that is the one listed.
-  const read = (reads: LensRead[], cols: ReadColumn[]) => headline(reads.find((r) => cols.includes(r.col) && !r.twin)?.tokens ?? [], 6);
+  // Each half through each lens: the first of its reads this depth lists.
+  const read = (reads: LensRead[], cols: ReadColumn[]) => headline(reads.find((r) => cols.includes(r.col))?.tokens ?? [], 6);
   function load() {
     loadNeuron(OWL.model, OWL.layer, OWL.n).then((d) => {
       const reads = d?.poles.find((p) => p.pole === 1)?.reads;

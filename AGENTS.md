@@ -61,6 +61,8 @@ unit's view shows all of its evidence on one page, with nothing behind a "more" 
 baskets under a bar that stays in reach: Firings (its images and sounds, its firings, what it does in real
 text, how often and how hard), Weights (every read the labeller saw, with its test, and what it adds
 beyond what it reads) and Stream (what the residual holds where it fires, which never reached the labeller).
+Each read shows its normal list, or with the Distinctive switch beside English its layer-contrastive (z) list; a
+normal list left with nothing once hub tokens are gone shows its distinctive list instead (most of Stream's early reads).
 Left is always what comes in and right what goes out. Beside them the rail holds its connections: a
 directed graph at true depth, and its strongest links in words. Wired to, driven by and fires with are
 three relations and stay three views (findings §17). A link's sign has no colour of its own, since the one

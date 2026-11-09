@@ -38,7 +38,7 @@ export const streamFacts = (pole: Pole): Fact[] => {
   ];
 };
 
-/** A read's family: the read and its z twin share one, and one test. */
+/** A read's family: the read and its distinctive (z) version share one, and one test. */
 export const family = (col: ReadColumn) => col.replace(/_z$/, "");
 
 /** Stems named by two or more lists: those tokens get flag 1 (two reads agree). */
@@ -125,9 +125,16 @@ export const headCopying = (head: HeadDetail, test: "q" | "p"): Fact[] => [
 ];
 
 /** A read's name in a tip: its lens's short name and meaning. */
-export function readTip(read: LensRead, reads: LensRead[]): string {
-  const info = LENSES[read.col];
-  if (!read.twin) return `${info.short}. ${info.describe}`;
-  const first = reads.find((other) => other !== read && family(other.col) === family(read.col));
-  return `${info.short}. ${info.describe} Only what ${first ? LENSES[first.col].short : "the read above"} doesn't already list.`;
+export const readTip = (read: LensRead) => `${LENSES[read.col].short}. ${LENSES[read.col].describe}`;
+
+/** One read of each family: the normal one, or the distinctive one (scored against the layer) when
+ * asked. A normal read that is nothing but tokens every unit shares gives way to its distinctive one. */
+export function oneOfEach(reads: LensRead[], distinctive: boolean): LensRead[] {
+  const families = new Map<string, LensRead[]>();
+  for (const read of reads) families.set(family(read.col), [...(families.get(family(read.col)) ?? []), read]);
+  return [...families.values()].map((members) => {
+    const normal = members.find((read) => !read.col.endsWith("_z"));
+    const distinct = members.find((read) => read.col.endsWith("_z"));
+    return (distinctive ? distinct ?? normal : normal?.tokens.length ? normal : distinct ?? normal)!;
+  });
 }

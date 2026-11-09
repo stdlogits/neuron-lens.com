@@ -97,10 +97,10 @@ HEAD_READS = ["ov_R", "ov_R_z", "ov_R_neg", "ov_R_neg_z", "ov_S", "ov_S_z", "ov_
               "qk_S", "qk_S_z", "qk_S_neg", "qk_S_neg_z", "qk_self_S", "qk_self_S_z"]
 NEURON_SIDES = ("read_S", "read_R", "write_S", "write_R")
 ORTH_READS = ["write_orth_R", "write_orth_R_z", "write_orth_S", "write_orth_S_z"]
-# What the stream holds at a pole's firings (the `firings` table), z first: the mean residual's raw reads are mostly hub tokens.
+# What the stream holds at a pole's firings (the `firings` table).
 STREAM_READS = ["before_R_z", "before_R", "before_S_z", "before_S", "mlp_R_z", "mlp_R", "mlp_S_z", "mlp_S",
                 "after_R_z", "after_R", "after_S_z", "after_S", "pred_z", "pred"]
-STREAM_TWIN = {"before_R": "read_R", "before_S": "read_S", "mlp_R": "write_R", "mlp_S": "write_S", "after_R": "write_R", "after_S": "write_S",
+WEIGHT_READ_OF = {"before_R": "read_R", "before_S": "read_S", "mlp_R": "write_R", "mlp_S": "write_S", "after_R": "write_R", "after_S": "write_S",
                "write_orth_R": "write_R", "write_orth_S": "write_S"}
 # Head roles, at the catalog's own thresholds (09_legible.py's pattern, checks/head_lens_sides.py), and
 # Gemma 4's in images (checks/head_media.py, findings §16).
@@ -329,29 +329,24 @@ def put_wires(rec, relation, ids, vals):
     rec[relation]["v"] = np.nan_to_num(vals[:, :K]).astype("<f2")
 
 
-def twin_reads(columns, trusted, primary=()):
+def matched_reads(columns, trusted, primary=()):
     """The header of reads with no plan of their own: each as trusted as the weight read through its lens on its side."""
-    out, seen = [], set()
+    out = []
     for c in columns:
         fam = c.removesuffix("_z")
-        twin = STREAM_TWIN.get(fam)
-        trust = "primary" if fam in primary else "trusted" if twin is None or twin in trusted or f"{twin}_z" in trusted else "weak"
-        out.append({"col": c, "trust": trust, "twin": fam in seen})
-        seen.add(fam)
+        weight = WEIGHT_READ_OF.get(fam)
+        trust = "primary" if fam in primary else "trusted" if weight is None or weight in trusted or f"{weight}_z" in trusted else "weak"
+        out.append({"col": c, "trust": trust})
     return out
 
 
 def read_header(order, primary, trusted, by_family=False):
-    """The reads every unit of a file lists, in order: [{col, trust, twin}]. A twin (the raw or z read
-    of a family shown above it) lists only the tokens its family hasn't. Neurons trust single
-    columns; heads trust a family (a read and its z twin) at once."""
-    seen, out = set(), []
+    """The reads every unit of a file lists, in order: [{col, trust}]. Neurons trust single columns;
+    heads trust a family (a read and its z read) at once."""
+    out = []
     for c in order:
-        fam = c.removesuffix("_z")
-        key = fam if by_family else c
-        trust = "primary" if key in primary else "trusted" if key in trusted else "weak"
-        out.append({"col": c, "trust": trust, "twin": fam in seen})
-        seen.add(fam)
+        key = c.removesuffix("_z") if by_family else c
+        out.append({"col": c, "trust": "primary" if key in primary else "trusted" if key in trusted else "weak"})
     return out
 
 
@@ -528,18 +523,17 @@ def neuron_layer(L):
         return s
 
     header = read_header(trusted + [c for c in NEURON_READS if c not in trusted], {ins[0], outs[0]}, set(trusted))
-    orth_header = twin_reads(ORTH_READS, set(trusted))
-    stream_header = twin_reads(STREAM_READS, set(trusted), primary={"pred"}) if firings is not None else []
+    orth_header = matched_reads(ORTH_READS, set(trusted))
+    stream_header = matched_reads(STREAM_READS, set(trusted), primary={"pred"}) if firings is not None else []
     flow = {c: col(firings, c).astype(float) for c in ("parallel", "orthogonal", "n_firings")} if firings is not None else None
     cos_gate, cos_up = col(reads, "cos_write_gate").astype(float), col(reads, "cos_write_up").astype(float)
 
     def lists_of(head, i, every=frozenset(), meas=frozenset()):
-        """Each read of a header for pole i: [percentile, tokens], a twin listing only what its family hasn't."""
-        out, twins = [], {}
+        """Each read of a header for pole i: [percentile, tokens]."""
+        out = []
         for h in head:
-            c, fam = h["col"], h["col"].removesuffix("_z")
-            toks = merged([int(t) for t in ids[c][i] if t >= 0 and not hubs[c][t]], skip=frozenset(twins.get(fam, ())), limit=LIMIT[h["trust"]])
-            twins.setdefault(fam, set()).update(k for _, _, k in toks)
+            c = h["col"]
+            toks = merged([int(t) for t in ids[c][i] if t >= 0 and not hubs[c][t]], limit=LIMIT[h["trust"]])
             out.append([int(pct[c][i]), encoded(toks, every, meas)])
         return out
 
@@ -547,11 +541,10 @@ def neuron_layer(L):
         a = act_rows[i]
         peaks = parse_counts(a["peak_tokens"], 6)
         meas = measured_stems(i, peaks)
-        rd, fam_keys, twins = [], collections.defaultdict(set), {}
+        rd, fam_keys = [], collections.defaultdict(set)
         for h in header:
             c, fam = h["col"], h["col"].removesuffix("_z")
-            toks = merged([int(t) for t in ids[c][i] if not hubs[c][t]], skip=frozenset(twins.get(fam, ())), limit=LIMIT[h["trust"]])
-            twins.setdefault(fam, set()).update(k for _, _, k in toks)
+            toks = merged([int(t) for t in ids[c][i] if not hubs[c][t]], limit=LIMIT[h["trust"]])
             if h["trust"] != "weak":
                 fam_keys[fam] |= {k for _, _, k in toks[:24] if k and not k.startswith("\u0001")}
             rd.append((int(pct[c][i]), toks))
@@ -706,11 +699,10 @@ def heads():
         L, h = int(layer[i]), int(head[i])
         A, G, R, B, M = a[i], g[i], r[i], lab[i], med[i]
         header = head_header(L)
-        rd, twins = [], {}
+        rd = []
         for hd in header:
-            c, fam = hd["col"], hd["col"].removesuffix("_z")
-            toks = merged([int(x) for x in ids[c][i] if not hubs[c][x]], skip=frozenset(twins.get(fam, ())), limit=LIMIT[hd["trust"]])
-            twins.setdefault(fam, set()).update(k for _, _, k in toks)
+            c = hd["col"]
+            toks = merged([int(x) for x in ids[c][i] if not hubs[c][x]], limit=LIMIT[hd["trust"]])
             rd.append([int(pct[c][i]), encoded(toks)])
         hm = head_media(M)
         img = (hm or {}).get("image") or {}

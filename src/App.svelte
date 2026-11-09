@@ -9,6 +9,7 @@
   import { href, router, startRouter } from "./lib/router.svelte";
   import { ORIGIN } from "./lib/site";
   import { theme } from "./lib/theme";
+  import { restoreDistinctive } from "./lib/reading.svelte";
   import { restoreTranslate } from "./lib/translate.svelte";
   import { tips } from "@stdlogits/ledger";
 
@@ -17,6 +18,7 @@
     const stopRouter = startRouter();
     const stopTheme = theme.start();
     restoreTranslate();
+    restoreDistinctive();
     ready = true;
     return () => { stopRouter(); stopTheme(); };
   });

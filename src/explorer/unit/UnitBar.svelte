@@ -3,6 +3,7 @@
   import { IconButton, MorphText, Switch, fadeIn } from "@stdlogits/ledger";
   import { useLens } from "../lens.svelte";
   import { describeRole, formatCount, rolesOf } from "../../lib/data";
+  import { reading, setDistinctive } from "../../lib/reading.svelte";
   import { setTranslate, translation } from "../../lib/translate.svelte";
   import { neuronTags } from "./evidence";
 
@@ -46,6 +47,7 @@
     </p>
   </div>
   <div class="tools">
+    <Switch checked={reading.distinctive} onchange={setDistinctive} label="Distinctive" hint="Score each read against the layer's other units, so what they all share drops out" />
     <Switch checked={translation.on} onchange={setTranslate} label="English" hint="Show text in other languages in English" />
     <span class="gap" aria-hidden="true"></span>
     {#if where}<span class="meta where"><span aria-hidden="true"><MorphText text={where} /></span><span class="sr-only">{lens.position + 1} of {lens.order.length}</span></span>{/if}

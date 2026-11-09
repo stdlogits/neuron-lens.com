@@ -14,7 +14,7 @@
   const load = () => loadNeuron(OWL.model, OWL.layer, OWL.n).then((d) => { pole = d?.poles.find((p) => p.pole === -1) ?? null; failed = !pole; }, () => (failed = true));
 
   const context = $derived(pole?.contexts.find((c) => c[1]) ?? null);
-  const tokens = $derived(pole ? headline(pole.reads.find((r) => r.col === "write_R" && !r.twin)?.tokens ?? [], 8) : []);
+  const tokens = $derived(pole ? headline(pole.reads.find((r) => r.col === "write_R")?.tokens ?? [], 8) : []);
 </script>
 
 <Part id="languages" title="Other languages" onnear={load} tint={depthColor(MODELS[OWL.model], OWL.layer)}>

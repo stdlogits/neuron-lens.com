@@ -29,8 +29,6 @@ export type LensToken = [string, number, number];
 export interface ReadInfo {
   col: ReadColumn;
   trust: Trust;
-  /** True when this is the raw or z twin of a read listed above it: only its extra tokens are listed. */
-  twin: boolean;
 }
 export interface LensRead extends ReadInfo {
   /** Mean top-8 score as a percentile of the layer's poles (of all heads, for heads). */

@@ -16,8 +16,10 @@ export function layout(graph: Graph, width: number, height: number, layers: numb
   const centre = left + span / 2;
   const top = graph.nodes.reduce((max, n) => (n.side === "focus" ? max : Math.max(max, n.flow)), 1e-9);
 
+  // A layer's heads sit in a row just above its neurons, so each row is seated on its own.
+  const rowOf = (n: GraphNode) => n.layer * 2 + (n.kind === "head" && n.side !== "focus" ? 0 : 1);
   const byLayer = new Map<number, GraphNode[]>();
-  for (const n of graph.nodes) byLayer.set(n.layer, [...(byLayer.get(n.layer) ?? []), n]);
+  for (const n of graph.nodes) byLayer.set(rowOf(n), [...(byLayer.get(rowOf(n)) ?? []), n]);
 
   const x = new Map<string, number>();
   const neighbours = new Map<string, string[]>();
@@ -62,8 +64,9 @@ export function layout(graph: Graph, width: number, height: number, layers: numb
   const placed = new Map<string, Placed>();
   for (const n of graph.nodes) {
     const weight = n.side === "focus" ? 1 : Math.sqrt(n.flow / top);
-    const w = n.side === "focus" ? 40 : n.kind === "head" ? 6 + 6 * weight : 6 + 26 * weight;
-    const h = n.side === "focus" ? 12 : n.kind === "head" ? w : 6;
+    // Neurons are dots, because there are so many of them; heads are oblong. The unit itself is the largest of its kind.
+    const w = n.kind === "head" ? (n.side === "focus" ? 40 : 10 + 22 * weight) : n.side === "focus" ? 18 : 5 + 8 * weight;
+    const h = n.kind === "head" ? (n.side === "focus" ? 12 : 6) : w;
     // A head writes into its own layer's stream, so it sits just above that layer's neurons.
     const y = (n.layer + (n.kind === "head" && n.side !== "focus" ? 0.2 : 0.62)) * band;
     placed.set(n.key, { ...n, x: Math.min(left + span - w / 2, Math.max(left + w / 2, x.get(n.key)!)), y, w, h });

@@ -4,7 +4,8 @@
   import Reads from "./Reads.svelte";
   import { percent, type HeadDetail } from "../../lib/data";
   import type { ModelInfo } from "../../lib/models";
-  import { WEIGHTS, agreement, family, headTests, sideReads } from "./evidence";
+  import { reading } from "../../lib/reading.svelte";
+  import { WEIGHTS, agreement, family, headTests, oneOfEach, sideReads } from "./evidence";
 
   // A head's evidence under its three columns, each opening with what it does in real text: the
   // query tokens that drive it and its peaks; the key tokens it attends to, what it looked at and
@@ -22,8 +23,9 @@
   const lit = (token: string) => (agree.has(stem(token)) ? 1 : 0);
   const measured = (list: [string, number][]) => list.map(([token, value]) => ({ token, value, flags: lit(token) }));
   const counted = (list: [string, number][]) => list.map(([token, times]) => ({ token, times, flags: lit(token) }));
-  const inputs = $derived(sideReads(head.reads, "input"));
-  const outputs = $derived(sideReads(head.reads, "output"));
+  const shown = $derived(oneOfEach(head.reads, reading.distinctive));
+  const inputs = $derived(sideReads(shown, "input"));
+  const outputs = $derived(sideReads(shown, "output"));
   const tests = $derived(headTests(head, model.headTest));
 </script>
 
@@ -44,7 +46,7 @@
       <Group title="Looked at" tip="The tokens it attended to at its top firings, and how many of them" items={counted(head.sources)}
         share={{ value: head.modes[1], label: `${percent(head.modes[1])} of its top firings look at one token` }} />
     {/if}
-    {#if inputs.length}<Group title="From its weights" tip={WEIGHTS}><Reads reads={inputs} all={head.reads} {tests} {agree} scope="all heads" /></Group>{/if}
+    {#if inputs.length}<Group title="From its weights" tip={WEIGHTS}><Reads reads={inputs} {tests} {agree} scope="all heads" /></Group>{/if}
   </div>
   <div class="col">
     <h3 class="col-head head">Writes</h3>
@@ -52,7 +54,7 @@
       <Group title="In real text" tip="What its output at its top firings pushes the model to say, against the layer's other heads (R-lens, z)"
         items={head.outRz.map(([token, count]) => ({ token, count, flags: lit(token) }))} />
     {/if}
-    {#if outputs.length}<Group title="From its weights" tip={WEIGHTS}><Reads reads={outputs} all={head.reads} {tests} {agree} scope="all heads" /></Group>{/if}
+    {#if outputs.length}<Group title="From its weights" tip={WEIGHTS}><Reads reads={outputs} {tests} {agree} scope="all heads" /></Group>{/if}
   </div>
 </div>
 

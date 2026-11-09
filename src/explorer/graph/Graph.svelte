@@ -5,8 +5,8 @@
   import type { Graph, GraphEdge } from "./trace";
 
   // The unit's directed graph, drawn at true depth: a band per layer down the page, so what feeds it
-  // sits above it and what it feeds below. A bar is a neuron's side and a dot a head, in the depth
-  // colour of its layer and as wide as the flow through it; a link is as heavy as its flow, grey and
+  // sits above it and what it feeds below. A dot is a neuron's side and a bar a head, in the depth
+  // colour of its layer and as large as the flow through it; a link is as heavy as its flow, grey and
   // dashed where it pushes against. Pointing at a unit lights what connects it to the centre.
   let { graph, model, href, hovered = $bindable(null) }: {
     graph: Graph;
@@ -73,7 +73,6 @@
     {#each placed.nodes as node (node.key)}
       <a
         class="node"
-        class:head={node.kind === "head"}
         class:focus={node.side === "focus"}
         class:dim={lit && !lit.nodes.has(node.key)}
         href={href(node.kind, node.layer, node.index)}
