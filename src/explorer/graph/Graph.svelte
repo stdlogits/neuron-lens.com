@@ -4,7 +4,7 @@
   import { headId, neuronId, percent } from "../../lib/data";
   import { layout, rows } from "./layout";
   import { Stage, type Seated, type Shown } from "./stage";
-  import type { Graph, GraphEdge, Mode } from "./trace";
+  import { headInput, type Graph, type GraphEdge, type Mode } from "./trace";
 
   // The unit's directed graph, drawn at true depth: a band per layer down the page, so what feeds it
   // sits above it and what it feeds below. A dot is a neuron's side and a bar a head, in the depth
@@ -78,9 +78,14 @@
   function standing(n: Seated): string | undefined {
     if (n.side === "focus") return undefined;
     if (mode === "with") return `Active at ${Math.round(n.flow * 5)} of its first 5 top firings`;
-    if (mode === "context") {
+    if (mode !== "weights") {
       const share = percent(Math.min(1, n.flow), n.flow < 0.1 ? 1 : 0);
-      return n.side === "up" ? `${share} of its activation traces back here` : `${share} of this unit's activation traces back to it`;
+      if (n.side === "up") {
+        const head = graph.nodes.some((other) => other.side === "focus" && other.kind === "head");
+        return `${share} of ${head ? headInput("it", mode === "query" ? 1 : mode === "key" ? 2 : 0) : "its activation"} traces back here`;
+      }
+      const what = n.kind === "neuron" ? "this neuron's activation" : n.onward > 0 ? "what this head writes" : "where this head looks";
+      return `${share} of ${what} traces back to it`;
     }
     const way = n.hop === 1 ? "Directly" : `${n.hop} links`;
     return `${way} ${n.side === "up" ? "upstream" : "downstream"} in the weights`;

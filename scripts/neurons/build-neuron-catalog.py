@@ -9,8 +9,8 @@ The catalog dir is neuron-lens's ``data/catalog/<model>`` (``~/Work/neuron-lens/
 whose name picks the model's profile below; the files go to ``<out dir>/<model>/``, which the site
 serves as ``/data/<model>/``. It holds ``neurons/<table>/L<layer>.parquet`` (a row per pole,
 the + poles first) and ``heads/<table>.parquet`` (a row per head) for its tables, ``acts``,
-``drivers``, ``reads``, ``legible``, ``labels``, ``firings``, ``edges`` and ``sources``; Gemma 4 adds ``neurons/{image,audio}/``,
-``neurons/{image,audio}_optimised.parquet``, ``heads/media.parquet`` and ``media/*_docs.parquet``.
+``drivers``, ``reads``, ``legible``, ``labels``, ``sources`` and, for neurons, ``firings`` and ``edges``; Gemma 4 adds
+``neurons/{image,audio}/``, ``neurons/{image,audio}_optimised.parquet``, ``heads/{image,audio}.parquet`` and ``media/*_docs.parquet``.
 Every neuron and head is written, with everything the page would otherwise compute baked in: decoded
 tokens, the hub filter, merged variants, strength percentiles, which reads to trust at each depth
 (the labeller's plan, so the page shows the evidence Haiku saw), the tokens two lenses (or a lens and
@@ -29,7 +29,8 @@ Output, JSON unless named otherwise:
   from where its ``graph.bin`` records say;
 - ``scores.json``: every neuron's readability as a byte, base64 per layer (the All view's texture);
 - ``heads/index.json``: every head's labels, roles and pattern; ``heads/L<layer>.json``: details;
-  ``heads/graph.bin``: a ``WIRE`` record per head, layer-major (its title and what it drives);
+  ``heads/graph.bin``: a ``HEAD_WIRE`` record per head, layer-major (its title, what drives it through its value, query
+  and key, what fires with it and what it drives);
 - ``search.json``: word -> curated neuron poles and heads; ``terms.json``: token -> English;
   ``vocab.json``: every token decoded, which the details name by id;
 - Gemma 4: ``media/<modality>/d<block>.json``: each image's or sound's source, labels, caption (and
@@ -98,10 +99,9 @@ HEAD_READS = ["ov_R", "ov_R_z", "ov_R_neg", "ov_R_neg_z", "ov_S", "ov_S_z", "ov_
 NEURON_SIDES = ("read_S", "read_R", "write_S", "write_R")
 ORTH_READS = ["write_orth_R", "write_orth_R_z", "write_orth_S", "write_orth_S_z"]
 # What the stream holds at a pole's firings (the `firings` table).
-STREAM_READS = ["before_R_z", "before_R", "before_S_z", "before_S", "mlp_R_z", "mlp_R", "mlp_S_z", "mlp_S",
-                "after_R_z", "after_R", "after_S_z", "after_S", "pred_z", "pred"]
-WEIGHT_READ_OF = {"before_R": "read_R", "before_S": "read_S", "mlp_R": "write_R", "mlp_S": "write_S", "after_R": "write_R", "after_S": "write_S",
-               "write_orth_R": "write_R", "write_orth_S": "write_S"}
+STREAM_READS = ["before_R_z", "before_R", "before_S_z", "before_S", "mlp_R_z", "mlp_R", "mlp_S_z", "mlp_S", "pred_z", "pred"]
+WEIGHT_READ_OF = {"before_R": "read_R", "before_S": "read_S", "mlp_R": "write_R", "mlp_S": "write_S",
+                  "write_orth_R": "write_R", "write_orth_S": "write_S"}
 # Head roles, at the catalog's own thresholds (09_legible.py's pattern, checks/head_lens_sides.py), and
 # Gemma 4's in images (checks/head_media.py, findings §16).
 (ROLE_INDUCTION, ROLE_DUPLICATE, ROLE_PREVIOUS, ROLE_SELF, ROLE_SINK, ROLE_NEXT, ROLE_COPY, ROLE_DARK,
@@ -112,13 +112,20 @@ WEIGHT_READ_OF = {"before_R": "read_R", "before_S": "read_S", "mlp_R": "write_R"
 # A pole's or head's record in graph.bin: its title's confidence and flags (1: the title is its writes label, 2: silent);
 # which units pack holds its detail, where and how long; the share of its activation from neurons, heads and the
 # embedding; its title; then K (id, value) pairs per relation, unused ones with id NONE. An id is a pole's
-# layer × 2·neurons + neuron (+ neurons for a − pole), or under `heads` and in a head's own record a head's layer × heads + head.
-# Values: `in`, `out` push; `driven`, `heads`, `drives` share; `with` the share of the firings where both fire.
+# layer × 2·neurons + neuron (+ neurons for a − pole), or under `heads` a head's layer × heads + head. Under `drives_heads` it
+# is a head's id with the input it reaches that head through in its top bits (CHANNEL_SHIFT; 0 value, 1 query, 2 key).
+# Values: `in`, `out` push; `driven`, `heads`, `drives`, `drives_heads` share; `with` the share of the firings where both fire.
+# A head has three inputs where a pole has one read direction, and no weight edges: its `driven`, `heads` and `mix` are its
+# value's, and its query's and key's follow them, with its query's and key's mixes at the record's end.
 ENTRY = np.dtype([("id", "<u4"), ("v", "<f2")])
-WIRE = np.dtype([("conf", "u1"), ("flags", "u1"), ("pack", "u1"), ("pad", "u1"), ("off", "<u4"), ("len", "<u4"), ("mix", "<f2", (3,)), ("title", "S110"),
-                 *[(r, ENTRY, (K,)) for r in ("in", "out", "driven", "drives", "heads", "with")]])
-assert WIRE.itemsize == 704
+RELATIONS = ("in", "out", "driven", "drives", "heads", "with", "drives_heads")
+HEAD_RELATIONS = ("driven", "heads", "q_driven", "q_heads", "k_driven", "k_heads", "drives", "drives_heads", "with")
+HEADER = [("conf", "u1"), ("flags", "u1"), ("pack", "u1"), ("pad", "u1"), ("off", "<u4"), ("len", "<u4"), ("mix", "<f2", (3,)), ("title", "S110")]
+WIRE = np.dtype([*HEADER, *[(r, ENTRY, (K,)) for r in RELATIONS]])
+HEAD_WIRE = np.dtype([*HEADER, *[(r, ENTRY, (K,)) for r in HEAD_RELATIONS], ("mix_q", "<f2", (3,)), ("mix_k", "<f2", (3,))])
+assert WIRE.itemsize == 800 and HEAD_WIRE.itemsize == 1004
 NONE = 0xFFFFFFFF
+CHANNEL_SHIFT = 28
 STOP = set("""a an the and or of to in on for with by as at from into its it this that these those is are be
 words word tokens token terms term pieces piece fragments fragment related like such mixed e.g eg i.e
 weak clear unclear no not theme themes output input mostly mainly slight slightly some other various
@@ -317,9 +324,9 @@ def head_ids(layer, head):
     return np.where(layer >= 0, layer.astype(np.int64) * HEADS + head.astype(np.int64), NONE).astype("<u4")
 
 
-def blank_wires(n):
-    rec = np.zeros(n, WIRE)
-    for r in ("in", "out", "driven", "drives", "heads", "with"):
+def blank_wires(n, dtype, relations):
+    rec = np.zeros(n, dtype)
+    for r in relations:
         rec[r]["id"] = NONE
     return rec
 
@@ -596,7 +603,7 @@ def neuron_layer(L):
 
     d_out = f"{out}/neurons/L{L:02d}"
     os.makedirs(d_out, exist_ok=True)
-    wires = blank_wires(2 * MLP)
+    wires = blank_wires(2 * MLP, WIRE, RELATIONS)
     if edges is not None:
         for r in ("in", "out"):
             layer, neuron, sign = (mat(edges, f"{r}_{x}", np.int32) for x in ("layer", "neuron", "pole"))
@@ -607,8 +614,10 @@ def neuron_layer(L):
             put_wires(wires, r, pole_ids(layer, neuron, sign), mat(sources, f"{name}_{value}"))
         put_wires(wires, "heads", head_ids(mat(sources, "driven_head_layer", np.int32), mat(sources, "driven_head", np.int32)), mat(sources, "driven_head_share"))
         wires["mix"] = np.nan_to_num(np.stack([col(sources, k).astype(float) for k in ("neurons_share", "heads_share", "emb_share")], 1)).astype("<f2")
-    if DRIVES_ID is not None:
-        wires["drives"]["id"], wires["drives"]["v"] = DRIVES_ID[L * 2 * MLP:(L + 1) * 2 * MLP], DRIVES_V[L * 2 * MLP:(L + 1) * 2 * MLP].astype("<f2")
+    for relation, target in (("drives", "pole"), ("drives_heads", "head")):
+        if ("pole", target) in DRIVES:
+            found, values = DRIVES["pole", target]
+            wires[relation]["id"], wires[relation]["v"] = found[L * 2 * MLP:(L + 1) * 2 * MLP], values[L * 2 * MLP:(L + 1) * 2 * MLP].astype("<f2")
 
     pack, written, stream = 0, 0, open(f"{d_out}/units-{0:02d}.bin", "wb")
     rows = []
@@ -665,9 +674,10 @@ def neuron_layer(L):
 def heads():
     names = ["acts", "drivers", "reads", "legible"] + (["labels"] if LABELLED else [])
     t = {name: pq.read_table(f"{catalog}/heads/{name}.parquet") for name in names}
-    media_t = table_or_none(f"{catalog}/heads/media.parquet")
+    media_t = {m: x for m in P["media"] if (x := table_or_none(f"{catalog}/heads/{m}.parquet")) is not None}
+    sources = table_or_none(f"{catalog}/heads/sources.parquet")
     layer, head = col(t["reads"], "layer").astype(int), col(t["reads"], "head").astype(int)
-    for x in [*t.values(), *([media_t] if media_t is not None else [])]:
+    for x in [*t.values(), *media_t.values(), *([sources] if sources is not None else [])]:
         assert (col(x, "layer") == layer).all() and (col(x, "head") == head).all(), "head tables out of order"
     n = len(layer)
     ids = {c: mat(t["reads"], f"{c}_ids", np.int32) for c in HEAD_READS}
@@ -676,7 +686,7 @@ def heads():
     hubs = {c: (np.zeros(VOCAB, bool) if c.endswith("_z") else hubs_of(ids[c])) for c in HEAD_READS}
     a, d, r, g = (t[k].to_pylist() for k in ("acts", "drivers", "reads", "legible"))
     lab = t["labels"].to_pylist() if LABELLED else [None] * n
-    med = media_t.to_pylist() if media_t is not None else [None] * n
+    med = {m: x.to_pylist() for m, x in media_t.items()}
     out_rz = mat(t["acts"], "out_R_z_ids", np.int32)
     drv = {k: (mat(t["drivers"], f"{k}_ids", np.int32), mat(t["drivers"], f"{k}_val")) for k in ("drivers", "keys")}
     test = P["head_test"]
@@ -685,26 +695,24 @@ def heads():
         v = row[k]
         return 1.0 if v is None or v != v else float(v)
 
-    def head_media(M):
+    def head_media(i):
         """In image and audio contexts (checks/head_media.py): reading the media against an even spread,
         attention within it and to grid neighbours, the content-carrier z, and the label-writer score."""
-        if M is None:
-            return None
-        return {m: {"read": num(M[f"{m}_read_ratio"]), "within": num(M[f"{m}_within"]), "nbr": num(M[f"{m}_nbr"]),
-                    "content": num(M[f"{m}_content_z"]), "write": num(M[f"{m}_write_mid"]), "writeQ": num(M[f"{m}_write_mid_q"])}
-                for m in P["media"]}
+        return {m: {"read": num(rows[i]["read_ratio"]), "within": num(rows[i]["within"]), "nbr": num(rows[i]["nbr"]),
+                    "content": num(rows[i]["content_z"]), "write": num(rows[i]["write_mid"]), "writeQ": num(rows[i]["write_mid_q"])}
+                for m, rows in med.items()} or None
 
     rows, details, search = [], collections.defaultdict(list), []
     for i in range(n):
         L, h = int(layer[i]), int(head[i])
-        A, G, R, B, M = a[i], g[i], r[i], lab[i], med[i]
+        A, G, R, B = a[i], g[i], r[i], lab[i]
         header = head_header(L)
         rd = []
         for hd in header:
             c = hd["col"]
             toks = merged([int(x) for x in ids[c][i] if not hubs[c][x]], limit=LIMIT[hd["trust"]])
             rd.append([int(pct[c][i]), encoded(toks)])
-        hm = head_media(M)
+        hm = head_media(i)
         img = (hm or {}).get("image") or {}
         roles = ((ROLE_INDUCTION if A["induction"] > 0.3 else 0) | (ROLE_DUPLICATE if A["duplicate"] > 0.3 else 0)
                  | (ROLE_PREVIOUS if A["prev"] > 0.5 else 0) | (ROLE_SELF if A["self"] > 0.5 else 0)
@@ -742,13 +750,20 @@ def heads():
                      *[int(round(c * 100)) for c in conf], roles, round(score, 1), pattern])
         search.append(search_weights(header, rd, peaks, [B["fires"], B["attends"], B["writes"]]))
     os.makedirs(f"{out}/heads", exist_ok=True)
-    wires = blank_wires(n)
+    wires = blank_wires(n, HEAD_WIRE, HEAD_RELATIONS)
     for i in range(n):
         B = lab[i] or {}
         wires[i]["title"] = utf8_fit(shorten(B.get("writes"), 110), 110)
         wires[i]["conf"] = int(round(float(B.get("writes_conf") or 0) * 100))
-    if HEAD_DRIVES_ID is not None:
-        wires["drives"]["id"], wires["drives"]["v"] = HEAD_DRIVES_ID, HEAD_DRIVES_V.astype("<f2")
+    if sources is not None:
+        for c, into, mix in (("v", "", "mix"), ("q", "q_", "mix_q"), ("k", "k_", "mix_k")):
+            put_wires(wires, f"{into}driven", pole_ids(*(mat(sources, f"{c}_driven_{x}", np.int32) for x in ("layer", "neuron", "pole"))), mat(sources, f"{c}_driven_share"))
+            put_wires(wires, f"{into}heads", head_ids(mat(sources, f"{c}_driven_head_layer", np.int32), mat(sources, f"{c}_driven_head", np.int32)), mat(sources, f"{c}_driven_head_share"))
+            wires[mix] = np.nan_to_num(np.stack([col(sources, f"{c}_{k}").astype(float) for k in ("neurons_share", "heads_share", "emb_share")], 1)).astype("<f2")
+        put_wires(wires, "with", pole_ids(*(mat(sources, f"with_{x}", np.int32) for x in ("layer", "neuron", "pole"))), mat(sources, "with_co"))
+    for relation, target in (("drives", "pole"), ("drives_heads", "head")):
+        if ("head", target) in DRIVES:
+            wires[relation]["id"], wires[relation]["v"] = DRIVES["head", target][0], DRIVES["head", target][1].astype("<f2")
     wires.tofile(f"{out}/heads/graph.bin")
     for L, hs in details.items():
         json.dump({"layer": L, "reads": head_header(L), "heads": hs}, open(f"{out}/heads/L{L:02d}.json", "w"), ensure_ascii=False, separators=(",", ":"))
@@ -792,7 +807,8 @@ def media_docs():
         print(f"media docs, {m}: {len(rows)}, shown {len(hosted)}", flush=True)
 
 
-DRIVES_ID = DRIVES_V = HEAD_DRIVES_ID = HEAD_DRIVES_V = None
+# What each unit drives, inverted from every `sources` table: (kind of source, kind of target) -> (ids, shares), each [units, K].
+DRIVES = {}
 
 
 def inverted(sources, count):
@@ -810,24 +826,32 @@ def inverted(sources, count):
 
 
 def invert_sources():
-    """What each pole and head drives: the poles that name it among their sources, read off every `sources` table (`driven_*`)."""
-    global DRIVES_ID, DRIVES_V, HEAD_DRIVES_ID, HEAD_DRIVES_V
-    poles, heads_ = [], []
+    """What each pole and head drives: the poles and heads that name it among their sources, read off every `sources` table (`driven_*`)."""
+    found = collections.defaultdict(list)
+
+    def add(kinds, source, target, share):
+        # A share past 1 is a target firing near zero with its sources cancelling: it says nothing about who drives it.
+        used = (source != NONE) & (np.abs(np.nan_to_num(share)) <= 1)
+        found[kinds].append((source[used].astype(np.int64), np.broadcast_to(target[:, None], source.shape)[used], np.nan_to_num(share[used])))
+
     for L in range(1, LAYERS):
         t = table_or_none(f"{catalog}/neurons/sources/L{L:02d}.parquet", ["driven_layer", "driven_neuron", "driven_pole", "driven_share", "driven_head_layer", "driven_head", "driven_head_share"])
         if t is None:
             continue
         target = L * 2 * MLP + np.arange(2 * MLP, dtype=np.uint32)
-        for out_list, source, share in ((poles, pole_ids(mat(t, "driven_layer", np.int32), mat(t, "driven_neuron", np.int32), mat(t, "driven_pole", np.int32)), mat(t, "driven_share")),
-                                        (heads_, head_ids(mat(t, "driven_head_layer", np.int32), mat(t, "driven_head", np.int32)), mat(t, "driven_head_share"))):
-            # A share past 1 is a pole firing near zero with its sources cancelling: it says nothing about who drives it.
-            used = (source != NONE) & (np.abs(np.nan_to_num(share)) <= 1)
-            out_list.append((source[used].astype(np.int64), np.repeat(target, source.shape[1])[used.ravel()], np.nan_to_num(share[used])))
-    if not poles:
-        return
-    DRIVES_ID, DRIVES_V = inverted(poles, LAYERS * 2 * MLP)
-    HEAD_DRIVES_ID, HEAD_DRIVES_V = inverted(heads_, LAYERS * HEADS)
-    print(f"sources inverted: {(DRIVES_ID[:, 0] != NONE).mean():.2f} of poles drive something", flush=True)
+        add(("pole", "pole"), pole_ids(*(mat(t, f"driven_{x}", np.int32) for x in ("layer", "neuron", "pole"))), target, mat(t, "driven_share"))
+        add(("head", "pole"), head_ids(mat(t, "driven_head_layer", np.int32), mat(t, "driven_head", np.int32)), target, mat(t, "driven_head_share"))
+    t = table_or_none(f"{catalog}/heads/sources.parquet")
+    if t is not None:
+        assert (col(t, "layer").astype(int) * HEADS + col(t, "head").astype(int) == np.arange(LAYERS * HEADS)).all(), "head sources out of order"
+        for channel, c in enumerate("vqk"):
+            target = np.arange(LAYERS * HEADS, dtype=np.uint32) | channel << CHANNEL_SHIFT
+            add(("pole", "head"), pole_ids(*(mat(t, f"{c}_driven_{x}", np.int32) for x in ("layer", "neuron", "pole"))), target, mat(t, f"{c}_driven_share"))
+            add(("head", "head"), head_ids(mat(t, f"{c}_driven_head_layer", np.int32), mat(t, f"{c}_driven_head", np.int32)), target, mat(t, f"{c}_driven_head_share"))
+    for (source, target), lists in found.items():
+        DRIVES[source, target] = inverted(lists, LAYERS * (2 * MLP if source == "pole" else HEADS))
+    if ("pole", "pole") in DRIVES:
+        print(f"sources inverted: {(DRIVES['pole', 'pole'][0][:, 0] != NONE).mean():.2f} of poles drive a pole, {(DRIVES.get(('pole', 'head'), (np.full((1, K), NONE),))[0][:, 0] != NONE).mean():.3f} a head", flush=True)
 
 
 def main():
@@ -866,7 +890,7 @@ def main():
     json.dump({"forms": forms, "display": {k: display[k] for k in forms}}, open(f"{out}/search.json", "w"), ensure_ascii=False, separators=(",", ":"))
     json.dump(TERMS, open(f"{out}/terms.json", "w"), ensure_ascii=False, separators=(",", ":"))
     json.dump(TOKS, open(f"{out}/vocab.json", "w"), ensure_ascii=False, separators=(",", ":"))
-    json.dump({"model": P["name"], "id": MODEL, "layers": LAYERS, "neuronsPerLayer": MLP, "headsPerLayer": HEADS, "wire": WIRE.itemsize, "connections": K,
+    json.dump({"model": P["name"], "id": MODEL, "layers": LAYERS, "neuronsPerLayer": MLP, "headsPerLayer": HEADS, "wire": WIRE.itemsize, "headWire": HEAD_WIRE.itemsize, "connections": K,
                "docBlock": DOC_BLOCK, "labelled": LABELLED, "media": P["media"],
                "layerMeta": metas, "neurons": [c["row"] for c in curated],
                "columns": ["layer", "neuron", "titlePlus", "titleMinus", "score", "flags", "confPlus", "confMinus"]},

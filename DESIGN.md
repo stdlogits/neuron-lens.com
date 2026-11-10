@@ -18,6 +18,9 @@ What the site draws for itself, in Ledger:
 - The connections graph (`src/explorer/graph/`): a band per layer down the page, a dot per neuron side
   and a bar per head, both in the depth colour of their layer. A link is as heavy as its
   flow, in the depth colour of its source, or grey and dashed where it pushes against: the one hue is depth.
+  A head is a node like a neuron, with links both ways. On a head's own page, what feeds it is what feeds the input chosen
+  (Value, Query or Key). A path through any other head goes by its value, and a path into a head's query or key stops there,
+  because what those set is where the head looks.
 - The graph's motion (`src/explorer/graph/stage.ts`), on Ledger's curve and durations, all on one clock so a link
   never parts from its nodes. Arriving: the unit swells in; its neighbours bud from it ring by ring (at most
   340 ms in all, strongest first, each link growing with its node); the links that make it a graph draw in behind them; the

@@ -2,10 +2,10 @@
   import { onDestroy, onMount } from "svelte";
   import { LabelText, Meter, MorphText, Segmented, Swap, Tabs, expand, fadeIn } from "@stdlogits/ledger";
   import Graph from "./Graph.svelte";
-  import { focusOf, nodeKey, trace, type Graph as GraphData, type Mode, type Reach } from "./trace";
+  import { focusOf, headInput, nodeKey, trace, type Graph as GraphData, type Mode, type Reach } from "./trace";
   import { useLens } from "../lens.svelte";
   import { depthColor } from "../../lib/models";
-  import { headId, headOf, neuronId, percent, poleOf, type Link, type Wire } from "../../lib/data";
+  import { headId, headOf, neuronId, percent, poleOf, type Link, type Through, type Wire } from "../../lib/data";
 
   // The chosen unit among the others: its directed graph at true depth, then the strongest links on
   // each side in words. A choice between what feeds it in real text, what its weights wire it to,
@@ -35,12 +35,19 @@
     query.addEventListener("change", look);
     return () => query.removeEventListener("change", look);
   });
-  const modes = $derived<{ value: Mode; label: string; hint: string }[]>(isHead ? [{ value: "context", label: "In context", hint: "" }] : [
+  const FIRES_WITH = { value: "with" as const, label: "Fires with", hint: "The earlier neurons active at its top firings, most out of proportion to how often they fire at all" };
+  const modes = $derived<{ value: Mode; label: string; hint: string }[]>(isHead ? [
+    { value: "context", label: "Value", hint: "What it copies. Measured at its top firings: which earlier units what it writes comes from, and which later units it helps fire" },
+    { value: "query", label: "Query", hint: "Why it looks where it looks, from the token it reads for. Which earlier units set its query, and which later units it helps fire" },
+    { value: "key", label: "Key", hint: "Why it looks where it looks, from the tokens it can look at. Which earlier units set their keys, and which later units it helps fire" },
+    FIRES_WITH,
+  ] : [
     { value: "context", label: tight ? "Context" : "In context", hint: "Measured at its top firings: which earlier units its activation comes from, and which later units it helps fire" },
     { value: "weights", label: tight ? "Weights" : "In the weights", hint: "Read from the weights alone, with no text: how far one firing moves each later neuron, directly" },
-    { value: "with", label: "Fires with", hint: "The earlier neurons active at its top firings, most out of proportion to how often they fire at all" },
+    FIRES_WITH,
   ]);
-  const shownMode = $derived<Mode>(isHead ? "context" : mode);
+  // A view one kind of unit doesn't have stays chosen for when the page is on the other kind again.
+  const shownMode = $derived<Mode>(modes.some((option) => option.value === mode) ? mode : "context");
   const reaches: { value: Reach; label: string; hint: string }[] = [
     { value: "near", label: "Near", hint: "Only the units most of its flow passes through" },
     { value: "far", label: "Far", hint: "Followed until the flow falls to a third of a percent" },
@@ -62,17 +69,17 @@
   const nodeOf = $derived(new Map((graph?.nodes ?? []).map((node) => [node.key, node])));
   const focusWire = $derived(graph?.nodes.find((node) => node.side === "focus")?.wire ?? null);
 
-  interface Row { key: string; name: string; layer: number; href: string; value: number; title: string; low: boolean; mirrored: boolean }
+  interface Row { key: string; kind: "neuron" | "head"; name: string; layer: number; href: string; value: number; title: string; low: boolean; mirrored: boolean; through: Through[] }
 
   function row(kind: "neuron" | "head", [id, value]: Link, mirrored = false): Row {
     const key = nodeKey(kind, id);
     const wire: Wire | undefined = nodeOf.get(key)?.wire;
     if (kind === "head") {
       const { layer, head } = headOf(lens.model.heads, id);
-      return { key, name: headId(layer, head), layer, href: lens.unitHref("heads", layer, head), value, title: wire?.title ?? "", low: (wire?.conf ?? 100) < 25, mirrored };
+      return { key, kind, name: headId(layer, head), layer, href: lens.unitHref("heads", layer, head), value, title: wire?.title ?? "", low: (wire?.conf ?? 100) < 25, mirrored, through: [] };
     }
     const { layer, neuron, pole } = poleOf(lens.model.mlp, id);
-    return { key, name: `${neuronId(layer, neuron)} ${pole > 0 ? "+" : "−"}`, layer, href: lens.unitHref("neurons", layer, neuron), value, title: wire?.title ?? "", low: (wire?.conf ?? 100) < 25, mirrored };
+    return { key, kind, name: `${neuronId(layer, neuron)} ${pole > 0 ? "+" : "−"}`, layer, href: lens.unitHref("neurons", layer, neuron), value, title: wire?.title ?? "", low: (wire?.conf ?? 100) < 25, mirrored, through: [] };
   }
 
   /** A list's rows, each neuron once: its two sides are the same weight with the sign flipped. */
@@ -88,19 +95,36 @@
     return [...best.values()].map(({ link, twins }) => row("neuron", link, twins > 1));
   }
 
+  /** The heads it drives, each once, by the strongest of the inputs it reaches it through. */
+  function headTargets(list: Link[]): Row[] {
+    const byHead = new Map<number, Row>();
+    for (const link of list) {
+      const held = byHead.get(link[0]);
+      if (held) held.through.push(link[2]!);
+      else byHead.set(link[0], { ...row("head", link), through: [link[2]!] });
+    }
+    return [...byHead.values()];
+  }
+
+  /** The input of a head this view is about: its value, unless it is on the query or the key. */
+  const input = $derived<Through>(shownMode === "query" ? 1 : shownMode === "key" ? 2 : 0);
+  const DRIVEN_TIPS = ["The earlier neurons and heads that make up the most of what it writes at its top firings", "The earlier neurons and heads, at the token it reads for, that do the most to set where it looks", "The earlier neurons and heads, at the tokens it can look at, that do the most to set where it looks"];
+  const THROUGH = ["value", "query", "key"];
+
   const SHOWN = 8;
   const sides = $derived.by(() => {
     if (!focusWire) return [];
     const { links } = focusWire;
     const byStrength = (rows: Row[]) => rows.sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, SHOWN);
-    const drives = { title: "Drives", tip: "The later neurons that count it among their largest sources at their top firings", rows: byStrength(links.drives.map((link) => row("neuron", link))) };
+    const drives = { title: "Drives", tip: "The later neurons and heads that count it among their largest sources at their top firings", rows: byStrength([...links.drives.map((link) => row("neuron", link)), ...headTargets(links.drivesHeads)]) };
     if (shownMode === "with") return [{ title: "Fires with", tip: "Earlier neurons active at its top firings, ranked by how far that beats their usual rate", rows: links.with.slice(0, SHOWN).map((link) => row("neuron", link)) }];
     if (shownMode === "weights") return [
       { title: "Wired from", tip: "The earlier neurons whose writes move it most, read from the weights", rows: byStrength(collapsed(links.in)) },
       { title: "Wired to", tip: "The later neurons its write moves most, read from the weights", rows: byStrength(collapsed(links.out)) },
     ];
-    return isHead ? [drives] : [
-      { title: "Driven by", tip: "The earlier neurons and heads that make up the most of its activation at its top firings", rows: byStrength([...links.driven.map((link) => row("neuron", link)), ...links.heads.map((link) => row("head", link))]) },
+    const from = shownMode === "query" || shownMode === "key" ? focusWire[shownMode]! : links;
+    return [
+      { title: "Driven by", tip: isHead ? DRIVEN_TIPS[input] : "The earlier neurons and heads that make up the most of its activation at its top firings", rows: byStrength([...from.driven.map((link) => row("neuron", link)), ...from.heads.map((link) => row("head", link))]) },
       drives,
     ];
   });
@@ -114,15 +138,20 @@
     return `${value >= 0 ? "+" : "−"}${percent(Math.abs(value))}`;
   };
   /** What a row's number is. */
-  function valueTip(title: string, value: number): string {
+  function valueTip(title: string, { value, kind, through }: Row): string {
     if (title === "Fires with") return `Active at ${Math.round(value * 5)} of its first 5 top firings`;
     if (title === "Wired from") return "How far one of that neuron's top firings moves this one's normalised input";
     if (title === "Wired to") return "How far one of this neuron's top firings moves that one's normalised input";
-    const whose = title === "Driven by" ? "its" : "that neuron's";
-    return value >= 0 ? `Makes up ${percent(value)} of ${whose} activation at its top firings` : `Takes ${percent(-value)} off ${whose} activation at its top firings`;
+    const what = title === "Driven by"
+      ? (isHead ? headInput("it", input) : "its activation")
+      : (kind === "head" ? headInput("that head", through[0] ?? 0) : "that neuron's activation");
+    return `${value >= 0 ? "Makes up" : "Takes"} ${percent(Math.abs(value))} ${value >= 0 ? "of" : "off"} ${what} at its top firings`;
   }
+  // A share can run past the whole, with another taking it back.
+  const signedPercent = (value: number) => `${value < -0.005 ? "−" : ""}${percent(Math.abs(value) < 0.005 ? 0 : Math.abs(value))}`;
   const top = (rows: Row[]) => Math.max(1e-9, ...rows.map((r) => Math.abs(r.value)));
-  const mix = $derived(shownMode === "context" && !isHead && focusWire ? focusWire.mix : null);
+  const mix = $derived(!focusWire || shownMode === "weights" || shownMode === "with" ? null : shownMode === "context" ? focusWire.mix : focusWire[shownMode]!.mix);
+  const mixTip = $derived(`How much of ${isHead ? headInput("it", input) : "its activation"} at its top firings comes from earlier neurons, from attention heads and from the token's embedding`);
   const showsHeads = $derived(graph?.nodes.some((node) => node.kind === "head") ?? false);
   const showsAgainst = $derived(graph?.edges.some((edge) => edge.value < 0) ?? false);
 </script>
@@ -134,9 +163,9 @@
   </div>
 
   {#if mix}
-    <div class="mix" data-tip="How much of its activation at its top firings comes from earlier neurons, from attention heads and from the token's embedding" transition:expand>
+    <div class="mix" data-tip={mixTip} transition:expand>
       <div class="bar" aria-hidden="true"><i style:flex-grow={Math.max(mix[0], 0)}></i><i class="two" style:flex-grow={Math.max(mix[1], 0)}></i></div>
-      <p class="meta"><MorphText text={`Neurons ${percent(mix[0])} · heads ${percent(mix[1])} · embedding ${percent(Math.max(mix[2], 0))}`} /></p>
+      <p class="meta"><MorphText text={`Neurons ${signedPercent(mix[0])} · heads ${signedPercent(mix[1])} · embedding ${signedPercent(mix[2])}`} /></p>
     </div>
   {/if}
 
@@ -159,8 +188,8 @@
         <div class="rows">
           {#each side.rows as item, i (item.key)}
             <a class="row rise" style:--i={i} class:on={hovered === item.key} href={item.href} onpointerenter={() => point(item.key)} onpointerleave={() => point(null)}>
-              <span class="id"><i class="swatch" style:background={depthColor(lens.model, item.layer)}></i>{item.name}{#if item.mirrored}<span class="mirror" data-tip="Its other side pushes the opposite way">±</span>{/if}</span>
-              <span class="value" data-tip={valueTip(side.title, item.value)}><Meter value={Math.abs(item.value) / top(side.rows)} label={valueTip(side.title, item.value)} />{shownValue(item.value)}</span>
+              <span class="id"><i class="swatch" style:background={depthColor(lens.model, item.layer)}></i>{item.name}{#if item.mirrored}<span class="mirror" data-tip="Its other side pushes the opposite way">±</span>{/if}{#if item.through.length}<span data-tip="The inputs of that head it reaches, strongest first">· {item.through.map((through) => THROUGH[through]).join(", ")}</span>{/if}</span>
+              <span class="value" data-tip={valueTip(side.title, item)}><Meter value={Math.abs(item.value) / top(side.rows)} label={valueTip(side.title, item)} />{shownValue(item.value)}</span>
               <span class="title" class:low={item.low}>{#key item.title}<span in:fadeIn>{#if item.title}<LabelText text={item.title} />{:else}&nbsp;{/if}</span>{/key}</span>
             </a>
           {:else}

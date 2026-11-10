@@ -16,11 +16,10 @@ export type HeadColumn =
   | "qk_S" | "qk_S_z" | "qk_S_neg" | "qk_S_neg_z" | "qk_self_S" | "qk_self_S_z";
 /** What a pole adds beyond what it reads: the write's reads with its gate and up rows removed (findings §18). */
 export type OrthColumn = "write_orth_R" | "write_orth_R_z" | "write_orth_S" | "write_orth_S_z";
-/** What the stream holds at a pole's firings: entering its MLP, written by its layer, leaving the layer, and the model's next word. */
+/** What the stream holds at a pole's firings: entering its MLP, written by its layer, and the model's next word. */
 export type StreamColumn =
   | "before_R" | "before_R_z" | "before_S" | "before_S_z"
   | "mlp_R" | "mlp_R_z" | "mlp_S" | "mlp_S_z"
-  | "after_R" | "after_R_z" | "after_S" | "after_S_z"
   | "pred" | "pred_z";
 export type ReadColumn = NeuronColumn | HeadColumn | OrthColumn | StreamColumn;
 
@@ -164,8 +163,9 @@ export interface CatalogIndex {
   layers: number;
   neuronsPerLayer: number;
   headsPerLayer: number;
-  /** Bytes in a pole's or head's record of a graph.bin file. */
+  /** Bytes in a pole's record of a graph.bin file, and in a head's. */
   wire: number;
+  headWire: number;
   /** Connections each record keeps per relation. */
   connections: number;
   layerMeta: LayerMeta[];
@@ -262,10 +262,17 @@ const inflated = (bytes: ArrayBuffer) => new Response(new Blob([bytes]).stream()
 
 // ---------- connections: a fixed-width record per pole (graph.bin, see WIRE in the builder)
 
-export type Relation = "in" | "out" | "driven" | "drives" | "heads" | "with";
-const RELATIONS: Relation[] = ["in", "out", "driven", "drives", "heads", "with"];
-/** One connection: the other unit's id and its value (a push, a share, or the share of firings in common). */
-export type Link = [number, number];
+export type Relation = "in" | "out" | "driven" | "drives" | "heads" | "with" | "drivesHeads";
+const POLE_RELATIONS = ["in", "out", "driven", "drives", "heads", "with", "drivesHeads"] as const;
+const HEAD_RELATIONS = ["driven", "heads", "qDriven", "qHeads", "kDriven", "kHeads", "drives", "drivesHeads", "with"] as const;
+/** The input a link reaches a head through: 0 its value, 1 its query, 2 its key. */
+export type Through = 0 | 1 | 2;
+/** One connection: the other unit's id and its value (a push, a share, or the share of firings in common); into a head, the input it arrives through. */
+export type Link = [id: number, value: number, through?: Through];
+/** The share of a unit's input from neurons, heads and the embedding. */
+export type Mix = [number, number, number];
+/** A head's query or key: what drives it there, as `driven`, `heads` and `mix` say for its value. */
+export interface HeadInput { driven: Link[]; heads: Link[]; mix: Mix }
 export interface Wire {
   /** The unit's clearest label, shortened, and its confidence 0–100. */
   title: string;
@@ -273,11 +280,14 @@ export interface Wire {
   /** The title is what it writes, not what it fires on. */
   writes: boolean;
   silent: boolean;
-  /** The share of its activation from neurons, heads and the embedding. */
-  mix: [number, number, number];
+  /** The share of its activation (a head's: of what it writes) from neurons, heads and the embedding. */
+  mix: Mix;
   links: Record<Relation, Link[]>;
   /** Where its neuron's detail is: a units pack, an offset and a length. */
   detail: [number, number, number];
+  /** A head's other inputs. */
+  query?: HeadInput;
+  key?: HeadInput;
 }
 
 const NO_LINK = 0xffffffff;
@@ -285,6 +295,7 @@ const TITLE_START = 18;
 const TITLE_BYTES = 110;
 const LINKS_START = 128;
 const ENTRY_BYTES = 6;
+const THROUGH_SHIFT = 28;
 
 /** A half-precision float, which DataView can't read everywhere yet. */
 function half(bits: number): number {
@@ -298,30 +309,38 @@ function half(bits: number): number {
 
 const utf8 = new TextDecoder();
 
-function wireOf(buffer: ArrayBuffer, perRelation: number): Wire {
+function wireOf(buffer: ArrayBuffer, perRelation: number, relations: readonly string[]): Wire {
   const view = new DataView(buffer);
   const bytes = new Uint8Array(buffer);
   let end = TITLE_START;
   while (end < TITLE_START + TITLE_BYTES && bytes[end] !== 0) end += 1;
-  const links = {} as Record<Relation, Link[]>;
-  RELATIONS.forEach((relation, r) => {
+  const lists = new Map(relations.map((relation, r) => {
     const list: Link[] = [];
     for (let i = 0; i < perRelation; i += 1) {
       const at = LINKS_START + (r * perRelation + i) * ENTRY_BYTES;
       const id = view.getUint32(at, true);
       if (id === NO_LINK) break;
-      list.push([id, half(view.getUint16(at + 4, true))]);
+      const value = half(view.getUint16(at + 4, true));
+      list.push(relation === "drivesHeads" ? [id % 2 ** THROUGH_SHIFT, value, (id >>> THROUGH_SHIFT) as Through] : [id, value]);
     }
-    links[relation] = list;
-  });
+    return [relation, list] as const;
+  }));
+  const list = (relation: string) => lists.get(relation) ?? [];
+  const mixAt = (at: number): Mix => [half(view.getUint16(at, true)), half(view.getUint16(at + 2, true)), half(view.getUint16(at + 4, true))];
+  const links = Object.fromEntries(POLE_RELATIONS.map((relation) => [relation, list(relation)])) as Record<Relation, Link[]>;
+  const inputs = LINKS_START + relations.length * perRelation * ENTRY_BYTES;
   return {
     title: utf8.decode(bytes.subarray(TITLE_START, end)),
     conf: bytes[0],
     writes: (bytes[1] & 1) !== 0,
     silent: (bytes[1] & 2) !== 0,
-    mix: [half(view.getUint16(12, true)), half(view.getUint16(14, true)), half(view.getUint16(16, true))],
+    mix: mixAt(12),
     links,
     detail: [bytes[2], view.getUint32(4, true), view.getUint32(8, true)],
+    ...(lists.has("qDriven") ? {
+      query: { driven: list("qDriven"), heads: list("qHeads"), mix: mixAt(inputs) },
+      key: { driven: list("kDriven"), heads: list("kHeads"), mix: mixAt(inputs + 6) },
+    } : {}),
   };
 }
 
@@ -338,11 +357,11 @@ export const headOf = (heads: number, id: number) => ({ layer: Math.floor(id / h
 export const loadPoleWire = (model: ModelId, id: number) => memo(`${model}/wire:${id}`, async () => {
   const { wire, neuronsPerLayer: mlp, connections } = await loadIndex(model);
   const { layer, neuron, pole } = poleOf(mlp, id);
-  return wireOf(await range(`${DATA_BASE}/${model}/neurons/L${pad(layer)}/graph.bin`, (neuron + (pole < 0 ? mlp : 0)) * wire, wire), connections);
+  return wireOf(await range(`${DATA_BASE}/${model}/neurons/L${pad(layer)}/graph.bin`, (neuron + (pole < 0 ? mlp : 0)) * wire, wire), connections, POLE_RELATIONS);
 });
 export const loadHeadWire = (model: ModelId, id: number) => memo(`${model}/head-wire:${id}`, async () => {
-  const { wire, connections } = await loadIndex(model);
-  return wireOf(await range(`${DATA_BASE}/${model}/heads/graph.bin`, id * wire, wire), connections);
+  const { headWire, connections } = await loadIndex(model);
+  return wireOf(await range(`${DATA_BASE}/${model}/heads/graph.bin`, id * headWire, headWire), connections, HEAD_RELATIONS);
 });
 
 /** One neuron's detail, from where its record says it is. */
@@ -485,10 +504,6 @@ export const LENSES: Record<ReadColumn, LensInfo> = {
   mlp_R_z: { short: "mlp·R z", name: "Its layer distinctively writes", side: "output", describe: "The same, scored against what the layer writes where its other poles fire." },
   mlp_S: { short: "mlp·S", name: "Footprints its layer writes", side: "output", describe: "The input tokens the layer's output imitates where this pole fires." },
   mlp_S_z: { short: "mlp·S z", name: "Distinctive footprints its layer writes", side: "output", describe: "The same, scored against what the layer writes where its other poles fire." },
-  after_R: { short: "after·R", name: "The stream after its layer", side: "output", describe: "The residual leaving the layer where it fires: what the model is then getting ready to say." },
-  after_R_z: { short: "after·R z", name: "Distinctive ideas after its layer", side: "output", describe: "The same, scored against the layer's other poles." },
-  after_S: { short: "after·S", name: "Footprints after its layer", side: "output", describe: "The input tokens the residual looks like when it leaves the layer." },
-  after_S_z: { short: "after·S z", name: "Distinctive footprints after its layer", side: "output", describe: "The same, scored against the layer's other poles." },
   pred: { short: "pred", name: "The model says next", side: "output", describe: "The model's own mean logit where it fires." },
   pred_z: { short: "pred z", name: "The model distinctively says next", side: "output", describe: "The same, scored against what the model says where the layer's other poles fire." },
   ov_R: { short: "OV·R", name: "Copies", side: "output", describe: "Reading a token, what the head makes the model say: each token's place in its own column of the OV map." },

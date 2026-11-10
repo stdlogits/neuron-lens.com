@@ -65,7 +65,8 @@ Each read shows its normal list, or with the Distinctive switch beside English i
 normal list left with nothing once hub tokens are gone shows its distinctive list instead (most of Stream's early reads).
 Left is always what comes in and right what goes out. Beside them the rail holds its connections: a
 directed graph at true depth, and its strongest links in words. Wired to, driven by and fires with are
-three relations and stay three views (findings §17). A link's sign has no colour of its own, since the one
+three relations and stay three views (findings §17). A head has no wired to, because two heads meet through a matrix and not a dot product;
+what drives it is split over its three inputs, so its views are Value, Query, Key and Fires with. A link's sign has no colour of its own, since the one
 hue is depth: a link that pushes against is grey and dashed. Phone widths down to 320 px must not scroll
 sideways.
 
@@ -126,11 +127,12 @@ Labels come from neuron-lens's `scripts/10_labels.py`, per model. The builder al
 titles then fall back to a unit's media label or its peak tokens.
 
 Each layer's neurons are two kinds of file, both read by HTTP range. `graph.bin` holds a fixed-width
-record per pole (`WIRE` in the builder, 704 bytes): its title, where its detail is, and its 16 strongest
+record per pole (`WIRE` in the builder, 800 bytes): its title, where its detail is, and its 16 strongest
 links per relation, ids and half-floats, so a pole's record costs one small request and the graph can follow
 links as far as it likes. `units-<pack>.bin` holds each neuron's detail as deflated JSON, end to end, in
 packs under 25 MiB. The builder inverts every `sources` table for what each pole and head drives (the
-catalog lists only what drives a pole). `heads/graph.bin` holds a record per head.
+catalog lists only what drives a unit). `heads/graph.bin` holds a record per head (`HEAD_WIRE`, 1004 bytes): what drives
+it through its value, its query and its key, what fires with it, and what it drives.
 
 The types in `src/lib/data.ts` mirror the builder's output. Change both together, then regenerate the
 e2e mock catalog (`node e2e/fixtures/build.mjs`) so the specs see the new shape. The builder's `stem()`

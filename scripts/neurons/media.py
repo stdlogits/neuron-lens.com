@@ -14,8 +14,10 @@ The catalog dir is neuron-lens's ``data/catalog/gemma-4-12b``; the out dir is th
 (``public/data/gemma-4-12b``). Each allowed source is streamed again with
 neuron-lens's own reader (``media_sets._take``: the same split, seed and count as the exemplar run),
 and an item is kept only when its bytes' SHA-1 matches its document's, so a page never shows an image
-or sound other than the one the catalog names. Synthetic probes are drawn again and matched by their
-labels in order; photographs degraded from COCO stay out.
+or sound other than the one the catalog names. Synthetic images are the pixels the model saw, from the catalog
+folder's ``media/image_synth.parquet`` (neuron-lens's run writes it beside the tables; it isn't in the Hub release,
+because drawing them again takes that run's fonts); synthetic sounds are drawn again and matched by their labels in
+order; photographs degraded from COCO stay out.
 
 Output, under ``<out dir>/media/``:
 
@@ -93,7 +95,7 @@ def encode_audio(w: np.ndarray) -> bytes:
     return run.stdout
 
 
-def fetch(modality: str, sources: set[str], docs: list[dict]) -> dict[int, bytes]:
+def fetch(modality: str, sources: set[str], docs: list[dict], catalog: Path) -> dict[int, bytes]:
     """doc -> encoded bytes, for every document of an allowed source whose item streams back identical."""
     from neuron_lens import media_sets as ms
 
@@ -147,9 +149,14 @@ def fetch(modality: str, sources: set[str], docs: list[dict]) -> dict[int, bytes
         for got in ex.map(take, jobs):
             out |= got
 
-    if synth_docs:
-        made = ms.synth_images(1.0) if modality == "image" else ms.synth_audio(1.0)
-        made = [x for x in made if x[3] == "synth" and "degraded" not in (x[4] or {})]
+    if synth_docs and modality == "image":
+        from PIL import Image
+        wanted = {r["doc"] for r in synth_docs}
+        drawn = {r["doc"]: r["png"] for r in pq.read_table(catalog / "media" / "image_synth.parquet").to_pylist() if r["doc"] in wanted}
+        out |= {doc: encode_image(Image.open(io.BytesIO(png)).convert("RGB")) for doc, png in drawn.items()}
+        print(f"image synth: {len(drawn)} of {len(wanted)} as the model saw them", flush=True)
+    elif synth_docs:
+        made = [x for x in ms.synth_audio(1.0) if x[3] == "synth" and "degraded" not in (x[4] or {})]
         matched = 0
         for r, x in zip(synth_docs, made):
             if " | ".join(x[1]) == r["labels"]:
@@ -191,7 +198,7 @@ def main():
     for modality in filter(None, args.modality.split(",")):
         sources = set(ALLOWED[modality]) & (only or set(ALLOWED[modality]))
         docs = pq.read_table(catalog / "media" / f"{modality}_docs.parquet").to_pylist()
-        pack(modality, fetch(modality, sources, docs), out)
+        pack(modality, fetch(modality, sources, docs, catalog), out)
     write_credits(catalog, out)
 
 

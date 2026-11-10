@@ -294,6 +294,26 @@ test("the rail draws a unit's connections, in three views", async ({ page }) => 
   await expect(page).toHaveURL(new RegExp(`${href}(\\?all)?$`));
 });
 
+test("a head's rail splits what drives it over its three inputs", async ({ page }) => {
+  await page.goto("/qwen3-8b/L20/h17");
+  const rail = page.getByRole("complementary", { name: "Connections" });
+  const views = rail.getByRole("group", { name: "Which connections" });
+  await expect(views.getByRole("button", { name: "Value" })).toHaveAttribute("aria-pressed", "true");
+  await expect(views.getByRole("button", { name: "In the weights" })).toHaveCount(0);
+  const drivenBy = rail.getByRole("heading", { name: "Driven by" }).locator("..").getByRole("link");
+  await expect(rail.getByRole("heading", { name: "Drives" })).toBeVisible();
+  await expect(drivenBy.first()).toBeVisible();
+  const value = await drivenBy.allTextContents();
+
+  await views.getByRole("button", { name: "Query" }).click();
+  await expect(views.getByRole("button", { name: "Query" })).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => drivenBy.allTextContents()).not.toEqual(value);
+
+  await views.getByRole("button", { name: "Fires with" }).click();
+  await expect(rail.getByRole("heading", { name: "Fires with" })).toBeVisible();
+  await expect(rail.getByRole("heading", { name: "Driven by" })).toHaveCount(0);
+});
+
 test("the baskets sort a neuron's evidence and take you to each", async ({ page }) => {
   await page.goto("/qwen3-8b/L8/n344");
   const baskets = page.getByRole("navigation", { name: "Baskets" });

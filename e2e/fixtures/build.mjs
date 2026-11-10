@@ -55,7 +55,7 @@ const records = (wire, list) => ({ wire, records: Object.fromEntries(list.map(([
 async function cut(model) {
   const keep = KEEP[model];
   const index = await read(model, "index.json");
-  const { headsPerLayer: heads, neuronsPerLayer: mlp, wire } = index;
+  const { headsPerLayer: heads, neuronsPerLayer: mlp, wire, headWire } = index;
 
   // ---------- which neurons
   const easiest = new Map(); // old index.neurons position -> row
@@ -195,7 +195,7 @@ async function cut(model) {
     await write(model, `neurons/L${pad(layer)}/units-00.bin`, Buffer.concat(pack));
     await write(model, `neurons/L${pad(layer)}/graph.json`, records(wire, list));
   }
-  await write(model, "heads/graph.json", records(wire, [...keptHeads].sort((a, b) => a - b).map((id) => [id, Buffer.from(headGraph.subarray(id * wire, (id + 1) * wire))])));
+  await write(model, "heads/graph.json", records(headWire, [...keptHeads].sort((a, b) => a - b).map((id) => [id, Buffer.from(headGraph.subarray(id * headWire, (id + 1) * headWire))])));
   for (const [path, file] of headFiles) {
     for (const head of file.heads) {
       head.reads = head.reads.map(([pct, tokens]) => [pct, tokens.map(retoken)]);

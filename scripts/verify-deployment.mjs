@@ -238,7 +238,7 @@ export async function checkMediaRanges(origin, rules) {
   }
 }
 
-/** A neuron as the explorer reads it: its record from graph.bin, then its detail from the units pack that record names. */
+/** A neuron as the explorer reads it: its record from graph.bin, then its detail from the units pack that record names; and a head's record. */
 export async function checkGraphRanges(origin, rules) {
   const read = async (path, offset, length) => {
     const response = await get(origin, path, { Range: `bytes=${offset}-${offset + length - 1}` });
@@ -249,14 +249,16 @@ export async function checkGraphRanges(origin, rules) {
     assertHeaders(response, rules, path);
     return bytes;
   };
-  for (const [model, layer, neuron] of [["qwen3-8b", 8, 344], ["gemma-4-12b", 33, 12225]]) {
-    const { wire } = await (await get(origin, `/data/${model}/index.json`)).json();
+  for (const [model, layer, neuron, head] of [["qwen3-8b", 8, 344, 8 * 32 + 3], ["gemma-4-12b", 33, 12225, 33 * 16 + 5]]) {
+    const { wire, headWire } = await (await get(origin, `/data/${model}/index.json`)).json();
     const folder = `/data/${model}/neurons/L${String(layer).padStart(2, "0")}`;
     const record = await read(`${folder}/graph.bin`, neuron * wire, wire);
     const [pack, offset, length] = [record[2], record.readUInt32LE(4), record.readUInt32LE(8)];
     assert.ok(length > 0, `${model} L${layer} n${neuron}: its record names no detail`);
     const detail = JSON.parse(inflateSync(await read(`${folder}/units-${String(pack).padStart(2, "0")}.bin`, offset, length)).toString("utf8"));
     assert.equal(detail.n, neuron, `${model} L${layer} n${neuron}: its record leads to neuron ${detail.n}`);
+    const firstSource = (await read(`/data/${model}/heads/graph.bin`, head * headWire, headWire)).readUInt32LE(128);
+    assert.notEqual(firstSource, 0xffffffff, `${model} head ${head}: its record names no source`);
   }
 }
 
