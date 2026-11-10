@@ -50,8 +50,9 @@
     const col = Math.max(0, width - gutter) / TOKENS.length;
     const x = (i: number) => round(gutter + (i + 0.5) * col);
     const height = wide ? 288 : 224;
-    const head = { x: x(AT), y: wide ? 72 : 56, w: wide ? 72 : 46, h: wide ? 40 : 28 };
-    const neuron = { x: x(FIRED), y: height - (wide ? 52 : 40), w: wide ? 84 : 50, h: wide ? 32 : 24 };
+    // As in the explorer's graph: a head is oblong, a neuron round.
+    const head = { x: x(AT), y: wide ? 72 : 56, w: wide ? 96 : 52, h: wide ? 36 : 20 };
+    const neuron = { x: x(FIRED), y: height - (wide ? 52 : 40), w: wide ? 60 : 48, h: wide ? 60 : 48 };
     const from = neuron.y - (wide ? 48 : 36);
     const lane = wide ? 8 : 6;
     // The widest ribbon is as wide as a stream. They arrive stacked, farthest on top, and tuck under
@@ -64,7 +65,7 @@
       top += w;
       return { i, d: ribbon(x(i), w, end, y, from), x1: x(i), y1: from, x2: round(end), y2: y };
     });
-    return { wide, gutter, height, lane, bead: wide ? { w: 28, h: 16 } : { w: 18, h: 12 }, x, head, neuron, ribbons };
+    return { wide, gutter, height, lane, bead: wide ? { w: 20, h: 20 } : { w: 14, h: 14 }, x, head, neuron, ribbons };
   }
 
   /** A ribbon w wide that leaves the lane at x upward from `from` and reaches (end, y) level: the band
