@@ -10,16 +10,28 @@ export interface Layout { nodes: Placed[]; height: number }
 const SWEEPS = 4;
 export const GUTTER = 28;
 const MIN_STEP = 12;
+const ROOM = 22;
+
+/** How far down the page a layer's rows sit. A head at the centre is the largest thing drawn, so its layer opens to give it a row of its own, and the layer's neurons line up under it as any layer's do. */
+export function rows(graph: Graph, height: number, layers: number) {
+  const focus = graph.nodes.find((n) => n.side === "focus");
+  const opened = focus?.kind === "head" ? focus.layer : Infinity;
+  const band = (height - ROOM) / layers;
+  const neurons = (layer: number) => (layer + 0.62) * band + (layer >= opened ? ROOM : 0);
+  // A head writes into its own layer's stream, so it sits just above that layer's neurons.
+  const heads = (layer: number) => neurons(layer) - (layer === opened ? ROOM : 0.42 * band);
+  return { neurons, heads };
+}
 
 export function layout(graph: Graph, width: number, height: number, layers: number, was?: Map<string, number>): Layout {
-  const band = height / layers;
+  const depth = rows(graph, height, layers);
   const left = GUTTER;
   const span = Math.max(40, width - left - 8);
   const centre = left + span / 2;
   const top = graph.nodes.reduce((max, n) => (n.side === "focus" ? max : Math.max(max, n.flow)), 1e-9);
 
   // A layer's heads sit in a row just above its neurons, so each row is seated on its own.
-  const rowOf = (n: GraphNode) => n.layer * 2 + (n.kind === "head" && n.side !== "focus" ? 0 : 1);
+  const rowOf = (n: GraphNode) => n.layer * 2 + (n.kind === "head" ? 0 : 1);
   const byLayer = new Map<number, GraphNode[]>();
   for (const n of graph.nodes) byLayer.set(rowOf(n), [...(byLayer.get(rowOf(n)) ?? []), n]);
 
@@ -80,9 +92,8 @@ export function layout(graph: Graph, width: number, height: number, layers: numb
     // Neurons are dots, because there are so many of them; heads are oblong. The unit itself is the largest of its kind.
     const w = n.kind === "head" ? (n.side === "focus" ? 40 : 10 + 22 * weight) : n.side === "focus" ? 18 : 5 + 8 * weight;
     const h = n.kind === "head" ? (n.side === "focus" ? 12 : 6) : w;
-    // A head writes into its own layer's stream, so it sits just above that layer's neurons.
-    const y = (n.layer + (n.kind === "head" && n.side !== "focus" ? 0.2 : 0.62)) * band;
-    placed.set(n.key, { ...n, x: Math.min(left + span - w / 2, Math.max(left + w / 2, x.get(n.key)!)), y, w, h });
+    const y = n.kind === "head" ? depth.heads(n.layer) : depth.neurons(n.layer);
+    placed.set(n.key,{ ...n, x: Math.min(left + span - w / 2, Math.max(left + w / 2, x.get(n.key)!)), y, w, h });
   }
 
   return { nodes: [...placed.values()], height };

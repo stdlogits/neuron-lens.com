@@ -2,7 +2,7 @@
   import { onDestroy, untrack } from "svelte";
   import { bandOf, depthColor, type ModelInfo } from "../../lib/models";
   import { headId, neuronId, percent } from "../../lib/data";
-  import { layout } from "./layout";
+  import { layout, rows } from "./layout";
   import { Stage, type Seated, type Shown } from "./stage";
   import type { Graph, GraphEdge, Mode } from "./trace";
 
@@ -86,11 +86,12 @@
     return `${way} ${n.side === "up" ? "upstream" : "downstream"} in the weights`;
   }
   const ticks = $derived(Array.from({ length: model.layers }, (_, layer) => layer).filter((layer) => layer % 5 === 0));
+  const depth = $derived(rows(graph, HEIGHT, model.layers));
 </script>
 
 <div class="graph" bind:clientWidth={width} style:height={`${HEIGHT}px`}>
   {#if width > 0}
-    {#each ticks as layer, i (layer)}<span class="tick" style:--i={i} style:top={`${(layer + 0.62) * (HEIGHT / model.layers)}px`} data-tip-title={`Layer ${layer}`} data-tip={bandOf(model, layer).name}>{layer}</span>{/each}
+    {#each ticks as layer, i (layer)}<span class="tick" style:--i={i} style:top={`${depth.neurons(layer)}px`} data-tip-title={`Layer ${layer}`} data-tip={bandOf(model, layer).name}>{layer}</span>{/each}
     <svg width={width} height={HEIGHT} aria-hidden="true">
       {#each shown.edges as edge (edge.key)}
         {@const on = lit?.edges.has(edge.key)}
@@ -141,6 +142,7 @@
     text-align: end;
     translate: 0 -50%;
     cursor: help;
+    transition: top var(--glide) var(--ease);
     animation: appear var(--in) var(--ease) backwards;
     animation-delay: calc(var(--i) * 32ms);
   }
