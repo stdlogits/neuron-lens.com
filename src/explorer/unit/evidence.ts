@@ -100,11 +100,18 @@ export const neuronStrength = (pole: Pole): Fact[] => [
   { k: "Past the first token", v: percent(pole.act.pos), tip: "Share of its top firings after the first position, where many units fire regardless" },
 ];
 
-/** Each side of a neuron's weights, read through each lens, tested against the pole's own top firings. */
-const SIDES: NeuronSide[] = ["read_S", "read_R", "write_S", "write_R"];
-export const neuronTests = (pole: Pole): Record<string, Test> => (pole.silent ? {} : Object.fromEntries(SIDES.map((side) => {
+const MISS = "A narrow target: a miss doesn't make the read wrong.";
+
+/** What each side of a neuron's weights, read through each lens, is tested on (findings §7). */
+const TARGETS: Record<NeuronSide, string> = {
+  read_S: "names the tokens its top firings land on",
+  read_R: "names its exact drivers",
+  write_S: "names the tokens its top firings land on",
+  write_R: "promotes the tokens after its top firings",
+};
+export const neuronTests = (pole: Pole): Record<string, Test> => (pole.silent ? {} : Object.fromEntries((Object.keys(TARGETS) as NeuronSide[]).map((side) => {
   const q = pole.legible[side];
-  return [side, { v: `q ${stat(q)}`, off: !(q <= 0.05), tip: `Whether ${LENSES[side].short} predicts this side's own top firings. It holds under 0.05.` }];
+  return [side, { v: `q ${stat(q)}`, off: !(q <= 0.05), tip: `Whether ${LENSES[side].short} ${TARGETS[side]}. It does under 0.05. ${MISS}` }];
 })));
 
 export const headStrength = (head: HeadDetail): Fact[] => [
@@ -124,7 +131,7 @@ export const headAttending = (head: HeadDetail, groupSize: number): Fact[] => [
 const headTest = (value: number, what: string, test: "q" | "p"): Test => ({
   v: `${test} ${stat(value)}`,
   off: !(value <= 0.05),
-  tip: `${what}. It holds under 0.05${test === "p" ? ", uncorrected: with 16 heads a layer, no false-discovery test has the power" : ""}.`,
+  tip: `${what}. It does under 0.05${test === "p" ? ", uncorrected: with 16 heads a layer, no false-discovery test has the power" : ""}. ${MISS}`,
 });
 
 export const headTests = (head: HeadDetail, test: "q" | "p"): Record<string, Test> => ({

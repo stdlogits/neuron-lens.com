@@ -6,8 +6,8 @@
 
   // One side's reads of the unit's weights, in the order its depth trusts them: each its plain name
   // (the lens and what it measures in a tip), its strength among its peers, its family's test where
-  // one applies, and all its tokens. Reads weak at this depth, or whose test fails, are quieter and
-  // weak ones come last. A token two lists agree on is tinted. Flipping Distinctive keeps each read's
+  // one applies, and all its tokens. Reads weak at this depth are quieter and come last; a test's miss
+  // only greys its own number. A token two lists agree on is tinted. Flipping Distinctive keeps each read's
   // place: its name morphs and its tokens give way to the others, while what sits under them slides.
   let { reads, tests = {}, agree, scope = "the layer", skipEmpty = false }: {
     reads: LensRead[];
@@ -28,7 +28,7 @@
 <div class="reads">
   {#each ordered as read (family(read.col))}
     {@const test = tests[family(read.col)]}
-    <div class="read" class:quiet={read.trust === "weak" || test?.off}>
+    <div class="read" class:quiet={read.trust === "weak"}>
       <div class="rh">
         <span class="name" data-tip={readTip(read) + (read.trust === "weak" ? " Weak at this depth." : "")}><MorphText text={LENSES[read.col].name} numbers={false} /></span>
         <Meter value={read.pct / 100} label={`${nth(read.pct)} percentile of ${scope}`} />

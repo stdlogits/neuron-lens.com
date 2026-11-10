@@ -71,7 +71,7 @@ PROFILES = {
         "out": [(4, ["write_R_z", "write_S_z"]), (20, ["write_R", "write_R_z", "write_S_z"]), (35, ["write_R", "write_R_z"])],
         "ov": [(8, ["ov_S", "ov_R"]), (35, ["ov_R"])],
         "ov_S_trusted": 20,
-        "bands": [(0, "embed"), (7, "early"), (8, "crossover"), (12, "concept"), (20, "dark"), (31, "predict"), (35, "suppress")],
+        "bands": [(0, "embed"), (7, "early"), (8, "crossover"), (12, "concept"), (20, "middle"), (31, "predict"), (35, "suppress")],
         "late": 21, "head_test": "q", "global": [], "media": [], "pinned": [(8, 344)],
     },
     "gemma-4-12b": {
@@ -104,11 +104,11 @@ WEIGHT_READ_OF = {"before_R": "read_R", "before_S": "read_S", "mlp_R": "write_R"
                   "write_orth_R": "write_R", "write_orth_S": "write_S"}
 # Head roles, at the catalog's own thresholds (09_legible.py's pattern, checks/head_lens_sides.py), and
 # Gemma 4's in images (checks/head_media.py, findings §16).
-(ROLE_INDUCTION, ROLE_DUPLICATE, ROLE_PREVIOUS, ROLE_SELF, ROLE_SINK, ROLE_NEXT, ROLE_COPY, ROLE_DARK,
- ROLE_CARRIES, ROLE_NAMES) = (1 << k for k in range(10))
+(ROLE_INDUCTION, ROLE_DUPLICATE, ROLE_PREVIOUS, ROLE_SELF, ROLE_SINK, ROLE_NEXT, ROLE_COPY,
+ ROLE_CARRIES, ROLE_NAMES) = (1 << k for k in range(9))
 # Neuron flags.
-(FLAG_DETECTOR, FLAG_PREDICTS, FLAG_SUPPRESSES, FLAG_PLUS_WRITES, FLAG_MINUS_WRITES, FLAG_DARK,
- FLAG_IMAGE, FLAG_AUDIO, FLAG_CROSSMODAL) = (1 << k for k in range(9))
+(FLAG_DETECTOR, FLAG_PREDICTS, FLAG_SUPPRESSES, FLAG_PLUS_WRITES, FLAG_MINUS_WRITES,
+ FLAG_IMAGE, FLAG_AUDIO, FLAG_CROSSMODAL) = (1 << k for k in range(8))
 # A pole's or head's record in graph.bin: its title's confidence and flags (1: the title is its writes label, 2: silent);
 # which units pack holds its detail, where and how long; the share of its activation from neurons, heads and the
 # embedding; its title; then K (id, value) pairs per relation, unused ones with id NONE. An id is a pole's
@@ -495,7 +495,7 @@ def neuron_layer(L):
     kurt_pct = np.searchsorted(np.sort(kurt), kurt) * 100 // n
     skew = col(reads, "vocab_skew")
 
-    silent, dark = col(legible, "silent").astype(bool), col(legible, "dark").astype(bool)
+    silent = col(legible, "silent").astype(bool)
     cur_mode = np.nan_to_num(col(legible, "cur_mode").astype(float))
     next_mode = np.nan_to_num(col(legible, "next_mode").astype(float))
     q = {s: np.nan_to_num(col(legible, f"{s}_q").astype(float), nan=1.0) for s in NEURON_SIDES}
@@ -568,7 +568,7 @@ def neuron_layer(L):
              "peaks": peaks, "next": parse_counts(a["next_tokens"], 6), "contexts": contexts_of(a["contexts"]),
              "drivers": drivers_of(drv_ids[i], drv_val[i]),
              "legible": {s: round(float(q[s][i]), 3) for s in NEURON_SIDES},
-             "silent": bool(silent[i]), "dark": bool(dark[i]),
+             "silent": bool(silent[i]),
              "detector": "token" if cur_mode[i] >= 1 / 3 else "next" if next_mode[i] >= 1 / 3 else None,
              "score": round(float(max(pole_score[i], 0)), 2)}
         if flow is not None:
@@ -637,7 +637,6 @@ def neuron_layer(L):
                  | (FLAG_PREDICTS if any((p.get("shape") or {}).get("kind") == "predicts" for p in poles) else 0)
                  | (FLAG_SUPPRESSES if any((p.get("shape") or {}).get("kind") == "suppresses" for p in poles) else 0)
                  | (FLAG_PLUS_WRITES if wp else 0) | (FLAG_MINUS_WRITES if wm else 0)
-                 | (FLAG_DARK if all(p["dark"] or p["silent"] for p in poles) else 0)
                  | media_flags(poles))
         rows.append([nrn, tp, tm, round(float(max(neuron_score[nrn], 0)), 1), flags, int(round(cp * 100)), int(round(cm * 100))])
         for i, (text, is_writes, conf) in ((i_plus, (tp, wp, cp)), (i_minus, (tm, wm, cm))):
@@ -660,13 +659,13 @@ def neuron_layer(L):
         curated.append({"row": [L, *rows[nrn]], "search": searches})
     meta = {"layer": L, "band": band(L), "count": len(chosen), "reads": header, "orth": orth_header, "stream": stream_header,
             "stats": {"silent": round(float(silent.mean()), 4), "detector": round(float((detector & ~silent).mean()), 4),
-                      "legible": round(float(((passed > 0) & ~silent).mean()), 4), "dark": round(float(dark.mean()), 4)}}
+                      "legible": round(float(((passed > 0) & ~silent).mean()), 4)}}
     for m, rows_m in media.items():
         if rows_m:
             meta["stats"][m] = round(float(np.mean([x["reliable"] for x in rows_m])), 4)
     if L in P["global"]:
         meta["global"] = True
-    print(f"L{L:02d}: {MLP} neurons, curated {len(chosen)}, silent {meta['stats']['silent']:.2f} dark {meta['stats']['dark']:.2f}", flush=True)
+    print(f"L{L:02d}: {MLP} neurons, curated {len(chosen)}, silent {meta['stats']['silent']:.2f}", flush=True)
     return {"meta": meta, "curated": curated, "scores": neuron_score.astype(np.float32)}
 
 
@@ -718,7 +717,7 @@ def heads():
         roles = ((ROLE_INDUCTION if A["induction"] > 0.3 else 0) | (ROLE_DUPLICATE if A["duplicate"] > 0.3 else 0)
                  | (ROLE_PREVIOUS if A["prev"] > 0.5 else 0) | (ROLE_SELF if A["self"] > 0.5 else 0)
                  | (ROLE_SINK if A["sink"] > 0.9 else 0) | (ROLE_NEXT if q(G, f"ov_R_{test}") <= Q else 0)
-                 | (ROLE_COPY if q(G, f"ov_copy_{test}") <= Q else 0) | (ROLE_DARK if G["dark"] else 0)
+                 | (ROLE_COPY if q(G, f"ov_copy_{test}") <= Q else 0)
                  | (ROLE_CARRIES if (img.get("content") or 0) > 3 else 0)
                  | (ROLE_NAMES if img.get("writeQ") is not None and img["writeQ"] <= Q else 0))
         B = B or {"fires": "", "fires_conf": 0, "attends": "", "attends_conf": 0, "writes": "", "writes_conf": 0, "note": ""}
@@ -743,7 +742,7 @@ def heads():
             "keys": drivers_of(drv["keys"][0][i], drv["keys"][1][i]),
             "peaks": peaks, "sources": parse_counts(A["src_tokens"], 6), "contexts": contexts_of(A["contexts"]),
             "legible": {k: round(q(G, f"{k}_{test}"), 3) for k in ("ov_R", "ov_copy", "ov_S", "qk_S")},
-            "modes": [round(m, 3) for m in modes], "dark": bool(G["dark"]), "score": round(score, 2)}
+            "modes": [round(m, 3) for m in modes], "score": round(score, 2)}
         if hm:
             detail["media"] = hm
         details[L].append(detail)

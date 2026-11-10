@@ -14,8 +14,6 @@ export interface BandInfo {
   short: string;
   summary: string;
   reading: string;
-  /** The band where weight-only reads are weakest: examples and exact drivers lead there. */
-  dark?: boolean;
 }
 
 export interface ModelInfo {
@@ -25,11 +23,6 @@ export interface ModelInfo {
   mlp: number;
   heads: number;
   bands: BandInfo[];
-  /** Shown beside the dark band's units. */
-  caution: string;
-  cautionLabel: string;
-  /** By depth: (last layer, note on reading its heads). */
-  headNotes: [number, string][];
   /** By depth: (last layer, the heading over a neuron's output read). */
   writeVerbs: [number, string][];
   /** The head tests' statistic: a false-discovery q, or (with too few heads a layer for one) an uncorrected p. */
@@ -54,7 +47,7 @@ export const MODELS: Record<ModelId, ModelInfo> = {
       {
         key: "embed", first: 0, last: 0, name: "Token layer", short: "Token",
         summary: "Neurons here mostly respond to one literal input token.",
-        reading: "The input-token read (in·S) holds for 85% of poles at their own top firings. Writes are weak this early.",
+        reading: "The input-token read (in·S) names the firing token for 85% of poles. Writes are weak this early.",
       },
       {
         key: "early", first: 1, last: 7, name: "Early layers", short: "Early",
@@ -72,9 +65,9 @@ export const MODELS: Record<ModelId, ModelInfo> = {
         reading: "The concept read (in·R) takes over from in·S, which has gone to noise. out·R predicts steering, rarely the next word.",
       },
       {
-        key: "dark", first: 13, last: 20, name: "Middle layers", short: "Middle", dark: true,
-        summary: "87% of poles here pass no test of a weight-only read. They respond to context.",
-        reading: "Read the examples and the words that set it off in real text first. Lens reads are only a cross-check here.",
+        key: "middle", first: 13, last: 20, name: "Middle layers", short: "Middle",
+        summary: "Neurons here respond to context more than to any one token: the strongest single-token swap reaches about 9% of a typical firing.",
+        reading: "Read in·R and in·S's distinctive list, with the examples and exact drivers beside them. out·R predicts what pushing the neuron does.",
       },
       {
         key: "predict", first: 21, last: 31, name: "Prediction layers", short: "Predict",
@@ -86,14 +79,6 @@ export const MODELS: Record<ModelId, ModelInfo> = {
         summary: "Many neurons push down the word the model is about to say, to calibrate it.",
         reading: "Read both sides' writes: a side whose top tokens are the next word holds it back.",
       },
-    ],
-    caution: "Weight-only reads are least reliable at layers 13–20: 87% of neuron poles and four fifths of heads here pass none of the tests at their own top firings. Most respond to context built up over many words rather than to one word. Trust the examples first.",
-    cautionLabel: "Why layers 13–20 are harder to read",
-    headNotes: [
-      [8, "Early heads often attend by token identity or position. Their writes read best through the S-lens (OV·S)."],
-      [20, "Four fifths of mid-network heads pass no test of a weight-only read. Where a head looks says little about what it writes."],
-      [27, "Late heads start writing the token that follows what they attend to."],
-      [35, "26% of these heads write the next token as their OV read predicts, and many attend to the class they copy or suppress."],
     ],
     writeVerbs: [[3, "Writes (weak this early)"], [20, "When pushed, it promotes"], [31, "It predicts the next word"], [35, "It predicts or holds back the next word"]],
     headTest: "q",
@@ -113,7 +98,7 @@ export const MODELS: Record<ModelId, ModelInfo> = {
       {
         key: "token", first: 0, last: 4, name: "Token layers", short: "Token",
         summary: "Neurons here mostly respond to one literal input token.",
-        reading: "The input-token read (in·S) holds for a third to nearly all poles here. Writes are too weak to read this early.",
+        reading: "The input-token read (in·S) names the firing token for 40–95% of poles here. Writes are too weak to read this early.",
       },
       {
         key: "early", first: 5, last: 13, name: "Early layers", short: "Early",
@@ -121,22 +106,15 @@ export const MODELS: Record<ModelId, ModelInfo> = {
         reading: "Trust in·S at L10–L13, and the write's footprint (out·S) at L11–L13. From L11 the write read (out·R) predicts what pushing the neuron does.",
       },
       {
-        key: "middle", first: 14, last: 32, name: "Middle layers", short: "Middle", dark: true,
-        summary: "Most poles here pass no test of a weight-only read. They respond to context, and many to images: image concepts meet their names in text at these depths.",
-        reading: "Read the examples and the words that set it off in real text first. out·R still predicts what pushing the neuron does, though rarely the next word.",
+        key: "middle", first: 14, last: 32, name: "Middle layers", short: "Middle",
+        summary: "Neurons here respond to context, and many to images: image concepts meet their names in text at these depths.",
+        reading: "Read the examples and the words that set it off in real text first: the concept read (in·R) fails on this model. out·R still predicts what pushing the neuron does, though rarely the next word.",
       },
       {
         key: "late", first: 33, last: 47, name: "Late layers", short: "Late",
         summary: "Many neurons write the word the model is about to say.",
         reading: "out·R names the next word for 22–36% of poles at L33–L40, fewer after. Input reads are weak here: trust the examples.",
       },
-    ],
-    caution: "Weight-only reads are least reliable at layers 14–32: 62–91% of neuron poles by layer and three quarters of heads pass none of the tests at their own top firings. Most respond to context built up over many words rather than to one word. Trust the examples first.",
-    cautionLabel: "Why layers 14–32 are harder to read",
-    headNotes: [
-      [13, "Early heads often attend by token identity or position: for nearly two thirds of them, a third of their top firings share one query token. With 16 heads a layer, no OV read passes its test this early."],
-      [32, "Three quarters of mid-network heads pass no test of a weight-only read. Text reads images most at L23–L31, and zeroing L24–L35's heads costs an image's label most."],
-      [47, "OV·R holds for about a fifth of these heads (uncorrected): they write the token that follows what they attend to. Heads at L35–L46 most often write the class of an image they read."],
     ],
     writeVerbs: [[10, "Writes (weak this early)"], [32, "When pushed, it promotes"], [47, "It predicts the next word"]],
     headTest: "p",
@@ -154,7 +132,6 @@ export const isModelId = (value: string | null): value is ModelId => value !== n
 
 export const bandOf = (model: ModelInfo, layer: number): BandInfo => model.bands.find((band) => layer <= band.last) ?? model.bands[model.bands.length - 1];
 const byDepth = (steps: [number, string][], layer: number) => (steps.find(([last]) => layer <= last) ?? steps[steps.length - 1])[1];
-export const headBandNote = (model: ModelInfo, layer: number) => byDepth(model.headNotes, layer);
 /** How to phrase a neuron's output side at this depth: steering early, prediction late. */
 export const writeVerb = (model: ModelInfo, layer: number) => byDepth(model.writeVerbs, layer);
 export const bandRange = (band: BandInfo) => (band.first === band.last ? `L${band.first}` : `L${band.first}–${band.last}`);

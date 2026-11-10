@@ -98,7 +98,7 @@ function jsonLd() {
         ],
         citation: RESEARCH,
         measurementTechnique: ["R-lens and S-lens reads of weights", "activation statistics over 15M tokens", "exact token drivers by substitution", "labels by Claude Haiku 5.5"],
-        variableMeasured: ["weight-only lens reads", "activations and top contexts", "exact token drivers", "legibility tests", "labels"],
+        variableMeasured: ["weight-only lens reads", "activations and top contexts", "exact token drivers", "tests of each read", "labels"],
         distribution: [{ "@type": "DataDownload", contentUrl: CATALOG, encodingFormat: "application/vnd.apache.parquet" }],
       },
       A9LIM,

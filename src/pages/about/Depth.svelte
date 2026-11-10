@@ -5,15 +5,14 @@
   import { MODELS, MODEL_ORDER, bandOf, bandRange, depthColor, type ModelId } from "../../lib/models";
 
   // The depth ramp itself: one bar a layer, coloured by depth and as tall as the share of its neurons'
-  // sides a weight-only read explains, grouped into the model's bands. Pointing at a layer (or
+  // sides with a weight-only read that names its target, grouped into the model's bands. Pointing at a layer (or
   // choosing a band below) slides the band's wash under it and says what reading there is like.
   // The bars are pointer shortcuts into the explorer; keyboards go by the band tabs and their link.
   let modelId = $state<ModelId>("qwen3-8b");
   const model = $derived(MODELS[modelId]);
   const models = MODEL_ORDER.map((id) => ({ value: id, label: MODELS[id].name }));
 
-  const darkKey = (id: ModelId) => MODELS[id].bands.find((b) => b.dark)?.key ?? MODELS[id].bands[0].key;
-  let chosen = $state<Record<ModelId, string>>({ "qwen3-8b": darkKey("qwen3-8b"), "gemma-4-12b": darkKey("gemma-4-12b") });
+  let chosen = $state<Record<ModelId, string>>({ "qwen3-8b": "middle", "gemma-4-12b": "middle" });
   const band = $derived(model.bands.find((b) => b.key === chosen[modelId]) ?? model.bands[0]);
   const choose = (key: string) => { chosen[modelId] = key; };
 
@@ -26,8 +25,8 @@
     loadIndex(id).then((index) => { layers[id] = index.layerMeta; }, () => { failed = true; });
   });
 
-  // What to trust in each band, for each half of a pole (the research README's "which reads to trust
-  // where"): the read that holds, then what it shows. Lens reads are tinted; the rest are not.
+  // What to read in each band, for each half of a pole (the findings' "which read to use where"):
+  // the read, then what it shows. Lens reads are tinted; the rest are not.
   type Read = [read: string, shows: string];
   const TRUST: Record<ModelId, Record<string, { drives: Read; writes: Read }>> = {
     "qwen3-8b": {
@@ -35,14 +34,14 @@
       early: { drives: ["S-lens", "literal tokens"], writes: ["S-lens", "the tokens it detects; the R-lens from about L4"] },
       crossover: { drives: ["Both lenses", "agreeing most"], writes: ["Both lenses", "agreeing most"] },
       concept: { drives: ["R-lens", "concepts, and the exact drivers"], writes: ["R-lens", "what steering does, rarely what follows"] },
-      dark: { drives: ["Exact drivers", "and activations, nothing else"], writes: ["R-lens", "what steering does"] },
+      middle: { drives: ["R-lens", "and the S-lens's distinctive list, with firings and exact drivers beside them"], writes: ["R-lens", "what steering does"] },
       predict: { drives: ["R-lens", "and the exact drivers"], writes: ["R-lens", "the next token, from about L23"] },
       suppress: { drives: ["R-lens", "and the exact drivers"], writes: ["R-lens", "the next token, held back"] },
     },
     "gemma-4-12b": {
       token: { drives: ["S-lens", "literal tokens"], writes: ["Nothing", "too weak to read"] },
       early: { drives: ["S-lens", "fading by L9, back at L10–13"], writes: ["R-lens", "what steering does, from L11"] },
-      middle: { drives: ["Exact drivers", "and activations, nothing else"], writes: ["R-lens", "what steering does"] },
+      middle: { drives: ["Exact drivers", "and firings: the R-lens input read fails on this model"], writes: ["R-lens", "what steering does"] },
       late: { drives: ["Examples", "input reads are weak"], writes: ["R-lens", "the next word, at L33–40"] },
     },
   };
@@ -56,7 +55,7 @@
     <p>No one kind of evidence works everywhere.</p>
     <p>In early  layers, the stream is mostly the input token, so the S-lens works well.</p>
     <p>In late layers, the stream is mostly the output token, so the R-lens works well instead.</p>
-    <p>In between, most units respond to more opaque meaning so neither lens is as explanatory. There, firings are more important.</p>
+    <p>In between, most units respond to wider context, and no single token says much about them. There, read the lenses alongside the firings.</p>
   {/snippet}
   <div class="spec">
     <Segmented options={models} value={modelId} onchange={(id) => (modelId = id)} label="Model" />
@@ -77,9 +76,9 @@
                 style:--c={depthColor(model, meta.layer)}
                 style:--h={share}
                 style:--d="{meta.layer * 16}ms"
-                aria-label="Layer {meta.layer}: {percent(share)} read from weights"
+                aria-label="Layer {meta.layer}: {percent(share)} named by a weight-only read"
                 data-tip-title="Layer {meta.layer}"
-                data-tip="{percent(share)} of its neurons' sides pass a weight-only read"
+                data-tip="{percent(share)} of its neurons' sides have a weight-only read that names their firing token, exact drivers or next token"
                 onpointerenter={() => choose(bandOf(model, meta.layer).key)}
               ><i></i></a>
             {/each}

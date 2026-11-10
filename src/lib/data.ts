@@ -61,10 +61,9 @@ export interface Pole {
   flow?: [number | null, number | null, number];
   /** The cosine of its write with the gate and up sides of what it reads. */
   cos: [number | null, number | null];
-  /** Each side's q-value at the pole's own top firings: under 0.05, the read holds. */
+  /** Each side's q-value against its own target (`neuronTests`): under 0.05, the read names it. */
   legible: Record<NeuronSide, number>;
   silent: boolean;
-  dark: boolean;
   detector: "token" | "next" | null;
   shape?: { kurtPct: number; skew: number; kind: "predicts" | "suppresses" | null };
   score: number;
@@ -116,7 +115,6 @@ export interface HeadDetail {
   legible: { ov_R: number; ov_copy: number; ov_S: number; qk_S: number };
   /** Share of top firings on one query token, and on one attended token. */
   modes: [number, number];
-  dark: boolean;
   score: number;
   /** Gemma 4: the head in image and audio contexts (findings §16). */
   media?: Record<Modality, HeadMedia>;
@@ -132,11 +130,10 @@ export const FLAG_SUPPRESSES = 4;
 /** The + (or −) title is the pole's writes label rather than its fires label. */
 export const FLAG_PLUS_WRITES = 8;
 export const FLAG_MINUS_WRITES = 16;
-export const FLAG_DARK = 32;
 /** A pole with a reliable image or sound label, or one that holds a concept across text and media. */
-export const FLAG_IMAGE = 64;
-export const FLAG_AUDIO = 128;
-export const FLAG_CROSSMODAL = 256;
+export const FLAG_IMAGE = 32;
+export const FLAG_AUDIO = 64;
+export const FLAG_CROSSMODAL = 128;
 
 /** [layer, head, kv head, fires, attends, writes, their confidences 0–100, roles, score, pattern]. */
 export type HeadRow = [number, number, number, string, string, string, number, number, number, number, number, HeadDetail["pattern"]];
@@ -147,7 +144,7 @@ export interface LayerMeta {
   missing?: boolean;
   global?: boolean;
   count?: number;
-  stats?: { silent: number; detector: number; legible: number; dark: number; image?: number; audio?: number };
+  stats?: { silent: number; detector: number; legible: number; image?: number; audio?: number };
   /** The reads every neuron of the layer lists, in order. */
   reads?: ReadInfo[];
   orth?: ReadInfo[];
@@ -531,9 +528,8 @@ export const ROLE_SELF = 8;
 export const ROLE_SINK = 16;
 export const ROLE_NEXT = 32;
 export const ROLE_COPY = 64;
-export const ROLE_DARK = 128;
-export const ROLE_CARRIES = 256;
-export const ROLE_NAMES = 512;
+export const ROLE_CARRIES = 128;
+export const ROLE_NAMES = 256;
 
 export interface RoleInfo { bit: number; name: string; short: string; describe: string }
 
