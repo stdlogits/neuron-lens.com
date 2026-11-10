@@ -59,7 +59,7 @@
 
 <section class="modality" aria-label={names.title}>
   <div class="lead">
-    <h3 class="head">{names.title}</h3>
+    <h3 class="head" data-tip={`What the ${names.plural} it fires on most have in common`}>{names.title}</h3>
     <span class="label" class:weak={!media.reliable}>{media.label}</span>
     {#if auroc !== null}<span class="meta" data-tip={aurocTip} data-tip-title={media.reliable ? undefined : "Not reliable"}>AUROC {auroc}</span>{/if}
   </div>

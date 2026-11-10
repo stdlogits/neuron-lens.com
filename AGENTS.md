@@ -14,7 +14,7 @@ files. It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now
 - `src/explorer/`: the explorer. `lens.svelte.ts` is its state (get it with `useLens()`): it reads the
   address, loads what that place needs and changes place only by going to another address. The rest
   are its parts: `Atlas` (and `atlas/`), `graph/` (the unit's connections: `trace.ts` walks them,
-  `layout.ts` places them, `Graph` draws them, `Connections` is the rail), `UnitView` (and `unit/`), `Search`
+  `layout.ts` places them, `stage.ts` moves them, `Graph` draws them, `Connections` is the rail), `UnitView` (and `unit/`), `Search`
   (and `search/`), `media/`.
 - `src/pages/`: About, Credits, the missing page.
 - `src/lib/`: `data.ts` (the catalog's types and loaders), `models.ts` (each model's shape, its depth

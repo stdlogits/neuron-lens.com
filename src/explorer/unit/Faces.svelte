@@ -1,5 +1,11 @@
 <script lang="ts" module>
-  export interface FaceRow { sign: string; name: string; cells: { label: string; confidence: number }[] }
+  export interface FaceRow { sign: string; name: string; cells: { label: string; confidence: number }[]; tip?: string }
+
+  const COLUMN_TIPS: Record<string, string> = {
+    "Fires on": "What makes it fire",
+    "Attends to": "What it looks back at when it fires",
+    "Writes": "What it pushes the model toward when it fires",
+  };
 </script>
 
 <script lang="ts">
@@ -38,11 +44,11 @@
 <div class="faces-wrap">
   <div class="faces" style:--cols={columns.length} role={tabs ? "tablist" : undefined} aria-label={tabs ? "Side" : undefined} aria-orientation={tabs ? "vertical" : undefined} use:glide>
     <span class="corner" aria-hidden="true"></span>
-    {#each columns as column (column)}<span class="th head" aria-hidden="true">{column}</span>{/each}
+    {#each columns as column (column)}<span class="th head" aria-hidden="true" data-tip={COLUMN_TIPS[column]}>{column}</span>{/each}
     {#each rows as row, i (i)}
       {#if tabs}
         <button type="button" class="face tab" role="tab" id={`${id}-${i}`} aria-selected={selected === i} aria-controls={panel} tabindex={selected === i ? 0 : -1} onclick={() => (selected = i)} onkeydown={key}>
-          <span class="sign" aria-hidden="true">{row.sign}</span><span class="sr-only">{row.name}. </span>
+          <span class="sign" aria-hidden="true" data-tip={row.tip} data-tip-title={row.name}>{row.sign}</span><span class="sr-only">{row.name}. </span>
           {#each row.cells as cell, j (j)}<LabelCell label={cell.label} confidence={cell.confidence} column={columns[j]} />{/each}
         </button>
       {:else}
@@ -71,7 +77,7 @@
     column-gap: var(--s5);
     min-width: 0;
   }
-  .th { padding-bottom: var(--s1); }
+  .th { padding-bottom: var(--s1); cursor: help; }
   .face {
     display: grid;
     grid-column: 1 / -1;

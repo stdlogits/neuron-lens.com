@@ -1,10 +1,10 @@
 <script lang="ts">
   // While a unit loads: the faces table, five firings and two runs of tokens as plain washes. They
-  // fade in only after 150 ms, so a quick load never shows them, and they hold still.
-  let { columns = 2 }: { columns?: number } = $props();
+  // hold still. With `wait` they fade in only after 150 ms, so a quick load never shows them.
+  let { columns = 2, wait = true }: { columns?: number; wait?: boolean } = $props();
 </script>
 
-<div class="pending" aria-hidden="true" style:--cols={columns}>
+<div class="pending" class:wait aria-hidden="true" style:--cols={columns}>
   <div class="faces"><i class="row"></i></div>
   <div class="ctx"><i class="h"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c"></i><i class="c short"></i></div>
   <div class="ev">
@@ -15,7 +15,8 @@
 <p class="sr-only" role="status">Loading</p>
 
 <style>
-  .pending { display: grid; gap: var(--s6); min-width: 0; animation: appear var(--in) var(--ease) 150ms backwards; }
+  .pending { display: grid; gap: var(--s6); min-width: 0; animation: appear var(--in) var(--ease) backwards; }
+  .wait { animation-delay: 150ms; }
   i { display: block; border-radius: var(--r-box); background: var(--wash); }
   .faces .row { height: 152px; border-radius: var(--r-row); }
   .ctx { display: grid; gap: var(--s3); }

@@ -14,13 +14,19 @@
   const lens = new Lens();
   provideLens(lens);
 
-  const models = MODEL_ORDER.map((id) => ({ value: id, label: MODELS[id].name }));
-  const units: { value: Unit; label: string }[] = [{ value: "neurons", label: "Neurons" }, { value: "heads", label: "Heads" }];
+  const models = MODEL_ORDER.map((id) => {
+    const { name, layers, mlp, heads, media } = MODELS[id];
+    return { value: id, label: name, hint: `${layers} layers, each ${formatCount(mlp)} neurons and ${heads} attention heads.${media.length ? " It also takes in images and sound." : " It reads text."}` };
+  });
+  const units: { value: Unit; label: string; hint: string }[] = [
+    { value: "neurons", label: "Neurons", hint: "Single units of each layer's MLP, each with a positive and a negative side" },
+    { value: "heads", label: "Heads", hint: "Attention heads: what each looks back at, and what it carries forward from there" },
+  ];
   const scopes = $derived(lens.unit === "heads"
-    ? [{ value: "all", label: "All", count: formatCount(lens.totals.heads) }]
+    ? [{ value: "all", label: "All", count: formatCount(lens.totals.heads), hint: "Every attention head of the model" }]
     : [
       { value: "easiest", label: "Easiest", count: lens.totals.easiest === null ? "" : formatCount(lens.totals.easiest), hint: "The neurons easiest to read, 40 a layer" },
-      { value: "all", label: "All", count: formatCount(lens.totals.neurons) },
+      { value: "all", label: "All", count: formatCount(lens.totals.neurons), hint: "Every neuron of the model" },
     ]);
 
   // j and k step through the layer; / finds the search.
@@ -40,7 +46,7 @@
     <h1 id="title" class="rise">Explorer</h1>
     <div class="rise" style:--i="1"><Segmented options={models} value={lens.modelId} onchange={lens.setModel} label="Model" /></div>
     <p class="figures rise" style:--i="2">
-      {#each lens.figures as figure (figure.label)}<span><b><MorphText text={figure.value} /></b> {figure.label}</span>{/each}
+      {#each lens.figures as figure (figure.label)}<span class="figure" data-tip={figure.tip}><b><MorphText text={figure.value} /></b> {figure.label}</span>{/each}
     </p>
     <div class="find rise" style:--i="3"><Search /></div>
   </section>
@@ -77,6 +83,7 @@
   .intro { display: grid; justify-items: start; gap: var(--s5); }
   h1 { font: var(--type-title); letter-spacing: -0.04em; }
   .figures { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s5); color: var(--ink3); font: var(--type-small); }
+  .figure { cursor: help; }
   .figures b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
   .find { width: min(100%, 640px); }
   .map { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); min-width: 0; }

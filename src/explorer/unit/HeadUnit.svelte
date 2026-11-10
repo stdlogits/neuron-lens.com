@@ -31,9 +31,9 @@
 
   <section class="fires">
     <div class="fh">
-      <h3 class="head">Where it fires</h3>
-      <span class="meta key hit">fired here</span>
-      <span class="meta key src">looked at</span>
+      <h3 class="head" data-tip="Its top firings in real text">Where it fires</h3>
+      <span class="meta key hit" data-tip="The token where its output was largest">fired here</span>
+      <span class="meta key src" data-tip="The token it attended to most from there">looked at</span>
     </div>
     {#each head.contexts as context, i (i)}<Context {context} {i} />{:else}<p class="meta none">No firings recorded</p>{/each}
   </section>
@@ -47,6 +47,7 @@
   .unit { display: grid; gap: var(--s6); min-width: 0; }
   .fires { display: grid; gap: var(--s3); min-width: 0; }
   .fh { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); }
+  .fh .head, .key { cursor: help; }
   .key { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; }
   .key::before { content: ""; width: 12px; height: 8px; border-radius: 2px; background: color-mix(in oklch, var(--tint) 22%, transparent); }
   .key.src::before { background: color-mix(in oklch, var(--tint) 9%, transparent); }

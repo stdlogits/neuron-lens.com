@@ -5,6 +5,7 @@
   import { describeRole, formatCount, rolesOf } from "../../lib/data";
   import { reading, setDistinctive } from "../../lib/reading.svelte";
   import { setTranslate, translation } from "../../lib/translate.svelte";
+  import { bandRange } from "../../lib/models";
   import { neuronTags } from "./evidence";
 
   // The top of the unit: its ID over its depth and tags, then the tools: English, where it sits in
@@ -42,7 +43,7 @@
   <div class="name">
     <h2 id="unit-title"><MorphText text={lens.selectedId ?? ""} /></h2>
     <p class="meta tags">
-      <MorphText text={lens.band.name} numbers={false} />
+      <span class="band" data-tip={lens.band.summary} data-tip-title={bandRange(lens.band)}><MorphText text={lens.band.name} numbers={false} /></span>
       {#each tags as tag (tag.label)}<span class="tag" data-tip={tag.tip} in:fadeIn><span class="dot" aria-hidden="true">·</span>{tag.label}</span>{/each}
     </p>
   </div>
@@ -50,7 +51,7 @@
     <Switch checked={reading.distinctive} onchange={setDistinctive} label="Distinctive" hint="Score each read against the layer's other units, so what they all share drops out" />
     <Switch checked={translation.on} onchange={setTranslate} label="English" hint="Show text in other languages in English" />
     <span class="gap" aria-hidden="true"></span>
-    {#if where}<span class="meta where"><span aria-hidden="true"><MorphText text={where} /></span><span class="sr-only">{lens.position + 1} of {lens.order.length}</span></span>{/if}
+    {#if where}<span class="meta where" data-tip={`Its place in this list, which j and k step through`}><span aria-hidden="true"><MorphText text={where} /></span><span class="sr-only">{lens.position + 1} of {lens.order.length}</span></span>{/if}
     <IconButton icon="up" label={`Previous ${noun}`} href={prev === null ? undefined : lens.unitHref(lens.unit, lens.layer, prev)} replace disabled={prev === null} />
     <IconButton icon="down" label={`Next ${noun}`} href={next === null ? undefined : lens.unitHref(lens.unit, lens.layer, next)} replace disabled={next === null} />
     <IconButton icon={copied ? "check" : "link"} label={copied ? "Link copied" : "Copy link"} onclick={copy} />
@@ -63,6 +64,7 @@
   h2 { font: var(--type-heading); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
   .tags { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--s2); }
   .tag { display: inline-flex; gap: var(--s2); cursor: help; }
+  .band, .where { cursor: help; }
   .dot { color: var(--ink3); }
   .tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
   .gap { width: var(--s2); }

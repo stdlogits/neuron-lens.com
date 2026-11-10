@@ -31,7 +31,7 @@
     <h3 class="col-head head">Writes</h3>
     {#if outputs.length}<Group title="From its weights" tip={WEIGHTS}><Reads reads={outputs} {tests} /></Group>{/if}
     {#if !measured && orth.length}<Group title="Beyond what it reads" tip={ORTH}><Reads reads={orth} /></Group>{/if}
-    {#if !measured && facts.length}<Group title="Against what it reads"><Facts {facts} /></Group>{/if}
+    {#if !measured && facts.length}<Group title="Against what it reads" tip="How its write lines up with what it reads, from its weights"><Facts {facts} /></Group>{/if}
   </div>
 </div>
 

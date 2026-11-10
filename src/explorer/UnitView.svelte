@@ -7,15 +7,31 @@
   import { useLens } from "./lens.svelte";
 
   // The chosen neuron or head. Its header stays put (the ID morphs); below it one unit gives way to
-  // the next: stepping down the list it rises into place, stepping up it falls. A slow load shows
-  // still washes after 150 ms; a failed one offers to try again.
+  // the next: stepping down the list it rises into place, stepping up it falls. While the next one
+  // loads the last stays where it is, so stepping never flashes empty; a slow load shows still washes
+  // after 150 ms, and a failed one offers to try again.
   const lens = useLens();
 
   const detail = $derived(lens.unit === "heads" ? lens.headDetail : lens.neuronDetail);
   const phase = $derived(detail ? "ready" : lens.detailFailed ? "failed" : "pending");
   const unitKey = $derived(`${lens.modelId}/${lens.unit}/${lens.layer}/${lens.selected}`);
-  const key = $derived(phase === "ready" ? unitKey : phase);
-  const labelled = $derived(lens.index?.labelled ?? true);
+
+  // What was last on screen, for as long as it takes the next to arrive.
+  interface Held { key: string; neuron: typeof lens.neuronDetail; head: typeof lens.headDetail; layer: number; model: typeof lens.model; labelled: boolean; groupSize: number }
+  let lastHeld: Held | null = null;
+  const held = $derived.by<Held | null>(() => {
+    if (phase === "ready") lastHeld = { key: unitKey, neuron: lens.neuronDetail, head: lens.headDetail, layer: lens.layer, model: lens.model, labelled: lens.index?.labelled ?? true, groupSize: lens.groupSize };
+    return lastHeld;
+  });
+  let slow = $state(false);
+  $effect(() => {
+    slow = false;
+    if (phase !== "pending") return;
+    const timer = setTimeout(() => (slow = true), 150);
+    return () => clearTimeout(timer);
+  });
+  const showing = $derived(phase === "failed" ? "failed" : phase === "ready" || (held && !slow) ? "unit" : "pending");
+  const key = $derived(showing === "unit" ? held!.key : showing);
 
   // Which way the new unit moves in: by its place in the list against the last one's, within a list.
   let last = { unit: "", list: "", position: -1, direction: 1 as 1 | -1 };
@@ -36,17 +52,17 @@
 <article class="view" id="unit" aria-labelledby="unit-title">
   <UnitBar />
   <Swap {key} {direction}>
-    {#if phase === "failed"}
+    {#if showing === "failed"}
       <div class="failed" role="alert">
         <p>This one didn't load.</p>
         <button type="button" class="retry" onclick={() => lens.retry()}>Try again</button>
       </div>
-    {:else if lens.unit === "heads" && lens.headDetail}
-      <HeadUnit head={lens.headDetail} model={lens.model} {labelled} groupSize={lens.groupSize} />
-    {:else if lens.unit === "neurons" && lens.neuronDetail}
-      <NeuronUnit detail={lens.neuronDetail} layer={lens.layer} {labelled} />
+    {:else if showing === "unit" && held?.head}
+      <HeadUnit head={held.head} model={held.model} labelled={held.labelled} groupSize={held.groupSize} />
+    {:else if showing === "unit" && held?.neuron}
+      <NeuronUnit detail={held.neuron} layer={held.layer} labelled={held.labelled} />
     {:else}
-      <Pending columns={lens.unit === "heads" ? 3 : 2} />
+      <Pending columns={lens.unit === "heads" ? 3 : 2} wait={!held} />
     {/if}
   </Swap>
 </article>

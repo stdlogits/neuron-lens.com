@@ -1,15 +1,17 @@
 // Where a graph's nodes sit: depth down the page, a band per layer, and across it whatever crosses
-// the fewest links (a few sweeps of the barycentre rule; the unit stays on the centre line).
+// the fewest links (a few sweeps of the barycentre rule; the unit stays on the centre line). While the
+// walk is still growing the graph, `was` holds where everything already is: each row keeps its order and
+// a new node joins beside what it connects to, so only the finished graph is seated from scratch.
 import type { Graph, GraphNode } from "./trace";
 
 export interface Placed extends GraphNode { x: number; y: number; w: number; h: number }
-export interface Layout { nodes: Placed[]; paths: Map<string, string>; height: number }
+export interface Layout { nodes: Placed[]; height: number }
 
 const SWEEPS = 4;
 export const GUTTER = 28;
 const MIN_STEP = 12;
 
-export function layout(graph: Graph, width: number, height: number, layers: number): Layout {
+export function layout(graph: Graph, width: number, height: number, layers: number, was?: Map<string, number>): Layout {
   const band = height / layers;
   const left = GUTTER;
   const span = Math.max(40, width - left - 8);
@@ -47,8 +49,19 @@ export function layout(graph: Graph, width: number, height: number, layers: numb
     seat(list);
   }
 
+  if (was) {
+    for (const list of byLayer.values()) {
+      const guess = new Map(list.map((n) => {
+        const around = (neighbours.get(n.key) ?? []).map((key) => was.get(key)).filter((v): v is number => v !== undefined);
+        return [n.key, was.get(n.key) ?? (around.length ? around.reduce((a, b) => a + b, 0) / around.length : centre)] as const;
+      }));
+      list.sort((a, b) => guess.get(a.key)! - guess.get(b.key)!);
+      seat(list);
+    }
+  }
+
   const order = [...byLayer.keys()].sort((a, b) => a - b);
-  for (let sweep = 0; sweep < SWEEPS; sweep += 1) {
+  for (let sweep = 0; sweep < (was ? 0 : SWEEPS); sweep += 1) {
     for (const layer of sweep % 2 ? [...order].reverse() : order) {
       const list = byLayer.get(layer)!;
       const barycentre = (n: GraphNode) => {
@@ -72,15 +85,5 @@ export function layout(graph: Graph, width: number, height: number, layers: numb
     placed.set(n.key, { ...n, x: Math.min(left + span - w / 2, Math.max(left + w / 2, x.get(n.key)!)), y, w, h });
   }
 
-  const paths = new Map<string, string>();
-  for (const e of graph.edges) {
-    const a = placed.get(e.from);
-    const b = placed.get(e.to);
-    if (!a || !b) continue;
-    const y1 = a.y + a.h / 2;
-    const y2 = b.y - b.h / 2;
-    const bend = Math.max(10, (y2 - y1) * 0.5);
-    paths.set(e.key, `M${a.x.toFixed(1)} ${y1.toFixed(1)}C${a.x.toFixed(1)} ${(y1 + bend).toFixed(1)} ${b.x.toFixed(1)} ${(y2 - bend).toFixed(1)} ${b.x.toFixed(1)} ${y2.toFixed(1)}`);
-  }
-  return { nodes: [...placed.values()], paths, height };
+  return { nodes: [...placed.values()], height };
 }

@@ -4,7 +4,7 @@
 // and the search's matches are the only state outside the address.
 import { getContext, setContext, untrack } from "svelte";
 import {
-  FLAG_AUDIO, FLAG_CROSSMODAL, FLAG_DETECTOR, FLAG_IMAGE, FLAG_PREDICTS, FLAG_SUPPRESSES, ROLES,
+  FLAG_AUDIO, FLAG_CROSSMODAL, FLAG_DETECTOR, FLAG_IMAGE, FLAG_PREDICTS, FLAG_SUPPRESSES, ROLES, describeRole,
   ROLE_CARRIES, ROLE_COPY, ROLE_DUPLICATE, ROLE_INDUCTION, ROLE_NAMES, ROLE_NEXT, ROLE_PREVIOUS, ROLE_SINK,
   formatCount, headId, loadHeadIndex, loadHeadLayer, loadIndex, loadLayerIndex, loadNeuron, loadScores, neuronId,
   type CatalogIndex, type HeadDetail, type HeadRow, type IndexRow, type NeuronDetail, type Unit,
@@ -13,18 +13,18 @@ import { DEFAULT_MODEL, MODELS, bandOf, depthColor, type ModelId, type ModelInfo
 import { go, href, router, type ExploreRoute } from "../lib/router.svelte";
 import { setTermsModel } from "../lib/translate.svelte";
 
-export interface Filter { value: string; label: string; neurons?: number; heads?: number }
+export interface Filter { value: string; label: string; neurons?: number; heads?: number; hint?: string }
 
 const NEURON_FILTERS: Filter[] = [
-  { value: "all", label: "All" },
-  { value: "predicts", label: "Predictors", neurons: FLAG_PREDICTS },
-  { value: "suppresses", label: "Suppressors", neurons: FLAG_SUPPRESSES },
-  { value: "detector", label: "One token", neurons: FLAG_DETECTOR },
+  { value: "all", label: "All", hint: "Every neuron, whatever it does" },
+  { value: "predicts", label: "Predictors", neurons: FLAG_PREDICTS, hint: "Fires just before a word it then pushes the model to say" },
+  { value: "suppresses", label: "Suppressors", neurons: FLAG_SUPPRESSES, hint: "Holds back the word the model is about to say" },
+  { value: "detector", label: "One token", neurons: FLAG_DETECTOR, hint: "Most of its top firings land on one token" },
 ];
 const MEDIA_FILTERS: Filter[] = [
-  { value: "image", label: "Images", neurons: FLAG_IMAGE },
-  { value: "audio", label: "Sound", neurons: FLAG_AUDIO },
-  { value: "crossmodal", label: "Text and media", neurons: FLAG_CROSSMODAL },
+  { value: "image", label: "Images", neurons: FLAG_IMAGE, hint: "A side fires reliably on one kind of image" },
+  { value: "audio", label: "Sound", neurons: FLAG_AUDIO, hint: "A side fires reliably on one kind of sound" },
+  { value: "crossmodal", label: "Text and media", neurons: FLAG_CROSSMODAL, hint: "Its image or sound label holds in text too: the words fire it, and both lenses read them" },
 ];
 const HEAD_ROLES = [ROLE_INDUCTION, ROLE_DUPLICATE, ROLE_PREVIOUS, ROLE_NEXT, ROLE_COPY, ROLE_SINK, ROLE_CARRIES, ROLE_NAMES];
 
@@ -73,7 +73,7 @@ export class Lens {
   readonly filters = $derived.by<Filter[]>(() => {
     if (this.unit === "heads") {
       const present = (this.heads ?? []).reduce((bits, row) => bits | row[9], 0);
-      return [{ value: "all", label: "All" }, ...ROLES.filter((role) => HEAD_ROLES.includes(role.bit) && (present & role.bit)).map((role) => ({ value: String(role.bit), label: role.short, heads: role.bit }))];
+      return [{ value: "all", label: "All", hint: "Every head, whatever it does" }, ...ROLES.filter((role) => HEAD_ROLES.includes(role.bit) && (present & role.bit)).map((role) => ({ value: String(role.bit), label: role.short, heads: role.bit, hint: describeRole(role, this.model) }))];
     }
     return this.model.media.length ? [...NEURON_FILTERS, ...MEDIA_FILTERS] : NEURON_FILTERS;
   });
@@ -279,9 +279,9 @@ export class Lens {
 
   /** Figures for the intro: neurons, heads, layers. */
   readonly figures = $derived([
-    { value: formatCount(this.totals.neurons), label: "neurons" },
-    { value: formatCount(this.totals.heads), label: "heads" },
-    { value: String(this.model.layers), label: "layers" },
+    { value: formatCount(this.totals.neurons), label: "neurons", tip: `${formatCount(this.model.mlp)} to a layer` },
+    { value: formatCount(this.totals.heads), label: "heads", tip: `${this.model.heads} to a layer` },
+    { value: String(this.model.layers), label: "layers", tip: "Each is an attention step and then an MLP" },
   ]);
 }
 

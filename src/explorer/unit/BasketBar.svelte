@@ -3,21 +3,30 @@
   import { Tabs, reducedMotion } from "@stdlogits/ledger";
 
   // The unit's baskets, always in reach as the page scrolls past them. The one in view is marked;
-  // choosing one scrolls to it.
-  let { baskets }: { baskets: { value: string; label: string }[] } = $props();
+  // choosing one scrolls to it. Baskets are found by id on every look, because a change of side
+  // replaces them.
+  let { baskets }: { baskets: { value: string; label: string; hint?: string }[] } = $props();
   let active = $state(untrack(() => baskets[0]?.value ?? ""));
 
   onMount(() => {
-    const seen = new Map<string, boolean>();
-    const observer = new IntersectionObserver((entries) => {
-      for (const entry of entries) seen.set(entry.target.id, entry.isIntersecting);
-      active = baskets.find((basket) => seen.get(basket.value))?.value ?? active;
-    }, { rootMargin: "-64px 0px -55% 0px" });
-    for (const basket of baskets) {
-      const section = document.getElementById(basket.value);
-      if (section) observer.observe(section);
-    }
-    return () => observer.disconnect();
+    let frame = 0;
+    const look = () => {
+      frame = 0;
+      const seen = baskets.find((basket) => {
+        const box = document.getElementById(basket.value)?.getBoundingClientRect();
+        return box && box.bottom > 64 && box.top < window.innerHeight * 0.45;
+      });
+      if (seen) active = seen.value;
+    };
+    const queue = () => { if (!frame) frame = requestAnimationFrame(look); };
+    window.addEventListener("scroll", queue, { passive: true });
+    window.addEventListener("resize", queue, { passive: true });
+    queue();
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", queue);
+      window.removeEventListener("resize", queue);
+    };
   });
 
   function go(value: string) {

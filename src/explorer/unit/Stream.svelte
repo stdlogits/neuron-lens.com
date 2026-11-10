@@ -26,7 +26,7 @@
   <div class="col">
     <h4 class="col-head head">What leaves it</h4>
     <Group title="Where it fires" tip={`Its layer's output and what follows it, averaged over ${firings} top firings`}><Reads reads={outputs} skipEmpty /></Group>
-    {#if facts.length}<Group title="Against what it reads"><Facts {facts} /></Group>{/if}
+    {#if facts.length}<Group title="Against what it reads" tip="At its firings: how much of what it reads it scales, and how much it adds off it"><Facts {facts} /></Group>{/if}
   </div>
 </div>
 
