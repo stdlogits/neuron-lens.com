@@ -164,7 +164,7 @@ export class Lens {
         this.loadRows(model, layer);
       });
     });
-    // The selected neuron's detail. Its chunk depends on the index's chunk size: loadNeuron waits for it.
+    // The selected neuron's detail. Where its record sits depends on the index's shape: loadNeuron waits for it.
     $effect(() => {
       if (this.unit !== "neurons" || this.selected === null) return;
       const model = this.modelId;

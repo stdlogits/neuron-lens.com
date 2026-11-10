@@ -16,6 +16,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { inflateSync } from "node:zlib";
 
 const root = resolve(fileURLToPath(import.meta.url), "../..");
 const DEFAULT_ORIGIN = "https://neuron-lens.com";
@@ -237,6 +238,28 @@ export async function checkMediaRanges(origin, rules) {
   }
 }
 
+/** A neuron as the explorer reads it: its record from graph.bin, then its detail from the units pack that record names. */
+export async function checkGraphRanges(origin, rules) {
+  const read = async (path, offset, length) => {
+    const response = await get(origin, path, { Range: `bytes=${offset}-${offset + length - 1}` });
+    assert.equal(response.status, 206, `${path}: HTTP ${response.status} to a Range request, expected 206`);
+    assert.match(response.headers.get("content-range") ?? "", new RegExp(`^bytes ${offset}-${offset + length - 1}/\\d+$`), `${path}: Content-Range`);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    assert.equal(bytes.length, length, `${path}: ${bytes.length} bytes for a range of ${length}`);
+    assertHeaders(response, rules, path);
+    return bytes;
+  };
+  for (const [model, layer, neuron] of [["qwen3-8b", 8, 344], ["gemma-4-12b", 33, 12225]]) {
+    const { wire } = await (await get(origin, `/data/${model}/index.json`)).json();
+    const folder = `/data/${model}/neurons/L${String(layer).padStart(2, "0")}`;
+    const record = await read(`${folder}/graph.bin`, neuron * wire, wire);
+    const [pack, offset, length] = [record[2], record.readUInt32LE(4), record.readUInt32LE(8)];
+    assert.ok(length > 0, `${model} L${layer} n${neuron}: its record names no detail`);
+    const detail = JSON.parse(inflateSync(await read(`${folder}/units-${String(pack).padStart(2, "0")}.bin`, offset, length)).toString("utf8"));
+    assert.equal(detail.n, neuron, `${model} L${layer} n${neuron}: its record leads to neuron ${detail.n}`);
+  }
+}
+
 // ---------- Browser smoke
 
 // A Gemma 4 neuron whose top images and sounds include ones this site hosts.
@@ -360,6 +383,7 @@ async function main() {
       ["assets, theme-preflight.js, robots.txt, the site's files", () => checkAssets(opts.origin, rules, html, opts.build)],
       ["catalog JSON and missing data", () => checkData(opts.origin, rules)],
       ["media packs by range", () => checkMediaRanges(opts.origin, rules)],
+      ["neurons by range", () => checkGraphRanges(opts.origin, rules)],
     );
   }
   if (opts.browser) steps.push(["browser smoke: images, a sound, no CSP violation", () => browserSmoke(opts.origin)]);

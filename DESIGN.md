@@ -21,7 +21,7 @@ What the site draws for itself, in Ledger:
 - The graph's motion (`src/explorer/graph/stage.ts`), on Ledger's curve and durations, all on one clock so a link
   never parts from its nodes. Arriving: the unit swells in; its neighbours bud from it ring by ring (at most
   340 ms in all, strongest first, each link growing with its node); the links that make it a graph draw in behind them; the
-  finished graph untangles; then one pulse runs down the layers to the unit and on out of it, along the 48 strongest links.
+  finished graph untangles.
   What stays glides, what goes withdraws into what it budded from, and any change takes over from wherever things are.
   Reduced motion keeps the fades and drops the rest.
 

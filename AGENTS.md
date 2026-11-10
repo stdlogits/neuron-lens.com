@@ -58,8 +58,8 @@ rather than tell (no explanatory paragraphs or provenance in the explorer; tips 
 hold the words). The only credit in the explorer is "Labels by Claude Haiku 5.5"; above it sits the
 labeller's note on the chosen labels, which is evidence for them, not an explanation of the site. A
 unit's view shows all of its evidence on one page, with nothing behind a "more" button, sorted into
-baskets under a bar that stays in reach: Firings (its images and sounds, its firings, what it does in real
-text, how often and how hard), Weights (every read the labeller saw, with its test, and what it adds
+baskets under a bar that stays in reach: Firings (its images and sounds, its firings, what it does in real text, what the model says next there,
+how often and how hard), Weights (every read the labeller saw, with its test, and what it adds
 beyond what it reads) and Stream (what the residual holds where it fires, which never reached the labeller).
 Each read shows its normal list, or with the Distinctive switch beside English its layer-contrastive (z) list; a
 normal list left with nothing once hub tokens are gone shows its distinctive list instead (most of Stream's early reads).
@@ -160,13 +160,13 @@ CI (`.github/workflows/ci.yml`) runs `npm ci`, `check`, `build` and the e2e spec
 - `npm run check` (svelte-check) must be clean.
 - `npm run test:e2e` runs the specs in `e2e/` against the dev server on port 5195, with every `/data`
   request answered from `e2e/fixtures/catalog` (`e2e/fixtures/catalog.mjs`, which also makes up
-  `scores.json` and answers range requests). The mock's media bytes are made up, not the collections'.
+  `scores.json`, answers range requests and blanks the `graph.bin` records of units the mock doesn't keep). The mock's media bytes are made up, not the collections'.
   Specs test the address and the shell through roles and names; markup-level tests of the atlas, list
   and unit view are marked `test.fixme` until those parts settle.
 - `node scripts/verify-deployment.mjs <origin>` checks a deployed site: status codes, the headers from
   `_headers`, the JSON-LD and the files the site serves about itself (icons, card, manifest, llms.txt,
   sitemap; byte for byte against `dist` when deploying), catalog JSON, 404s for missing data, 206
-  ranges on media packs, immutable assets, then a
+  ranges on graph records, units packs and media packs, immutable assets, then a
   Chromium smoke that a Gemma neuron's images load and a sound plays with no CSP violation. Its
   selectors are constants at the top of its browser section.
 

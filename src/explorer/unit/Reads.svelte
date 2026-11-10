@@ -34,7 +34,7 @@
         <Meter value={read.pct / 100} label={`${nth(read.pct)} percentile of ${scope}`} />
         {#if test}<span class="q" class:off={test.off} data-tip={test.tip}>{test.v}</span>{/if}
       </div>
-      <div class="fit" use:fit>
+      <div use:fit>
         <div>
           <Swap key={read.col}>
             {#if read.tokens.length}
@@ -58,5 +58,4 @@
   .q { color: var(--ink2); font: var(--type-meta); font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: help; }
   .q.off { color: var(--ink3); }
   .empty { font-weight: 400; }
-  .fit { overflow: clip; overflow-clip-margin: var(--s1); transition: height var(--glide) var(--ease); }
 </style>

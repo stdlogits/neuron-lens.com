@@ -4,13 +4,14 @@
   import Reads from "./Reads.svelte";
   import type { LensRead, Pole } from "../../lib/data";
   import { reading } from "../../lib/reading.svelte";
-  import { oneOfEach, sideReads, streamFacts } from "./evidence";
+  import { family, oneOfEach, sideReads, streamFacts } from "./evidence";
 
   // What the stream holds where a side fires, averaged over its top firings, under the same two
-  // columns as its weights: what reaches it, then what its layer writes, what leaves the layer and
-  // what the model says next. Each list reads the residual itself, so none of it reached the labeller.
+  // columns as its weights: what reaches it, then what its layer writes and what leaves the layer.
+  // Each list reads the residual itself, so none of it reached the labeller. What the model says next
+  // sits with the firings, beside what did come next (RealText).
   let { pole, reads }: { pole: Pole; reads: LensRead[] } = $props();
-  const shown = $derived(oneOfEach(reads, reading.distinctive));
+  const shown = $derived(oneOfEach(reads.filter((read) => family(read.col) !== "pred"), reading.distinctive));
   const inputs = $derived(sideReads(shown, "input"));
   const outputs = $derived(sideReads(shown, "output"));
   const facts = $derived(streamFacts(pole));
@@ -22,11 +23,11 @@
   <div class="col">
     <h4 class="col-head head">What reaches it</h4>
     <Group title="Where it fires" tip={`The residual entering its MLP, averaged over ${firings} top firings`}><Reads reads={inputs} skipEmpty /></Group>
+    {#if facts.length}<Group title="Against what it reads" tip="At its firings: how much of what it reads it scales, and how much it adds off it"><Facts {facts} /></Group>{/if}
   </div>
   <div class="col">
     <h4 class="col-head head">What leaves it</h4>
     <Group title="Where it fires" tip={`Its layer's output and what follows it, averaged over ${firings} top firings`}><Reads reads={outputs} skipEmpty /></Group>
-    {#if facts.length}<Group title="Against what it reads" tip="At its firings: how much of what it reads it scales, and how much it adds off it"><Facts {facts} /></Group>{/if}
   </div>
 </div>
 

@@ -35,7 +35,7 @@
     ],
   })));
   const panel = $props.id();
-  const FIRINGS = "What it does in real text: where this side fires, and how often and how hard";
+  const FIRINGS = "What it does in real text: where this side fires, what the model says next there, and how often and how hard";
   const WEIGHTS_BASKET = "What the lenses read from its weights alone, with no text run through the model";
   const STREAM = "What the residual stream holds where this side fires, before and after its layer. None of this reached the labeller.";
   const baskets = $derived([

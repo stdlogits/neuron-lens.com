@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { LabelText, Meter, MorphText, Segmented, Swap, Tabs, expand, fadeIn } from "@stdlogits/ledger";
   import Graph from "./Graph.svelte";
   import { focusOf, nodeKey, trace, type Graph as GraphData, type Mode, type Reach } from "./trace";
@@ -15,6 +15,14 @@
   let mode = $state<Mode>("context");
   let reach = $state<Reach>("far");
   let hovered = $state<string | null>(null);
+  // Moving from one unit to the next crossfades the light between them, rather than through the whole graph.
+  let letGo = 0;
+  function point(key: string | null) {
+    clearTimeout(letGo);
+    if (key) hovered = key;
+    else letGo = window.setTimeout(() => (hovered = null), 90);
+  }
+  onDestroy(() => clearTimeout(letGo));
   let graph = $state.raw<GraphData | null>(null);
 
   const isHead = $derived(lens.unit === "heads");
@@ -133,7 +141,7 @@
   {/if}
 
   {#if graph}
-    <Graph {graph} model={lens.model} mode={shownMode} href={hrefFor} bind:hovered />
+    <Graph {graph} model={lens.model} mode={shownMode} href={hrefFor} {hovered} {point} />
     <ul class="key meta" aria-label="Key">
       <li data-tip="One side of a neuron. The larger it is, the more of the flow runs through it"><i class="dot"></i>Neuron</li>
       {#if showsHeads}<li data-tip="An attention head. It sits just above its layer's neurons, because it writes into their stream"><i class="bar"></i>Head</li>{/if}
@@ -150,7 +158,7 @@
       <Swap key={listKey}>
         <div class="rows">
           {#each side.rows as item, i (item.key)}
-            <a class="row rise" style:--i={i} class:on={hovered === item.key} href={item.href} onpointerenter={() => (hovered = item.key)} onpointerleave={() => (hovered = null)}>
+            <a class="row rise" style:--i={i} class:on={hovered === item.key} href={item.href} onpointerenter={() => point(item.key)} onpointerleave={() => point(null)}>
               <span class="id"><i class="swatch" style:background={depthColor(lens.model, item.layer)}></i>{item.name}{#if item.mirrored}<span class="mirror" data-tip="Its other side pushes the opposite way">±</span>{/if}</span>
               <span class="value" data-tip={valueTip(side.title, item.value)}><Meter value={Math.abs(item.value) / top(side.rows)} label={valueTip(side.title, item.value)} />{shownValue(item.value)}</span>
               <span class="title" class:low={item.low}>{#key item.title}<span in:fadeIn>{#if item.title}<LabelText text={item.title} />{:else}&nbsp;{/if}</span>{/key}</span>

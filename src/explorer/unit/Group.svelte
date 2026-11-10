@@ -5,12 +5,14 @@
 
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { Meter, Token } from "@stdlogits/ledger";
+  import { Meter, MorphText, Token } from "@stdlogits/ledger";
 
   // A titled part of a column: a run of tokens (what the unit fires on in real text, say), or what
   // it holds instead (figures, the reads of its weights), with a share as a meter beside the title.
-  let { title, tip, items = [], share, empty = "Nothing distinctive", children }: {
+  let { title, morph = false, tip, items = [], share, empty = "Nothing distinctive", children }: {
     title: string;
+    /** The title changes in place, so it morphs. */
+    morph?: boolean;
     /** What the group is, for the title's tip. */
     tip?: string;
     items?: Item[];
@@ -23,7 +25,7 @@
 
 <div class="group">
   <div class="gh">
-    <h3 class="head" data-tip={tip}>{title}</h3>
+    <h3 class="head" data-tip={tip}>{#if morph}<MorphText text={title} numbers={false} />{:else}{title}{/if}</h3>
     {#if share}<Meter value={share.value} label={share.label} />{/if}
   </div>
   {#if children}

@@ -2,9 +2,8 @@
 //
 // Arriving is a few overlapping beats. The unit swells into place. What it connects to buds out of it a
 // ring at a time, strongest first, each link growing with the node at its end. The links that make it
-// a graph rather than a tree draw themselves in behind them. The finished graph untangles. Then one
-// pulse runs down through the layers: into the unit, and on out of it. Data sets the pace when it is
-// slow; when it is quick, the rings still open one after another.
+// a graph rather than a tree draw themselves in behind them. The finished graph untangles. Data sets
+// the pace when it is slow; when it is quick, the rings still open one after another.
 //
 // Every value is a target plus offsets that shrink away on Ledger's curve. A new target only adds an
 // offset, so a walk that keeps growing, a click on a neighbour or a change of view takes over from
@@ -26,12 +25,6 @@ const SIBLING = 8;
 const MOST_SIBLINGS = 10;
 const FLIGHT = IN;
 const WEAVE = 180;
-/** Each of the pulse's two beats: down to the unit, then on from it. */
-const BEAT = 280;
-/** How near the pulse (px) a node starts to swell. */
-const BUMP = 30;
-const SPARKS = 48;
-const SPARK_LENGTH = 26;
 /** How long (ms) to wait for a frame before drawing without one. */
 const STARVED = 250;
 
@@ -98,9 +91,6 @@ interface Strand {
   painted: { d: string; opacity: string; dash: string };
 }
 
-interface Spark { strand: Strand; el: SVGPathElement; dash: number; painted: string }
-interface Sweep { start: number; top: number; focus: number; bottom: number; sparks: Spark[] | null }
-
 /** Each node's way back to the unit: its nearest neighbour, the strongest of them if several are as near. */
 function spanning(graph: Graph, focus: string | null) {
   const links = new Map<string, { other: string; flow: number }[]>();
@@ -135,14 +125,11 @@ export class Stage {
   private strands = new Map<string, Strand>();
   private frame = 0;
   private fallback = 0;
-  /** When the last bud lands, and the last link finishes drawing. */
+  /** When the last bud lands. */
   private landing = 0;
-  private woven = 0;
-  private grew = false;
-  private sweep: Sweep | null = null;
 
-  /** `changed`: what is shown has lost something that finished leaving. `layer`: where the pulse is drawn. */
-  constructor(private changed: () => void, private layer: () => SVGGElement | undefined) {}
+  /** `changed`: what is shown has lost something that finished leaving. */
+  constructor(private changed: () => void) {}
 
   shown(): Shown {
     return { nodes: [...this.seats.values()].map((seat) => seat.node), edges: [...this.strands.values()].map((strand) => strand.edge) };
@@ -160,7 +147,6 @@ export class Stage {
     const now = performance.now();
     const calm = reducedMotion();
     const instant = snap || (typeof document !== "undefined" && document.hidden);
-    this.endSweep();
 
     const focus = graph.nodes.find((n) => n.side === "focus")?.key ?? null;
     const tree = spanning(graph, focus);
@@ -228,7 +214,6 @@ export class Stage {
       freshKeys.add(node.key);
       this.landing = Math.max(this.landing, born + FLIGHT);
     }
-    if (fresh.length) this.grew = true;
 
     // Links. One that leads to a new node grows with it; the rest draw in once both ends are there.
     const wanted = new Set(graph.edges.map((edge) => edge.key));
@@ -265,18 +250,9 @@ export class Stage {
         const born = Math.max(now, a.born + FLIGHT * 0.7, b.born + FLIGHT * 0.7) + Math.min(rank, 16) * SIBLING;
         strand.shown.from(-1, born, FAST);
         if (edge.value >= 0) strand.drawn.from(-1, born, WEAVE);
-        this.woven = Math.max(this.woven, born + WEAVE);
       }
       this.strands.set(edge.key, strand);
     });
-
-    // When it has all landed: the pulse. Down from the top to the unit, and on out of it.
-    if (graph.settled && this.grew && !calm && !instant) {
-      this.grew = false;
-      const ys = placed.nodes.map((node) => node.y);
-      const mid = focus ? want.get(focus)?.y : undefined;
-      if (mid !== undefined && ys.length > 1) this.sweep = { start: Math.max(moveAt + GLIDE * 0.5, this.woven - 80), top: Math.min(...ys) - 4, focus: mid, bottom: Math.max(...ys) + 24, sparks: null };
-    }
 
     this.paint(now);
     this.run();
@@ -293,7 +269,7 @@ export class Stage {
     if (seat) {
       seat.el = el;
       seat.painted = { transform: "", width: "", height: "", opacity: "" };
-      this.paintSeat(seat, performance.now(), null);
+      this.paintSeat(seat, performance.now());
     }
     return { destroy: () => { if (seat?.el === el) seat.el = null; } };
   }
@@ -313,7 +289,6 @@ export class Stage {
     cancelAnimationFrame(this.frame);
     clearTimeout(this.fallback);
     this.frame = 0;
-    this.endSweep();
   }
 
   private run() {
@@ -333,7 +308,7 @@ export class Stage {
     clearTimeout(this.fallback);
     this.paint(now);
     let gone = false;
-    let moving = this.sweep !== null;
+    let moving = false;
     for (const [key, seat] of this.seats) {
       if (seat.leaving && !seat.shown.live) { this.seats.delete(key); gone = true; }
       else if (seat.x.live || seat.y.live || seat.w.live || seat.h.live || seat.shown.live) moving = true;
@@ -347,13 +322,11 @@ export class Stage {
   };
 
   private paint(now: number) {
-    const front = this.frontAt(now);
-    for (const seat of this.seats.values()) this.paintSeat(seat, now, front);
+    for (const seat of this.seats.values()) this.paintSeat(seat, now);
     for (const strand of this.strands.values()) this.paintStrand(strand, now);
-    if (front !== null) this.paintSparks(front);
   }
 
-  private paintSeat(seat: Seat, now: number, front: number | null) {
+  private paintSeat(seat: Seat, now: number) {
     seat.ax = seat.x.at(now);
     seat.ay = seat.y.at(now);
     seat.aw = Math.max(0, seat.w.at(now));
@@ -361,8 +334,7 @@ export class Stage {
     const opacity = unit(seat.shown.at(now)).toFixed(2);
     const { el, painted } = seat;
     if (!el) return;
-    const near = front === null ? 0 : Math.max(0, 1 - Math.abs(front - seat.ay) / BUMP);
-    const transform = `translate(${(seat.ax - seat.aw / 2).toFixed(1)}px, ${(seat.ay - seat.ah / 2).toFixed(1)}px)${near > 0 ? ` scale(${(1 + 0.6 * near * near).toFixed(3)})` : ""}`;
+    const transform = `translate(${(seat.ax - seat.aw / 2).toFixed(1)}px, ${(seat.ay - seat.ah / 2).toFixed(1)}px)`;
     if (transform !== painted.transform) el.style.transform = painted.transform = transform;
     const width = `${seat.aw.toFixed(1)}px`;
     if (width !== painted.width) el.style.width = painted.width = width;
@@ -389,64 +361,5 @@ export class Stage {
     if (!el) return;
     if (opacity !== painted.opacity) el.style.strokeOpacity = painted.opacity = opacity;
     if (dash !== painted.dash) el.style.strokeDasharray = painted.dash = dash;
-  }
-
-  /** How far down the page the pulse has come: on Ledger's curve to the unit, then again on from it. */
-  private frontAt(now: number): number | null {
-    const sweep = this.sweep;
-    if (!sweep) return null;
-    let t = now - sweep.start;
-    if (t < 0) return null;
-    const first = sweep.focus - sweep.top > 8 ? BEAT : 0;
-    const second = sweep.bottom - sweep.focus > 32 ? BEAT : 0;
-    if (t >= first + second) { this.endSweep(); return null; }
-    if (!sweep.sparks) sweep.sparks = this.lightSparks();
-    if (t < first) return sweep.top + (sweep.focus - sweep.top) * ease(t / first);
-    t -= first;
-    return sweep.focus + (sweep.bottom - sweep.focus) * ease(t / second);
-  }
-
-  /** The strongest links that push for their target carry the pulse. */
-  private lightSparks(): Spark[] {
-    const layer = this.layer();
-    if (!layer) return [];
-    const strongest = [...this.strands.values()]
-      .filter((strand) => !strand.leaving && strand.edge.value >= 0 && strand.el)
-      .sort((p, q) => q.edge.flow - p.edge.flow)
-      .slice(0, SPARKS);
-    return strongest.map((strand) => {
-      const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      const dash = Math.min(0.5, SPARK_LENGTH / Math.max(1, strand.y2 - strand.y1));
-      el.setAttribute("pathLength", "1");
-      el.setAttribute("d", strand.painted.d);
-      el.style.stroke = strand.el!.style.stroke;
-      el.style.strokeWidth = `${parseFloat(strand.el!.style.strokeWidth || "1") + 0.6}px`;
-      el.style.strokeDasharray = `${dash.toFixed(4)} 2`;
-      el.style.opacity = "0";
-      layer.append(el);
-      return { strand, el, dash, painted: "" };
-    });
-  }
-
-  private paintSparks(front: number) {
-    for (const spark of this.sweep?.sparks ?? []) {
-      const { y1, y2 } = spark.strand;
-      const head = (front - y1) / Math.max(1, y2 - y1);
-      const on = head > 0 && head - spark.dash < 1;
-      const painted = on ? (spark.dash - head).toFixed(4) : "off";
-      if (painted === spark.painted) continue;
-      spark.painted = painted;
-      spark.el.style.opacity = on ? "0.9" : "0";
-      if (on) spark.el.style.strokeDashoffset = painted;
-    }
-  }
-
-  private endSweep() {
-    if (!this.sweep) return;
-    for (const spark of this.sweep.sparks ?? []) spark.el.remove();
-    this.sweep = null;
-    // Each node lets go of the swell the pulse gave it.
-    const now = performance.now();
-    for (const seat of this.seats.values()) this.paintSeat(seat, now, null);
   }
 }

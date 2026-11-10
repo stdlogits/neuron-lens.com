@@ -11,19 +11,20 @@
   // colour of its layer and as large as the flow through it; a link is as heavy as its flow, grey and
   // dashed where it pushes against. Pointing at a unit lights what connects it to the centre. The
   // stage (stage.ts) owns where everything is and how it moves; this owns what each thing looks like.
-  let { graph, model, mode, href, hovered = $bindable(null) }: {
+  let { graph, model, mode, href, hovered, point }: {
     graph: Graph;
     model: ModelInfo;
     mode: Mode;
     href: (kind: "neuron" | "head", layer: number, index: number) => string;
-    hovered?: string | null;
+    hovered: string | null;
+    /** The pointer has come to this unit, or left (null). */
+    point: (key: string | null) => void;
   } = $props();
 
   let width = $state(0);
   const HEIGHT = 780;
   let shown = $state.raw<Shown>({ nodes: [], edges: [] });
-  let sparks = $state<SVGGElement>();
-  const stage = new Stage(() => (shown = stage.shown()), () => sparks);
+  const stage = new Stage(() => (shown = stage.shown()));
   onDestroy(() => stage.destroy());
 
   let laidOut = 0;
@@ -91,20 +92,17 @@
   {#if width > 0}
     {#each ticks as layer, i (layer)}<span class="tick" style:--i={i} style:top={`${(layer + 0.62) * (HEIGHT / model.layers)}px`} data-tip-title={`Layer ${layer}`} data-tip={bandOf(model, layer).name}>{layer}</span>{/each}
     <svg width={width} height={HEIGHT} aria-hidden="true">
-      <g>
-        {#each shown.edges as edge (edge.key)}
-          {@const on = lit?.edges.has(edge.key)}
-          <path
-            use:strand={edge.key}
-            pathLength={edge.value < 0 ? undefined : 1}
-            class:against={edge.value < 0}
-            style:stroke={edge.value < 0 ? undefined : depthColor(model, layerOf.get(edge.from) ?? 0)}
-            style:stroke-width={`${(0.7 + 3.3 * Math.sqrt(Math.min(1, edge.flow / top))).toFixed(2)}px`}
-            style:opacity={lit ? (on ? 0.95 : 0.06) : (0.28 + 0.5 * Math.sqrt(Math.min(1, edge.flow / top))).toFixed(2)}
-          />
-        {/each}
-      </g>
-      <g bind:this={sparks} fill="none" stroke-linecap="round"></g>
+      {#each shown.edges as edge (edge.key)}
+        {@const on = lit?.edges.has(edge.key)}
+        <path
+          use:strand={edge.key}
+          pathLength={edge.value < 0 ? undefined : 1}
+          class:against={edge.value < 0}
+          style:stroke={edge.value < 0 ? undefined : depthColor(model, layerOf.get(edge.from) ?? 0)}
+          style:stroke-width={`${(0.7 + 3.3 * Math.sqrt(Math.min(1, edge.flow / top))).toFixed(2)}px`}
+          style:opacity={lit ? (on ? 0.95 : 0.06) : (0.28 + 0.5 * Math.sqrt(Math.min(1, edge.flow / top))).toFixed(2)}
+        />
+      {/each}
     </svg>
     {#each shown.nodes as node (node.key)}
       <a
@@ -118,10 +116,10 @@
         data-tip-title={nameOf(node)}
         data-tip-sub={standing(node)}
         aria-label={`${nameOf(node)}${node.wire?.title ? `: ${node.wire.title}` : ""}`}
-        onpointerenter={() => (hovered = node.key)}
-        onpointerleave={() => (hovered = null)}
-        onfocus={() => (hovered = node.key)}
-        onblur={() => (hovered = null)}
+        onpointerenter={() => point(node.key)}
+        onpointerleave={() => point(null)}
+        onfocus={() => point(node.key)}
+        onblur={() => point(null)}
       ><i style:background={depthColor(model, node.layer)}></i></a>
     {/each}
   {/if}
@@ -130,7 +128,7 @@
 <style>
   .graph { position: relative; min-width: 0; }
   svg { position: absolute; inset: 0; pointer-events: none; }
-  path { fill: none; stroke-linecap: round; transition: opacity var(--fast) var(--ease), stroke-width var(--glide) var(--ease), stroke var(--glide) var(--ease); }
+  path { fill: none; stroke-linecap: round; transition: opacity var(--in) var(--ease), stroke-width var(--glide) var(--ease), stroke var(--glide) var(--ease); }
   path.against { stroke: var(--ink3); stroke-dasharray: 3 3; }
   .tick {
     position: absolute;
@@ -157,7 +155,7 @@
     border-radius: var(--r-pill);
     outline: 2px solid transparent;
     outline-offset: 2px;
-    transition: opacity var(--fast) var(--ease), scale var(--fast) var(--ease), background-color var(--glide) var(--ease), outline-color var(--glide) var(--ease);
+    transition: opacity var(--in) var(--ease), scale var(--in) var(--ease), background-color var(--glide) var(--ease), outline-color var(--glide) var(--ease);
   }
   .focus { z-index: 1; }
   .focus i { outline-color: var(--ink); }
