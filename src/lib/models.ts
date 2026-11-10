@@ -54,7 +54,7 @@ export const MODELS: Record<ModelId, ModelInfo> = {
       {
         key: "embed", first: 0, last: 0, name: "Token layer", short: "Token",
         summary: "Neurons here mostly respond to one literal input token.",
-        reading: "The input-token read (in·S) holds for 78% of poles at their own top firings. Writes are weak this early.",
+        reading: "The input-token read (in·S) holds for 85% of poles at their own top firings. Writes are weak this early.",
       },
       {
         key: "early", first: 1, last: 7, name: "Early layers", short: "Early",
@@ -73,7 +73,7 @@ export const MODELS: Record<ModelId, ModelInfo> = {
       },
       {
         key: "dark", first: 13, last: 20, name: "Middle layers", short: "Middle", dark: true,
-        summary: "82% of poles here pass no test of a weight-only read. They respond to context.",
+        summary: "87% of poles here pass no test of a weight-only read. They respond to context.",
         reading: "Read the examples and the words that set it off in real text first. Lens reads are only a cross-check here.",
       },
       {
@@ -87,13 +87,13 @@ export const MODELS: Record<ModelId, ModelInfo> = {
         reading: "Read both sides' writes: a side whose top tokens are the next word holds it back.",
       },
     ],
-    caution: "Weight-only reads are least reliable at layers 13–20: 82% of neuron poles and three quarters of heads here pass none of the tests at their own top firings. Most respond to context built up over many words rather than to one word. Trust the examples first.",
+    caution: "Weight-only reads are least reliable at layers 13–20: 87% of neuron poles and four fifths of heads here pass none of the tests at their own top firings. Most respond to context built up over many words rather than to one word. Trust the examples first.",
     cautionLabel: "Why layers 13–20 are harder to read",
     headNotes: [
       [8, "Early heads often attend by token identity or position. Their writes read best through the S-lens (OV·S)."],
-      [20, "Three quarters of mid-network heads pass no test of a weight-only read. Where a head looks says little about what it writes."],
+      [20, "Four fifths of mid-network heads pass no test of a weight-only read. Where a head looks says little about what it writes."],
       [27, "Late heads start writing the token that follows what they attend to."],
-      [35, "27% of these heads write the next token as their OV read predicts, and many attend to the class they copy or suppress."],
+      [35, "26% of these heads write the next token as their OV read predicts, and many attend to the class they copy or suppress."],
     ],
     writeVerbs: [[3, "Writes (weak this early)"], [20, "When pushed, it promotes"], [31, "It predicts the next word"], [35, "It predicts or holds back the next word"]],
     headTest: "q",
@@ -128,14 +128,14 @@ export const MODELS: Record<ModelId, ModelInfo> = {
       {
         key: "late", first: 33, last: 47, name: "Late layers", short: "Late",
         summary: "Many neurons write the word the model is about to say.",
-        reading: "out·R names the next word for 21–37% of poles at L33–L40, fewer after. Input reads are weak here: trust the examples.",
+        reading: "out·R names the next word for 22–36% of poles at L33–L40, fewer after. Input reads are weak here: trust the examples.",
       },
     ],
-    caution: "Weight-only reads are least reliable at layers 14–32: 48–85% of neuron poles by layer and 70% of heads pass none of the tests at their own top firings. Most respond to context built up over many words rather than to one word. Trust the examples first.",
+    caution: "Weight-only reads are least reliable at layers 14–32: 62–91% of neuron poles by layer and three quarters of heads pass none of the tests at their own top firings. Most respond to context built up over many words rather than to one word. Trust the examples first.",
     cautionLabel: "Why layers 14–32 are harder to read",
     headNotes: [
-      [13, "Early heads often attend by token identity or position: for two thirds of them, a third of their top firings share one query token. With 16 heads a layer, no OV read passes its test this early."],
-      [32, "70% of mid-network heads pass no test of a weight-only read. Text reads images most at L23–L31, and zeroing L24–L35's heads costs an image's label most."],
+      [13, "Early heads often attend by token identity or position: for nearly two thirds of them, a third of their top firings share one query token. With 16 heads a layer, no OV read passes its test this early."],
+      [32, "Three quarters of mid-network heads pass no test of a weight-only read. Text reads images most at L23–L31, and zeroing L24–L35's heads costs an image's label most."],
       [47, "OV·R holds for about a fifth of these heads (uncorrected): they write the token that follows what they attend to. Heads at L35–L46 most often write the class of an image they read."],
     ],
     writeVerbs: [[10, "Writes (weak this early)"], [32, "When pushed, it promotes"], [47, "It predicts the next word"]],

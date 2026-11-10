@@ -72,7 +72,7 @@ PROFILES = {
         "ov": [(8, ["ov_S", "ov_R"]), (35, ["ov_R"])],
         "ov_S_trusted": 20,
         "bands": [(0, "embed"), (7, "early"), (8, "crossover"), (12, "concept"), (20, "dark"), (31, "predict"), (35, "suppress")],
-        "late": 21, "head_test": "q", "global": [], "media": [],
+        "late": 21, "head_test": "q", "global": [], "media": [], "pinned": [(8, 344)],
     },
     "gemma-4-12b": {
         "name": "Gemma 4 12B", "layers": 48, "mlp": 15360, "heads": 16,
@@ -82,7 +82,7 @@ PROFILES = {
         "ov": [(13, ["ov_S", "ov_R"]), (47, ["ov_R"])],
         "ov_S_trusted": 13,
         "bands": [(4, "token"), (13, "early"), (32, "middle"), (47, "late")],
-        "late": 33, "head_test": "p", "global": list(range(5, 48, 6)), "media": ["image", "audio"],
+        "late": 33, "head_test": "p", "global": list(range(5, 48, 6)), "media": ["image", "audio"], "pinned": [(33, 12225), (14, 8313), (37, 7165)],
     },
 }
 
@@ -649,6 +649,7 @@ def neuron_layer(L):
     json.dump({"layer": L, "neurons": rows}, open(f"{d_out}/index.json", "w"), ensure_ascii=False, separators=(",", ":"))
 
     chosen = sorted(range(MLP), key=lambda k: -neuron_score[k])[:KEEP_PER_LAYER]
+    chosen += [n for layer, n in P["pinned"] if layer == L and n not in chosen]  # the site's own examples stay listed and searchable
     curated = []
     for nrn in chosen:
         searches = []

@@ -60,11 +60,14 @@ test("a deep link loads that head", async ({ page }) => {
 });
 
 test("a neuron outside the layer's easiest opens with every neuron listed", async ({ page }) => {
+  const index = await fixture<CatalogIndex>("gemma-4-12b/index.json");
+  const layerRows = await fixture<{ neurons: number[][] }>("gemma-4-12b/neurons/L14/index.json");
+  const outside = layerRows.neurons.map((row) => row[0]).find((neuron) => !easiest(index, 14).includes(neuron))!;
   const rows = page.waitForRequest((request) => request.url().endsWith("/data/gemma-4-12b/neurons/L14/index.json"));
-  await page.goto("/gemma-4-12b/L14/n8313");
+  await page.goto(`/gemma-4-12b/L14/n${outside}`);
   await rows;
-  await expect(page).toHaveURL(/\/gemma-4-12b\/L14\/n8313\?all$/);
-  await expect(page).toHaveTitle("L14·n8313 · Gemma 4 12B · Neuron Lens");
+  await expect(page).toHaveURL(new RegExp(`/gemma-4-12b/L14/n${outside}\\?all$`));
+  await expect(page).toHaveTitle(`L14·n${outside} · Gemma 4 12B · Neuron Lens`);
 });
 
 test.describe("drowse.ai's old links become paths", () => {
@@ -139,7 +142,7 @@ test("clicking a layer in the atlas opens that layer", async ({ page }) => {
   await expect(page).toHaveTitle("Gemma 4 12B · Neuron Lens");
 
   // A bar is its unit: clicking one opens it, in its own layer.
-  const bar = (await bars(page).nth(1).boundingBox())!;
+  const bar = (await bars(page).nth(index.neurons.filter((row) => row[0] < 23).length + 1).boundingBox())!;
   await page.mouse.click(bar.x + bar.width / 2, bar.y + bar.height / 2);
   await expect(page).toHaveURL(new RegExp(`/gemma-4-12b/L23/n${middle[1]}$`));
   await expect(atlas(page)).toHaveAttribute("aria-valuenow", "23");
@@ -194,26 +197,26 @@ test("search finds a word, lights its units, and opens one", async ({ page }) =>
   await expect(bars(page).first()).toBeAttached();
   expect(await lit(page)).toBe(0);
 
-  // "/" finds the field. "owl" is the word of n344 and, as a stem, in n1165's "knowledge".
+  // "/" finds the field. "miami" is in two units' reads, n3908's more strongly than n6321's.
   await page.keyboard.press("/");
   await expect(search).toBeFocused();
-  await page.keyboard.type("owl");
+  await page.keyboard.type("miami");
   await expect(search).toHaveAttribute("aria-expanded", "true");
   await expect(matches.getByRole("option")).toHaveCount(2);
-  await expect(matches.getByRole("option", { name: /^L8·n344 plus side the word 'owl'/ })).toHaveAttribute("aria-selected", "true");
-  await expect(matches.getByRole("option", { name: /^L8·n1165 minus side/ })).toHaveAttribute("aria-selected", "false");
+  await expect(matches.getByRole("option", { name: /^L8·n3908 minus side/ })).toHaveAttribute("aria-selected", "true");
+  await expect(matches.getByRole("option", { name: /^L8·n6321 minus side/ })).toHaveAttribute("aria-selected", "false");
   await expect(page.getByText("2 matches.")).toBeAttached();
 
   // Those two units light on the atlas; the others don't.
   await expect.poll(() => lit(page)).toBe(2);
 
   // Choosing a match opens it, closes the results, and keeps the lights while the query stands.
-  await matches.getByRole("option", { name: /^L8·n1165/ }).click();
-  await expect(page).toHaveURL(/\/qwen3-8b\/L8\/n1165$/);
-  await expect(unitHeading(page, "L8·n1165")).toBeVisible();
+  await matches.getByRole("option", { name: /^L8·n6321/ }).click();
+  await expect(page).toHaveURL(/\/qwen3-8b\/L8\/n6321$/);
+  await expect(unitHeading(page, "L8·n6321")).toBeVisible();
   await expect(search).toHaveAttribute("aria-expanded", "false");
   await expect(matches).toHaveCount(0);
-  await expect(search).toHaveValue("owl");
+  await expect(search).toHaveValue("miami");
   expect(await lit(page)).toBe(2);
 
   // Clearing it puts the map back.
@@ -291,7 +294,7 @@ test("the rail draws a unit's connections, in three views", async ({ page }) => 
   const href = (await row.getAttribute("href"))!;
   await row.click();
   // A neuron outside its layer's easiest opens with every neuron listed.
-  await expect(page).toHaveURL(new RegExp(`${href}(\\?all)?$`));
+  await expect(page).toHaveURL(new RegExp(`${href.replace("?all", "")}(\\?all)?$`));
 });
 
 test("a head's rail splits what drives it over its three inputs", async ({ page }) => {

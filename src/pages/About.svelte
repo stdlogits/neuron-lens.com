@@ -26,7 +26,7 @@
     { value: formatCount(heads), label: "heads" },
     { value: "15 million", label: "tokens of text" },
     { value: "50,000", label: "images" },
-    { value: "47,000", label: "sounds" },
+    { value: "50,000", label: "sounds" },
   ];
 
   $effect(() => { document.title = "About · Neuron Lens"; });

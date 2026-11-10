@@ -12,7 +12,9 @@
     let frame = 0;
     const look = () => {
       frame = 0;
-      const seen = baskets.find((basket) => {
+      // At the page's end the last basket is the one in view, even if it is too short to reach the top.
+      const atEnd = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+      const seen = atEnd ? baskets.at(-1) : baskets.find((basket) => {
         const box = document.getElementById(basket.value)?.getBoundingClientRect();
         return box && box.bottom > 64 && box.top < window.innerHeight * 0.45;
       });
