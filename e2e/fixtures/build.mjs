@@ -26,9 +26,10 @@ const target = resolve(here, "catalog");
 /** easiest: layer -> how many of its easiest neurons; neurons: [layer, neuron] deep links; heads: layer -> how many, plus named ones. */
 const KEEP = {
   // Each also keeps the About page's specimens (src/pages/about/specimens.ts): the owl neuron and the
-  // British-spellings head of Qwen3-8B; Gemma 4's Apple neuron, groups head and induction head.
-  "qwen3-8b": { easiest: { 8: 6 }, neurons: [[8, 344]], allTop: 2, heads: { 20: { top: 4, named: [17] }, 31: { top: 0, named: [0] } } },
-  "gemma-4-12b": { easiest: { 23: 4 }, neurons: [[33, 12225], [14, 8313]], allTop: 2, heads: { 27: { top: 0, named: [4] }, 28: { top: 4, named: [6] }, 35: { top: 1, named: [14] } } },
+  // British-spellings head of Qwen3-8B; Gemma 4's Apple neuron, groups head and induction head. And the
+  // units the specs name, whatever their rank: "miami" in n3908 and n6321, 罚款 in n6321, n9658's sounds.
+  "qwen3-8b": { easiest: { 8: 6 }, neurons: [[8, 344], [8, 3908], [8, 6321]], allTop: 2, heads: { 20: { top: 4, named: [17] }, 31: { top: 0, named: [0] } } },
+  "gemma-4-12b": { easiest: { 23: 4 }, neurons: [[33, 12225], [14, 8313], [23, 9658]], allTop: 2, heads: { 27: { top: 0, named: [4] }, 28: { top: 4, named: [6] }, 35: { top: 1, named: [14] } } },
 };
 
 const pad = (value, width = 2) => String(value).padStart(width, "0");

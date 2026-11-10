@@ -115,7 +115,7 @@ test("a Gemma neuron shows its images from the media pack", async ({ page }) => 
 const easiest = (index: CatalogIndex, layer: number) => index.neurons.filter((row) => row[0] === layer).sort((a, b) => b[4] - a[4]).map((row) => row[1]);
 const atlas = (page: Page) => page.getByRole("slider", { name: "Layer" });
 // A bar is an <i> in its layer's column with no role of its own, so it is found by structure: the
-// columns run in layer order, each from its most readable unit down. --o is how lit it is (1 is lit).
+// columns run in layer order, each from the labeller's surest unit down. --o is how lit it is (1 is lit).
 const bars = (page: Page) => atlas(page).locator(".stack i");
 const lit = (page: Page) => bars(page).evaluateAll((list) => list.filter((bar) => Number((bar as HTMLElement).style.getPropertyValue("--o")) === 1).length);
 const place = (page: Page, at: number, of: number) => page.getByText(`${at} of ${of}`, { exact: true });
@@ -169,20 +169,21 @@ test("choosing a bar opens that unit, and j and k step on from it", async ({ pag
   await expect(unitHeading(page, `L8·n${order[0]}`)).toBeVisible();
   await expect(bars(page)).toHaveCount(order.length);
   await atlas(page).scrollIntoViewIfNeeded();
-  const bar = (await bars(page).nth(5).boundingBox())!;
+  const last = order.length - 1;
+  const bar = (await bars(page).nth(last - 1).boundingBox())!;
   await page.mouse.click(bar.x + bar.width / 2, bar.y + bar.height / 2);
-  await at(5);
+  await at(last - 1);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 
   // j and k move the choice down and up the list, and wrap at its ends.
   await page.keyboard.press("j");
-  await at(6);
+  await at(last);
   await page.keyboard.press("j");
   await at(0);
   await page.keyboard.press("k");
-  await at(6);
+  await at(last);
   await page.keyboard.press("k");
-  await at(5);
+  await at(last - 1);
 
   // The choice was one history entry; stepping with j and k replaced it.
   await page.goBack();

@@ -49,7 +49,7 @@ Qwen3-8B unless stated; numbers are medians over a layer's poles. The research R
 Every view of the explorer is a path:
 
 - `/qwen3-8b`, `/gemma-4-12b`: a model's atlas of layers (`/` is Qwen3-8B)
-- `/qwen3-8b/L8`: a layer's neurons, easiest to read first (`?all` lists every neuron of the layer)
+- `/qwen3-8b/L8`: a layer's neurons, those the labeller was surest of first (`?all` lists every neuron of the layer)
 - `/qwen3-8b/L8/n344`: one neuron, here layer 8, neuron 344 of Qwen3-8B, which fires on "owl" and writes toward owls and night
 - `/gemma-4-12b/heads`, `/gemma-4-12b/L27/heads`: a model's or a layer's attention heads
 - `/gemma-4-12b/L27/h4`: one head, here layer 27, head 4 of Gemma 4 12B, which at a word for a group ("both", "respectively") looks back at the members just named

@@ -58,7 +58,7 @@
   </div>
   <div class="atlas" id="atlas"></div>
   <script>
-    // columns: per layer, each bar's opacity, most readable first; here: the layer and bar to mark.
+    // columns: per layer, each bar's opacity, the labeller's surest first; here: the layer and bar to mark.
     window.draw = ({ columns, here }) => {
       const atlas = document.getElementById("atlas");
       columns.forEach((bars, L) => {

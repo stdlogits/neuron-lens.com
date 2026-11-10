@@ -8,8 +8,8 @@
   import { depthColor } from "../lib/models";
   import { theme } from "../lib/theme";
 
-  // The map of every layer: a column a layer, a short bar a unit, the most readable at the top, each
-  // shaded by how readable it is. Neurons (the easiest 40 a layer) and heads share one look; All mode
+  // The map of every layer: a column a layer, a short bar a unit, the labeller's surest at the top, each
+  // shaded by how sure the labeller was of it. Neurons (the easiest 40 a layer) and heads share one look; All mode
   // draws every neuron of a layer instead, a cell each in neuron order, on a canvas. Click a bar to open its unit, a column to open its layer;
   // press and drag to scrub through layers. As a slider: ←/→ layer, ↑/↓ unit, Enter opens.
   const lens = useLens();
@@ -27,7 +27,7 @@
   const last = $derived(lens.model.layers - 1);
   const indexReady = $derived(lens.index?.id === lens.modelId);
   const headsReady = $derived(lens.heads?.length === lens.model.layers * lens.model.heads);
-  /** All mode: each readability byte's shade, once every layer's scores are in. */
+  /** All mode: each confidence byte's shade, once every layer's scores are in. */
   const byteShade = $derived<Uint8Array | null>(lens.scores?.length === lens.model.layers ? byteShades(lens.scores) : null);
   // All mode shows the easiest neurons until every layer's scores are in, then crossfades.
   const mode = $derived<"heads" | "all" | "easiest">(lens.unit === "heads" ? "heads" : lens.all && byteShade ? "all" : "easiest");

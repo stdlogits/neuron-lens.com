@@ -1,7 +1,8 @@
 // How the atlas shades and places its units. A unit takes one of ten opacities by its rank among
 // every unit of its kind in the model, ten equal shares, so each shade is used as often as the others
-// and the map shows where in depth the readable units gather. All mode draws every neuron of a layer
-// as a cell of its column, in neuron order.
+// and the map shows where in depth the labeller was surest. A unit's score is the labeller's
+// confidence alone (the builder's `pole_score`): no test of a read enters it. All mode draws every
+// neuron of a layer as a cell of its column, in neuron order.
 
 /** The ten opacities, faintest to fullest. */
 export const SHADES = [0.1, 0.16, 0.24, 0.32, 0.42, 0.52, 0.62, 0.74, 0.86, 1];
@@ -21,7 +22,7 @@ export function shadeScale(scores: number[]): (score: number) => number {
   };
 }
 
-/** Each readability byte's shade (0–9), by its rank among every neuron of the model. */
+/** Each confidence byte's shade (0–9), by its rank among every neuron of the model. */
 export function byteShades(scores: Uint8Array[]): Uint8Array {
   const counts = new Float64Array(256);
   let total = 0;

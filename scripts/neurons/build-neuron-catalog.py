@@ -21,13 +21,13 @@ pole's image and sound evidence.
 Output, JSON unless named otherwise:
 
 - ``index.json``: the model, layer metadata (with the reads each layer's units list) and the curated
-  "easiest" neurons, chosen by legibility and label confidence;
+  "easiest" neurons, the ones the labeller was surest of;
 - ``neurons/L<layer>/index.json``: every neuron's titles, score and flags;
 - ``neurons/L<layer>/graph.bin``: a fixed-width record per pole (``WIRE``; + poles first, then − poles), read by
   HTTP range: its title, where its neuron's detail is, and its connections;
 - ``neurons/L<layer>/units-<pack>.bin``: every neuron's detail as deflated JSON, end to end, read by HTTP range
   from where its ``graph.bin`` records say;
-- ``scores.json``: every neuron's readability as a byte, base64 per layer (the All view's texture);
+- ``scores.json``: how sure the labeller was of every neuron, as a byte, base64 per layer (the All view's texture);
 - ``heads/index.json``: every head's labels, roles and pattern; ``heads/L<layer>.json``: details;
   ``heads/graph.bin``: a ``HEAD_WIRE`` record per head, layer-major (its title, what drives it through its value, query
   and key, what fires with it and what it drives);
@@ -91,7 +91,7 @@ DOC_BLOCK = 2048
 K = 16  # connections a unit keeps per relation (the catalog keeps 64, findings §17)
 PACK = 20 * 2**20  # a units pack's size at most: Pages caps a file at 25 MiB
 HUB = 0.03  # a raw read's token in this share of the layer's top 64s is a hub (neuron-lens §6)
-Q = 0.05  # a legibility test passes at this q-value
+Q = 0.05  # a read's test passes at this q-value
 CROSS = 0.95  # a cross-modal rank past this passes (findings §15)
 NEURON_READS = ["read_S", "read_S_z", "read_R", "read_R_z", "write_S", "write_S_z", "write_R", "write_R_z"]
 HEAD_READS = ["ov_R", "ov_R_z", "ov_R_neg", "ov_R_neg_z", "ov_S", "ov_S_z", "ov_S_neg", "ov_S_neg_z",
@@ -499,7 +499,6 @@ def neuron_layer(L):
     cur_mode = np.nan_to_num(col(legible, "cur_mode").astype(float))
     next_mode = np.nan_to_num(col(legible, "next_mode").astype(float))
     q = {s: np.nan_to_num(col(legible, f"{s}_q").astype(float), nan=1.0) for s in NEURON_SIDES}
-    passed = sum((q[s] <= Q).astype(int) for s in NEURON_SIDES)
     detector = (cur_mode >= 1 / 3) | (next_mode >= 1 / 3)
     if labels is not None:
         fires, writes, note = (labels.column(c).to_pylist() for c in ("fires", "writes", "note"))
@@ -508,15 +507,9 @@ def neuron_layer(L):
     else:
         fires, writes, note = [""] * n, [""] * n, [""] * n
         fc, wc = np.zeros(n), np.zeros(n)
-    # A reliable image or sound label is a read that holds too, weighted by its held-out AUROC.
-    media_read = np.zeros(n)
-    for rows in media.values():
-        if rows:
-            media_read = np.maximum(media_read, [float(m["auroc"] or 0) if m["reliable"] else 0.0 for m in rows])
-
-    # Easiest to read: tests that hold at the pole's own top firings, then Haiku's confidence.
-    pole_score = np.where(silent, -1.0, 1.2 * np.minimum(passed, 3) + 3.0 * np.maximum(fc, wc) + 1.0 * np.minimum(fc, wc)
-                          + 0.8 * detector + 1.0 * media_read)
+    # Easiest to read: how sure the labeller was, of the pole's title label first, then of its other label.
+    # Nothing here comes from the read tests: a miss doesn't make a read wrong.
+    pole_score = np.where(silent, -1.0, np.maximum(fc, wc) + np.minimum(fc, wc) / 3)
     plus, minus = pole_score[:MLP], pole_score[MLP:]
     neuron_score = np.maximum(plus, minus) + 0.25 * np.minimum(plus, minus)
 
@@ -570,7 +563,7 @@ def neuron_layer(L):
              "legible": {s: round(float(q[s][i]), 3) for s in NEURON_SIDES},
              "silent": bool(silent[i]),
              "detector": "token" if cur_mode[i] >= 1 / 3 else "next" if next_mode[i] >= 1 / 3 else None,
-             "score": round(float(max(pole_score[i], 0)), 2)}
+             "score": round(float(max(pole_score[i], 0)), 3)}
         if flow is not None:
             # Tokens the weights or a measurement also name are marked: nothing here reached the labeller.
             p["stream"] = lists_of(stream_header, i, every, meas)
@@ -638,7 +631,7 @@ def neuron_layer(L):
                  | (FLAG_SUPPRESSES if any((p.get("shape") or {}).get("kind") == "suppresses" for p in poles) else 0)
                  | (FLAG_PLUS_WRITES if wp else 0) | (FLAG_MINUS_WRITES if wm else 0)
                  | media_flags(poles))
-        rows.append([nrn, tp, tm, round(float(max(neuron_score[nrn], 0)), 1), flags, int(round(cp * 100)), int(round(cm * 100))])
+        rows.append([nrn, tp, tm, round(float(max(neuron_score[nrn], 0)), 3), flags, int(round(cp * 100)), int(round(cm * 100))])
         for i, (text, is_writes, conf) in ((i_plus, (tp, wp, cp)), (i_minus, (tm, wm, cm))):
             wires[i]["title"] = utf8_fit(text, 110)
             wires[i]["conf"] = int(round(conf * 100))
@@ -659,7 +652,7 @@ def neuron_layer(L):
         curated.append({"row": [L, *rows[nrn]], "search": searches})
     meta = {"layer": L, "band": band(L), "count": len(chosen), "reads": header, "orth": orth_header, "stream": stream_header,
             "stats": {"silent": round(float(silent.mean()), 4), "detector": round(float((detector & ~silent).mean()), 4),
-                      "legible": round(float(((passed > 0) & ~silent).mean()), 4)}}
+                      "conf": round(float(np.maximum(fc, wc).mean()), 4)}}
     for m, rows_m in media.items():
         if rows_m:
             meta["stats"][m] = round(float(np.mean([x["reliable"] for x in rows_m])), 4)
@@ -723,8 +716,7 @@ def heads():
         B = B or {"fires": "", "fires_conf": 0, "attends": "", "attends_conf": 0, "writes": "", "writes_conf": 0, "note": ""}
         conf = [float(B["fires_conf"] or 0), float(B["attends_conf"] or 0), float(B["writes_conf"] or 0)]
         modes = [float(G["cur_mode"] or 0), float(G["src_mode"] or 0)]
-        score = (2.0 * (q(G, f"ov_R_{test}") <= Q) + 1.5 * (q(G, f"ov_copy_{test}") <= Q) + 1.0 * bool(G["pattern"])
-                 + 0.8 * (max(modes) >= 1 / 3) + 3.0 * max(conf) + 1.0 * sum(conf) / 3)
+        score = max(conf) + sum(conf) / 9  # how sure the labeller was: its surest label, then all three
         pattern = [round(A[k], 3) for k in ("sink", "prev", "self", "induction", "duplicate")]
         peaks = parse_counts(A["peak_tokens"], 6)
         detail = {
@@ -742,12 +734,12 @@ def heads():
             "keys": drivers_of(drv["keys"][0][i], drv["keys"][1][i]),
             "peaks": peaks, "sources": parse_counts(A["src_tokens"], 6), "contexts": contexts_of(A["contexts"]),
             "legible": {k: round(q(G, f"{k}_{test}"), 3) for k in ("ov_R", "ov_copy", "ov_S", "qk_S")},
-            "modes": [round(m, 3) for m in modes], "score": round(score, 2)}
+            "modes": [round(m, 3) for m in modes], "score": round(score, 3)}
         if hm:
             detail["media"] = hm
         details[L].append(detail)
         rows.append([L, h, int(A["kv_head"]), shorten(B["fires"], 72), shorten(B["attends"], 72), shorten(B["writes"], 72),
-                     *[int(round(c * 100)) for c in conf], roles, round(score, 1), pattern])
+                     *[int(round(c * 100)) for c in conf], roles, round(score, 3), pattern])
         search.append(search_weights(header, rd, peaks, [B["fires"], B["attends"], B["writes"]]))
     os.makedirs(f"{out}/heads", exist_ok=True)
     wires = blank_wires(n, HEAD_WIRE, HEAD_RELATIONS)

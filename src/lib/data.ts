@@ -144,7 +144,8 @@ export interface LayerMeta {
   missing?: boolean;
   global?: boolean;
   count?: number;
-  stats?: { silent: number; detector: number; legible: number; image?: number; audio?: number };
+  /** Shares of its poles, and `conf` the labeller's mean confidence in their title labels. */
+  stats?: { silent: number; detector: number; conf: number; image?: number; audio?: number };
   /** The reads every neuron of the layer lists, in order. */
   reads?: ReadInfo[];
   orth?: ReadInfo[];
@@ -166,7 +167,7 @@ export interface CatalogIndex {
   /** Connections each record keeps per relation. */
   connections: number;
   layerMeta: LayerMeta[];
-  /** The easiest neurons to read, by legibility and label confidence. */
+  /** The easiest neurons to read: the ones the labeller was surest of. */
   neurons: IndexRow[];
 }
 

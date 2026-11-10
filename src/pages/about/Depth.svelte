@@ -4,8 +4,8 @@
   import { loadIndex, percent, type LayerMeta } from "../../lib/data";
   import { MODELS, MODEL_ORDER, bandOf, bandRange, depthColor, type ModelId } from "../../lib/models";
 
-  // The depth ramp itself: one bar a layer, coloured by depth and as tall as the share of its neurons'
-  // sides with a weight-only read that names its target, grouped into the model's bands. Pointing at a layer (or
+  // The depth ramp itself: one bar a layer, coloured by depth and as tall as the labeller's mean
+  // confidence in its neurons' labels, grouped into the model's bands. Pointing at a layer (or
   // choosing a band below) slides the band's wash under it and says what reading there is like.
   // The bars are pointer shortcuts into the explorer; keyboards go by the band tabs and their link.
   let modelId = $state<ModelId>("qwen3-8b");
@@ -66,7 +66,7 @@
             {#each model.bands as b (b.key)}<span class="span" class:on={b.key === band.key} style:grid-column="{b.first + 1} / {b.last + 2}"></span>{/each}
             {#each layers[modelId] ?? [] as meta (meta.layer)}
               {@const inBand = bandOf(model, meta.layer).key === band.key}
-              {@const share = meta.stats?.legible ?? 0}
+              {@const conf = meta.stats?.conf ?? 0}
               <a
                 class="col"
                 class:in={inBand}
@@ -74,11 +74,11 @@
                 tabindex="-1"
                 style:grid-column={meta.layer + 1}
                 style:--c={depthColor(model, meta.layer)}
-                style:--h={share}
+                style:--h={conf}
                 style:--d="{meta.layer * 16}ms"
-                aria-label="Layer {meta.layer}: {percent(share)} named by a weight-only read"
+                aria-label="Layer {meta.layer}: the labeller {percent(conf)} sure on average"
                 data-tip-title="Layer {meta.layer}"
-                data-tip="{percent(share)} of its neurons' sides have a weight-only read that names their firing token, exact drivers or next token"
+                data-tip="How sure the labeller was of its neurons' labels, on average: {percent(conf)}"
                 onpointerenter={() => choose(bandOf(model, meta.layer).key)}
               ><i></i></a>
             {/each}

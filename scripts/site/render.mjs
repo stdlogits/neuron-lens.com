@@ -18,7 +18,7 @@ const at = (path) => resolve(root, path);
 const SHADES = [0.1, 0.16, 0.24, 0.32, 0.42, 0.52, 0.62, 0.74, 0.86, 1];
 const UNIT = { layer: 8, n: 344 };
 
-/** Qwen3-8B's atlas: each layer's easiest neurons, most readable first, shaded by rank in the model. */
+/** Qwen3-8B's atlas: each layer's easiest neurons, the labeller's surest first, shaded by rank in the model. */
 async function atlas() {
   const index = JSON.parse(await readFile(at("public/data/qwen3-8b/index.json"), "utf8"));
   const scores = Float64Array.from(index.neurons.map((row) => row[4])).sort();
