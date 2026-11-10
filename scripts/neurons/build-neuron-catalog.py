@@ -387,7 +387,7 @@ def table_or_none(path, columns=None):
 
 # ---------- Gemma 4's images and sounds
 
-MEDIA_COLS = ["label", "label_z", "labels_str", "sig", "stable", "auroc_heldout", "top_docs", "top_vals",
+MEDIA_COLS = ["label", "label_z", "labels_str", "sig", "stable", "auroc_heldout", "top_doc", "top_val",
               "text_fire_rank", "text_read_rank", "text_write_rank", "write_R_ids", "write_R_z_ids"]
 
 
@@ -431,7 +431,7 @@ def media_layer(L, modality, opt):
         m = {"label": r["label"], "z": num(r["label_z"] * r["pole"]), "auroc": num(r["auroc_heldout"]),
              "reliable": bool(r["sig"] and r["stable"]),
              "labels": [x.strip() for x in (r["labels_str"] or "").split(" | ") if x.strip()][:6],
-             "top": [[int(d), num(v)] for d, v in zip(r["top_docs"][:8], r["top_vals"][:8])],
+             "top": [[int(d), num(v)] for d, v in zip(r["top_doc"][:8], r["top_val"][:8])],
              "write": encoded(raw), "writeZ": encoded(merged([int(x) for x in wz_ids[i]], skip=frozenset(k for _, _, k in raw), limit=12)),
              "ranks": ranks if any(x is not None for x in ranks) else None}
         o = opt.get((L, r["neuron"], r["pole"]))

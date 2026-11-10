@@ -1,5 +1,5 @@
 // Serves the mock catalog (e2e/fixtures/catalog, cut by build.mjs) in place of /data, the way Cloudflare
-// Pages serves the real one: JSON by path, media packs by HTTP range (206), anything else 404.
+// Pages serves the real one: JSON by path, graph records and packs by HTTP range (206), anything else 404.
 // JavaScript rather than TypeScript: the project has no Node types, and this reads files.
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -42,6 +42,47 @@ function madeUpScores(model) {
   return pending;
 }
 
+/** A pole's or head's record when the mock doesn't keep it: no title, no detail, no links.
+ * @param {number} wire
+ * @returns {Buffer} */
+function blankRecord(wire) {
+  const record = Buffer.alloc(wire);
+  const firstLink = 128;
+  for (let at = firstLink; at < wire; at += 6) record.writeUInt32LE(0xffffffff, at);
+  return record;
+}
+
+/** The records the mock keeps of one graph.bin: none, for a layer it doesn't keep.
+ * @type {Map<string, Promise<Record<string, string>>>} */
+const graphs = new Map();
+/** @param {string} path */
+function keptRecords(path) {
+  let pending = graphs.get(path);
+  if (!pending) {
+    pending = fixture(path.replace(/graph\.bin$/, "graph.json")).then((/** @type {{ records: Record<string, string> }} */ file) => file.records, () => ({}));
+    graphs.set(path, pending);
+  }
+  return pending;
+}
+
+/** A graph.bin record: the one graph.json keeps, or a blank.
+ * @param {import("@playwright/test").Route} route
+ * @param {string} path */
+async function answerGraph(route, path) {
+  const range = /^bytes=(\d+)-(\d+)$/.exec(route.request().headers()["range"] ?? "");
+  if (!range) return route.fulfill({ status: 400 });
+  const [start, end] = [Number(range[1]), Number(range[2])];
+  const wire = end - start + 1;
+  const records = await keptRecords(path);
+  const kept = records[Math.floor(start / wire)];
+  return route.fulfill({
+    status: 206,
+    contentType: "application/octet-stream",
+    headers: { "content-range": `bytes ${start}-${end}/*`, "accept-ranges": "bytes" },
+    body: kept ? Buffer.from(kept, "base64") : blankRecord(wire),
+  });
+}
+
 /** @param {import("@playwright/test").Route} route */
 async function answer(route) {
   const url = new URL(route.request().url());
@@ -49,6 +90,8 @@ async function answer(route) {
   if (path.includes("..")) return route.fulfill({ status: 400 });
   const [model, ...rest] = path.split("/");
   if (rest.join("/") === "scores.json") return route.fulfill({ status: 200, contentType: "application/json", body: await madeUpScores(model) });
+
+  if (path.endsWith("/graph.bin")) return answerGraph(route, path);
 
   let body;
   try {

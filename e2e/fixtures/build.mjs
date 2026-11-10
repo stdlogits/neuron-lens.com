@@ -10,11 +10,14 @@
 // unit or token, and media documents are renumbered into one block. Media bytes are made up (a 1 × 1
 // WebP, two frames of silent MP3, one copy for each shown document, since the page keys a tile by
 // where its bytes are) so no collection's images or sounds are copied into the repository.
-// scores.json isn't written: one byte per neuron is ~1 MB a model, so catalog.ts makes it up.
+// scores.json isn't written: one byte per neuron is ~1 MB a model, so catalog.mjs makes it up. Nor is
+// graph.bin, a fixed-width record for every pole (tens of MB): graph.json keeps the kept units' records,
+// and catalog.mjs answers for any other with a blank one. Their detail goes in one small units pack.
 
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { deflateSync, inflateSync } from "node:zlib";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const source = resolve(process.argv[2] ?? resolve(here, "../../public/data"));
@@ -30,6 +33,7 @@ const KEEP = {
 
 const pad = (value, width = 2) => String(value).padStart(width, "0");
 const read = async (model, path) => JSON.parse(await readFile(resolve(source, model, path), "utf8"));
+const bytes = (model, path) => readFile(resolve(source, model, path));
 async function write(model, path, value) {
   const file = resolve(target, model, path);
   await mkdir(dirname(file), { recursive: true });
@@ -45,10 +49,13 @@ function silentMp3(frames = 2) {
 }
 const MEDIA_BYTES = { image: WEBP, audio: silentMp3() };
 
+/** The records of graph.json: record number -> its bytes. */
+const records = (wire, list) => ({ wire, records: Object.fromEntries(list.map(([at, record]) => [at, record.toString("base64")])) });
+
 async function cut(model) {
   const keep = KEEP[model];
   const index = await read(model, "index.json");
-  const { chunk, headsPerLayer: heads } = index;
+  const { headsPerLayer: heads, neuronsPerLayer: mlp, wire } = index;
 
   // ---------- which neurons
   const easiest = new Map(); // old index.neurons position -> row
@@ -81,26 +88,32 @@ async function cut(model) {
   const ids = new Set();
   const docs = { image: new Set(), audio: new Set() };
   const token = (t) => ids.add(typeof t === "number" ? t : t[0]);
-  const chunks = new Map(); // path -> file
+  const readLists = (pole) => [pole.reads, pole.orth, pole.stream ?? []];
+  const units = new Map(); // layer -> [{ neuron, plus record, minus record }]
   for (const [layer, wanted] of detailed) {
-    for (const c of new Set([...wanted].map((n) => Math.floor(n / chunk)))) {
-      const path = `neurons/L${pad(layer)}/c${pad(c, 3)}.json`;
-      const file = await read(model, path);
-      file.neurons = file.neurons.filter((neuron) => wanted.has(neuron.n));
-      for (const neuron of file.neurons) {
-        for (const pole of neuron.poles) {
-          for (const [, tokens] of pole.reads) tokens.forEach(token);
-          for (const [t] of pole.drivers) ids.add(t);
-          for (const [modality, media] of Object.entries(pole.media ?? {})) {
-            media.write.forEach(token);
-            media.writeZ.forEach(token);
-            for (const [doc] of media.top) docs[modality].add(doc);
-          }
+    const graph = await bytes(model, `neurons/L${pad(layer)}/graph.bin`);
+    const packs = new Map();
+    const kept = [];
+    for (const n of [...wanted].sort((a, b) => a - b)) {
+      const plus = Buffer.from(graph.subarray(n * wire, (n + 1) * wire));
+      const minus = Buffer.from(graph.subarray((n + mlp) * wire, (n + mlp + 1) * wire));
+      const [pack, offset, length] = [plus[2], plus.readUInt32LE(4), plus.readUInt32LE(8)];
+      if (!packs.has(pack)) packs.set(pack, await bytes(model, `neurons/L${pad(layer)}/units-${pad(pack)}.bin`));
+      const neuron = JSON.parse(inflateSync(packs.get(pack).subarray(offset, offset + length)).toString("utf8"));
+      for (const pole of neuron.poles) {
+        for (const list of readLists(pole)) for (const [, tokens] of list) tokens.forEach(token);
+        for (const [t] of pole.drivers) ids.add(t);
+        for (const [modality, media] of Object.entries(pole.media ?? {})) {
+          media.write.forEach(token);
+          media.writeZ.forEach(token);
+          for (const [doc] of media.top) docs[modality].add(doc);
         }
       }
-      chunks.set(path, file);
+      kept.push({ neuron, plus, minus });
     }
+    units.set(layer, kept);
   }
+  const headGraph = await bytes(model, "heads/graph.bin");
   const headRows = (await read(model, "heads/index.json")).heads;
   const keptHeads = new Set();
   const headFiles = new Map();
@@ -152,10 +165,16 @@ async function cut(model) {
   if (index.media.length) await write(model, "media/credits.json", await read(model, "media/credits.json"));
 
   // ---------- write
-  for (const [path, file] of chunks) {
-    for (const neuron of file.neurons) {
+  for (const [layer, kept] of units) {
+    const pack = [];
+    let at = 0;
+    const list = [];
+    for (const { neuron, plus, minus } of kept) {
       for (const pole of neuron.poles) {
-        pole.reads = pole.reads.map(([pct, tokens]) => [pct, tokens.map(retoken)]);
+        const relist = (reads) => reads.map(([pct, tokens]) => [pct, tokens.map(retoken)]);
+        pole.reads = relist(pole.reads);
+        pole.orth = relist(pole.orth);
+        if (pole.stream) pole.stream = relist(pole.stream);
         pole.drivers = pole.drivers.map(repair);
         for (const [modality, media] of Object.entries(pole.media ?? {})) {
           media.write = media.write.map(retoken);
@@ -163,9 +182,20 @@ async function cut(model) {
           media.top = media.top.map(([doc, act]) => [docNumber[modality].get(doc), act]);
         }
       }
+      const packed = deflateSync(JSON.stringify(neuron));
+      for (const record of [plus, minus]) {
+        record[2] = 0;
+        record.writeUInt32LE(at, 4);
+        record.writeUInt32LE(packed.length, 8);
+      }
+      list.push([neuron.n, plus], [neuron.n + mlp, minus]);
+      pack.push(packed);
+      at += packed.length;
     }
-    await write(model, path, file);
+    await write(model, `neurons/L${pad(layer)}/units-00.bin`, Buffer.concat(pack));
+    await write(model, `neurons/L${pad(layer)}/graph.json`, records(wire, list));
   }
+  await write(model, "heads/graph.json", records(wire, [...keptHeads].sort((a, b) => a - b).map((id) => [id, Buffer.from(headGraph.subarray(id * wire, (id + 1) * wire))])));
   for (const [path, file] of headFiles) {
     for (const head of file.heads) {
       head.reads = head.reads.map(([pct, tokens]) => [pct, tokens.map(retoken)]);
@@ -199,7 +229,7 @@ async function cut(model) {
   // terms.json: the kept tokens, and terms quoted in the kept labels.
   const terms = await read(model, "terms.json");
   const tokens = new Set(smallVocab.map((t) => t.trim()));
-  const labels = [...chunks.values()].flatMap((file) => file.neurons.flatMap((n) => n.poles.flatMap((p) => [p.label.fires, p.label.writes, p.label.note, ...p.peaks.map(([t]) => t)])))
+  const labels = [...units.values()].flat().flatMap(({ neuron }) => neuron.poles.flatMap((p) => [p.label.fires, p.label.writes, p.label.note, ...p.peaks.map(([t]) => t), ...p.next.map(([t]) => t)]))
     .concat([...headFiles.values()].flatMap((file) => file.heads.flatMap((h) => [h.label.fires, h.label.attends, h.label.writes, h.label.note, ...h.peaks.map(([t]) => t), ...h.sources.map(([t]) => t)])))
     .concat(positions.flatMap((i) => [easiest.get(i)[2], easiest.get(i)[3]]))
     .join("\n");

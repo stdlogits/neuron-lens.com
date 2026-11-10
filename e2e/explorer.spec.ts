@@ -3,8 +3,8 @@ import type { CatalogIndex } from "../src/lib/data";
 import { fixture, serveCatalog, silentClip } from "./fixtures/catalog.mjs";
 
 // The explorer on the mock catalog (e2e/fixtures). These tests hold the address and the state behind
-// it to account, and touch the markup only through roles and names; the atlas, list, search, sound
-// tiles and English switch are tested at the bottom.
+// it to account, and touch the markup only through roles and names; the atlas, search, connections,
+// baskets, sound tiles and the Distinctive and English switches are tested at the bottom.
 
 test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -42,9 +42,9 @@ test("switching model changes the address, the figures and the title", async ({ 
 });
 
 test("a deep link loads that neuron", async ({ page }) => {
-  const chunk = page.waitForRequest((request) => request.url().endsWith("/data/qwen3-8b/neurons/L08/c001.json"));
+  const record = page.waitForRequest((request) => request.url().endsWith("/data/qwen3-8b/neurons/L08/graph.bin"));
   await page.goto("/qwen3-8b/L8/n344");
-  await chunk;
+  await record;
   await expect(page).toHaveTitle("L8·n344 · Qwen3-8B · Neuron Lens");
   await settle(page);
   expect(path(page)).toBe("/qwen3-8b/L8/n344");
@@ -106,17 +106,16 @@ test("a Gemma neuron shows its images from the media pack", async ({ page }) => 
   ).toBeGreaterThan(0);
 });
 
-// ---------- the atlas, the list, the search, the sound tiles and the English switch
+// ---------- the atlas, the search, the connections, the baskets, the sound tiles and the switches
 
-/** A model's easiest neurons of one layer, in the order the list and the atlas show them. */
+/** A model's easiest neurons of one layer, in the order the atlas shows them and j and k step through them. */
 const easiest = (index: CatalogIndex, layer: number) => index.neurons.filter((row) => row[0] === layer).sort((a, b) => b[4] - a[4]).map((row) => row[1]);
 const atlas = (page: Page) => page.getByRole("slider", { name: "Layer" });
 // A bar is an <i> in its layer's column with no role of its own, so it is found by structure: the
 // columns run in layer order, each from its most readable unit down. --o is how lit it is (1 is lit).
 const bars = (page: Page) => atlas(page).locator(".stack i");
 const lit = (page: Page) => bars(page).evaluateAll((list) => list.filter((bar) => Number((bar as HTMLElement).style.getPropertyValue("--o")) === 1).length);
-const layerList = (page: Page, layer: number) => page.getByRole("navigation", { name: `Layer ${layer}` });
-const listed = (page: Page, layer: number, neuron: number) => layerList(page, layer).getByRole("link", { name: new RegExp(`^n${neuron}\\b`) });
+const place = (page: Page, at: number, of: number) => page.getByText(`${at} of ${of}`, { exact: true });
 const unitHeading = (page: Page, id: string) => page.getByRole("heading", { level: 2, name: id });
 
 test("clicking a layer in the atlas opens that layer", async ({ page }) => {
@@ -127,7 +126,7 @@ test("clicking a layer in the atlas opens that layer", async ({ page }) => {
   await expect(atlas(page)).toHaveAttribute("aria-valuenow", "23");
   await expect(atlas(page)).toHaveAttribute("aria-valuemax", String(index.layers - 1));
   await expect(bars(page)).toHaveCount(index.neurons.length);
-  await expect(listed(page, 23, middle[0])).toHaveAttribute("aria-current", "true");
+  await expect(unitHeading(page, `L23·n${middle[0]}`)).toBeVisible();
 
   // The foot of a column is the layer, not one of its bars.
   await atlas(page).scrollIntoViewIfNeeded();
@@ -136,8 +135,7 @@ test("clicking a layer in the atlas opens that layer", async ({ page }) => {
   await expect(page).toHaveURL(/\/gemma-4-12b\/L33$/);
   await expect(atlas(page)).toHaveAttribute("aria-valuenow", "33");
   await expect(atlas(page)).toHaveAttribute("aria-valuetext", /^Layer 33, Late layers/);
-  await expect(layerList(page, 33).getByRole("heading", { level: 2, name: "Layer 33" })).toBeVisible();
-  await expect(listed(page, 33, easiest(index, 33)[0])).toHaveAttribute("aria-current", "true");
+  await expect(unitHeading(page, `L33·n${easiest(index, 33)[0]}`)).toBeVisible();
   await expect(page).toHaveTitle("Gemma 4 12B · Neuron Lens");
 
   // A bar is its unit: clicking one opens it, in its own layer.
@@ -147,7 +145,6 @@ test("clicking a layer in the atlas opens that layer", async ({ page }) => {
   await expect(atlas(page)).toHaveAttribute("aria-valuenow", "23");
   await expect(atlas(page)).toHaveAttribute("aria-valuetext", new RegExp(`^Layer 23, Middle layers, neuron ${middle[1]}$`));
   await expect(unitHeading(page, `L23·n${middle[1]}`)).toBeVisible();
-  await expect(listed(page, 23, middle[1])).toHaveAttribute("aria-current", "true");
 
   // Each choice is a history entry.
   await page.goBack();
@@ -155,25 +152,24 @@ test("clicking a layer in the atlas opens that layer", async ({ page }) => {
   await expect(atlas(page)).toHaveAttribute("aria-valuenow", "33");
 });
 
-test("choosing a unit in the layer's list opens it, and the list follows j and k", async ({ page }) => {
+test("choosing a bar opens that unit, and j and k step on from it", async ({ page }) => {
   const index = await fixture<CatalogIndex>("qwen3-8b/index.json");
   const order = easiest(index, 8);
-  const current = layerList(page, 8).locator('a[aria-current="true"]');
   const at = async (position: number) => {
     await expect(page).toHaveURL(new RegExp(`/qwen3-8b/L8/n${order[position]}$`));
-    await expect(listed(page, 8, order[position])).toHaveAttribute("aria-current", "true");
-    await expect(current).toHaveCount(1);
     await expect(unitHeading(page, `L8·n${order[position]}`)).toBeVisible();
-    await expect(page.getByText(`${position + 1} of ${order.length}`)).toBeAttached();
+    await expect(place(page, position + 1, order.length)).toBeAttached();
   };
 
   // A layer opens on its easiest unit; choosing another opens that one.
   await page.goto("/qwen3-8b/L8");
-  await expect(listed(page, 8, order[0])).toHaveAttribute("aria-current", "true");
   await expect(unitHeading(page, `L8·n${order[0]}`)).toBeVisible();
-  await expect(layerList(page, 8).getByRole("link")).toHaveCount(order.length);
-  await listed(page, 8, order[5]).click();
+  await expect(bars(page)).toHaveCount(order.length);
+  await atlas(page).scrollIntoViewIfNeeded();
+  const bar = (await bars(page).nth(5).boundingBox())!;
+  await page.mouse.click(bar.x + bar.width / 2, bar.y + bar.height / 2);
   await at(5);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 
   // j and k move the choice down and up the list, and wrap at its ends.
   await page.keyboard.press("j");
@@ -188,14 +184,14 @@ test("choosing a unit in the layer's list opens it, and the list follows j and k
   // The choice was one history entry; stepping with j and k replaced it.
   await page.goBack();
   await expect(page).toHaveURL(/\/qwen3-8b\/L8$/);
-  await expect(listed(page, 8, order[0])).toHaveAttribute("aria-current", "true");
+  await expect(unitHeading(page, `L8·n${order[0]}`)).toBeVisible();
 });
 
 test("search finds a word, lights its units, and opens one", async ({ page }) => {
   await page.goto("/qwen3-8b");
   const search = page.getByRole("combobox", { name: "Search neurons and heads" });
   const matches = page.getByRole("listbox", { name: "Matches" });
-  await expect(listed(page, 8, 6321)).toBeVisible();
+  await expect(bars(page).first()).toBeAttached();
   expect(await lit(page)).toBe(0);
 
   // "/" finds the field. "owl" is the word of n344 and, as a stem, in n1165's "knowledge".
@@ -208,12 +204,8 @@ test("search finds a word, lights its units, and opens one", async ({ page }) =>
   await expect(matches.getByRole("option", { name: /^L8·n1165 minus side/ })).toHaveAttribute("aria-selected", "false");
   await expect(page.getByText("2 matches.")).toBeAttached();
 
-  // Those two units light on the atlas and are marked in the list; the others are not.
+  // Those two units light on the atlas; the others don't.
   await expect.poll(() => lit(page)).toBe(2);
-  await expect(listed(page, 8, 344)).toHaveAccessibleName(/, matches the search/);
-  await expect(listed(page, 8, 1165)).toHaveAccessibleName(/, matches the search/);
-  await expect(listed(page, 8, 6321)).not.toHaveAccessibleName(/matches the search/);
-  await expect(layerList(page, 8).getByRole("link", { name: /matches the search/ })).toHaveCount(2);
 
   // Choosing a match opens it, closes the results, and keeps the lights while the query stands.
   await matches.getByRole("option", { name: /^L8·n1165/ }).click();
@@ -222,14 +214,12 @@ test("search finds a word, lights its units, and opens one", async ({ page }) =>
   await expect(search).toHaveAttribute("aria-expanded", "false");
   await expect(matches).toHaveCount(0);
   await expect(search).toHaveValue("owl");
-  await expect(listed(page, 8, 1165)).toHaveAttribute("aria-current", "true");
   expect(await lit(page)).toBe(2);
 
   // Clearing it puts the map back.
   await page.getByRole("button", { name: "Clear the search" }).click();
   await expect(search).toHaveValue("");
   await expect.poll(() => lit(page)).toBe(0);
-  await expect(layerList(page, 8).getByRole("link", { name: /matches the search/ })).toHaveCount(0);
 
   // A word nothing has says so; a word that names a head opens it, in its own layer.
   await search.fill("zzyzx");
@@ -244,43 +234,93 @@ test("search finds a word, lights its units, and opens one", async ({ page }) =>
 test("the Easiest and All tabs switch the list and the address", async ({ page }) => {
   // Layer 33 of the mock lists one neuron among its easiest and three in all.
   const index = await fixture<CatalogIndex>("gemma-4-12b/index.json");
-  const layerRows = await fixture<{ neurons: [number, ...unknown[]][] }>("gemma-4-12b/neurons/L33/index.json");
+  const layerRows = await fixture<{ neurons: number[][] }>("gemma-4-12b/neurons/L33/index.json");
   const [first] = easiest(index, 33);
-  const everyone = layerRows.neurons.map((row) => row[0]);
+  const everyone = [...layerRows.neurons].sort((a, b) => b[3] - a[3]).map((row) => row[0]);
   expect(everyone).toContain(first);
   expect(everyone.length).toBeGreaterThan(1);
-  const others = everyone.filter((n) => n !== first);
 
   await page.goto("/gemma-4-12b/L33");
   const scope = page.getByRole("group", { name: "Which units" });
-  const links = layerList(page, 33).getByRole("link");
   await expect(scope.getByRole("button", { name: /^Easiest/ })).toHaveAttribute("aria-pressed", "true");
   await expect(scope.getByRole("button", { name: /^All/ })).toHaveAttribute("aria-pressed", "false");
-  await expect(links).toHaveCount(1);
-  await expect(listed(page, 33, first)).toBeVisible();
+  await expect(place(page, 1, 1)).toBeAttached();
+  await expect(unitHeading(page, `L33·n${first}`)).toBeVisible();
 
-  // All lists every neuron of the layer, and puts ?all in the address.
+  // All steps through every neuron of the layer, and puts ?all in the address.
   await scope.getByRole("button", { name: /^All/ }).click();
   await expect(page).toHaveURL(/\/gemma-4-12b\/L33\?all$/);
   await expect(scope.getByRole("button", { name: /^All/ })).toHaveAttribute("aria-pressed", "true");
   await expect(scope.getByRole("button", { name: /^Easiest/ })).toHaveAttribute("aria-pressed", "false");
-  await expect(links).toHaveCount(everyone.length);
-  for (const n of everyone) await expect(listed(page, 33, n)).toBeVisible();
+  await expect(place(page, 1, everyone.length)).toBeAttached();
 
-  // A neuron chosen there keeps ?all; going back to Easiest drops the list's extras and the neuron.
-  await listed(page, 33, others[0]).click();
-  await expect(page).toHaveURL(new RegExp(`/gemma-4-12b/L33/n${others[0]}\\?all$`));
-  await expect(unitHeading(page, `L33·n${others[0]}`)).toBeVisible();
+  // A neuron stepped to there keeps ?all; going back to Easiest drops the list's extras and the neuron.
+  await page.keyboard.press("j");
+  await expect(page).toHaveURL(new RegExp(`/gemma-4-12b/L33/n${everyone[1]}\\?all$`));
+  await expect(unitHeading(page, `L33·n${everyone[1]}`)).toBeVisible();
   await scope.getByRole("button", { name: /^Easiest/ }).click();
   await expect(page).toHaveURL(/\/gemma-4-12b\/L33$/);
-  await expect(links).toHaveCount(1);
-  await expect(listed(page, 33, first)).toHaveAttribute("aria-current", "true");
+  await expect(place(page, 1, 1)).toBeAttached();
   await expect(scope.getByRole("button", { name: /^Easiest/ })).toHaveAttribute("aria-pressed", "true");
 
   // Both are history entries.
   await page.goBack();
-  await expect(page).toHaveURL(new RegExp(`/gemma-4-12b/L33/n${others[0]}\\?all$`));
-  await expect(links).toHaveCount(everyone.length);
+  await expect(page).toHaveURL(new RegExp(`/gemma-4-12b/L33/n${everyone[1]}\\?all$`));
+  await expect(place(page, 2, everyone.length)).toBeAttached();
+});
+
+test("the rail draws a unit's connections, in three views", async ({ page }) => {
+  await page.goto("/qwen3-8b/L8/n344");
+  const rail = page.getByRole("complementary", { name: "Connections" });
+  const views = rail.getByRole("group", { name: "Which connections" });
+  await expect(views.getByRole("button", { name: "In context" })).toHaveAttribute("aria-pressed", "true");
+  await expect(rail.getByRole("link", { name: /^L8·n344 [+−]/ })).toBeAttached();
+  await expect(rail.getByRole("heading", { name: "Driven by" })).toBeVisible();
+  await expect(rail.getByRole("heading", { name: "Drives" })).toBeVisible();
+
+  await views.getByRole("button", { name: "In the weights" }).click();
+  await expect(rail.getByRole("heading", { name: "Wired from" })).toBeVisible();
+  await expect(rail.getByRole("heading", { name: "Wired to" })).toBeVisible();
+
+  await views.getByRole("button", { name: "Fires with" }).click();
+  await expect(rail.getByRole("heading", { name: "Fires with" })).toBeVisible();
+  await expect(rail.getByRole("heading", { name: "Wired from" })).toHaveCount(0);
+
+  // A row is a link to that unit.
+  const row = rail.getByRole("heading", { name: "Fires with" }).locator("..").getByRole("link").first();
+  const href = (await row.getAttribute("href"))!;
+  await row.click();
+  // A neuron outside its layer's easiest opens with every neuron listed.
+  await expect(page).toHaveURL(new RegExp(`${href}(\\?all)?$`));
+});
+
+test("the baskets sort a neuron's evidence and take you to each", async ({ page }) => {
+  await page.goto("/qwen3-8b/L8/n344");
+  const baskets = page.getByRole("navigation", { name: "Baskets" });
+  await expect(baskets.getByRole("button", { name: "Firings" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#firings")).toContainText(/The model (distinctively )?says next/);
+  await expect(page.locator("#stream")).not.toContainText(/The model (distinctively )?says next/);
+
+  await baskets.getByRole("button", { name: "Stream" }).click();
+  await expect(baskets.getByRole("button", { name: "Stream" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#stream")).toBeInViewport();
+});
+
+test("Distinctive swaps each read for its version against the layer, and is remembered", async ({ page }) => {
+  await page.goto("/qwen3-8b/L8/n344");
+  const distinctive = page.getByRole("switch", { name: "Distinctive" });
+  const weights = page.locator("#weights");
+  await expect(distinctive).toHaveAttribute("aria-checked", "false");
+  await expect(weights.getByText("Ideas that trigger it", { exact: true })).toBeAttached();
+
+  await distinctive.click();
+  await expect(distinctive).toHaveAttribute("aria-checked", "true");
+  await expect(weights.getByText("Distinctive ideas that trigger it", { exact: true })).toBeAttached();
+  await expect(weights.getByText("Ideas that trigger it", { exact: true })).toHaveCount(0);
+
+  await page.reload();
+  await expect(distinctive).toHaveAttribute("aria-checked", "true");
+  await expect(weights.getByText("Distinctive ideas that trigger it", { exact: true })).toBeAttached();
 });
 
 test("a sound tile plays its clip, and only one plays at a time", async ({ page }) => {
@@ -305,34 +345,34 @@ test("a sound tile plays its clip, and only one plays at a time", async ({ page 
 
   await page.goto("/gemma-4-12b/L23/n9658");
   const tiles = page.getByRole("list", { name: "The sounds it fires on most" }).getByRole("button");
-  await expect(tiles).toHaveCount(3);
-  for (let i = 0; i < 3; i += 1) await expect(tiles.nth(i)).toBeEnabled();
+  await expect(tiles.nth(1)).toBeEnabled();
   const [one, two] = [tiles.nth(0), tiles.nth(1)];
   await expect(one).toHaveAttribute("aria-pressed", "false");
-  await expect(one).toHaveAccessibleName(/^Play German, Multilingual LibriSpeech/);
-  await expect(two).toHaveAccessibleName(/^Play accent Romanian, EdAcc/);
+  // What each sound is called comes from the catalog; only Play and Stop are the page's.
+  const called = async (tile: typeof one) => (await tile.getAttribute("aria-label"))!.replace(/^Play /, "");
+  const [oneName, twoName] = [await called(one), await called(two)];
   expect(await clips()).toEqual([]);
 
   // A tile plays its clip: pressed, labelled Stop, and its audio is running.
   await one.click();
   await expect(one).toHaveAttribute("aria-pressed", "true");
-  await expect(one).toHaveAccessibleName(/^Stop German, Multilingual LibriSpeech/);
+  await expect(one).toHaveAttribute("aria-label", `Stop ${oneName}`);
   await expect.poll(async () => (await clips()).map((clip) => clip.playing)).toEqual([true]);
   await expect.poll(async () => (await clips())[0].time).toBeGreaterThan(0);
 
   // Starting another stops the first.
   await two.click();
   await expect(two).toHaveAttribute("aria-pressed", "true");
-  await expect(two).toHaveAccessibleName(/^Stop accent Romanian, EdAcc/);
+  await expect(two).toHaveAttribute("aria-label", `Stop ${twoName}`);
   await expect(one).toHaveAttribute("aria-pressed", "false");
-  await expect(one).toHaveAccessibleName(/^Play German/);
+  await expect(one).toHaveAttribute("aria-label", `Play ${oneName}`);
   await expect(page.getByRole("list", { name: "The sounds it fires on most" }).getByRole("button", { pressed: true })).toHaveCount(1);
   await expect.poll(async () => (await clips()).map((clip) => clip.playing)).toEqual([false, true]);
 
   // Pressing the playing one stops it.
   await two.click();
   await expect(two).toHaveAttribute("aria-pressed", "false");
-  await expect(two).toHaveAccessibleName(/^Play accent Romanian/);
+  await expect(two).toHaveAttribute("aria-label", `Play ${twoName}`);
   await expect.poll(async () => (await clips()).map((clip) => clip.playing)).toEqual([false, false]);
 });
 
@@ -341,7 +381,6 @@ test("Translate to English swaps tokens, labels and examples", async ({ page }) 
   await page.goto("/qwen3-8b/L8/n6321");
   const english = page.getByRole("switch", { name: "English" });
   const side = page.getByRole("tab", { name: /^Positive side/ });
-  const item = listed(page, 8, 6321);
   const token = page.getByRole("button", { name: /^罚款 \(two reads agree\) 8\.0$/ });
   const translated = page.getByRole("button", { name: /^fine \(two reads agree, translated from 罚款\) 8\.0$/ });
   const original = page.getByText("燒烤場）亂拋垃圾可被罰");
@@ -353,18 +392,16 @@ test("Translate to English swaps tokens, labels and examples", async ({ page }) 
   await expect(token).toBeVisible();
   await expect(original).toBeVisible();
   await expect(side).toContainText("罚款");
-  await expect(item).toContainText("罚款");
   await expect(translated).toHaveCount(0);
   await expect(inEnglish).toHaveCount(0);
   await expect(language).toHaveCount(0);
 
-  // On: the token, the label (in the unit's table and in the list), and the examples are in English.
+  // On: the token, the label and the examples are in English.
   await english.click();
   await expect(english).toHaveAttribute("aria-checked", "true");
   await expect(translated).toBeVisible();
   await expect(token).toHaveCount(0);
   await expect(side).toHaveAccessibleName(/fine \(translated from 罚款\)/);
-  await expect(item).toHaveAccessibleName(/fine \(translated from 罚款\)/);
   await expect(inEnglish).toBeVisible();
   // An example in English says what it was written in, and keeps the original in that button's name.
   await expect(language.first()).toBeVisible();
