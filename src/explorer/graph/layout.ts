@@ -10,17 +10,19 @@ export interface Layout { nodes: Placed[]; height: number }
 const SWEEPS = 4;
 export const GUTTER = 28;
 const MIN_STEP = 12;
-const ROOM = 22;
+// How much further the unit at the centre, with its ring, reaches toward the next row than a row's own marks do.
+const ROOM = 9;
 
-/** How far down the page a layer's rows sit. A head at the centre is the largest thing drawn, so its layer opens to give it a row of its own, and the layer's neurons line up under it as any layer's do. */
+// A layer is two rows: its heads, which write into its stream, then its neurons.
+const rowOf = (n: GraphNode) => n.layer * 2 + (n.kind === "head" ? 0 : 1);
+
+/** How far down the page a layer's rows sit: every row the same distance from the next, except that the unit at the centre opens its own by ROOM on each side, so what is next to it stands as clear as any row does. */
 export function rows(graph: Graph, height: number, layers: number) {
   const focus = graph.nodes.find((n) => n.side === "focus");
-  const opened = focus?.kind === "head" ? focus.layer : Infinity;
-  const band = (height - ROOM) / layers;
-  const neurons = (layer: number) => (layer + 0.62) * band + (layer >= opened ? ROOM : 0);
-  // A head writes into its own layer's stream, so it sits just above that layer's neurons.
-  const heads = (layer: number) => neurons(layer) - (layer === opened ? ROOM : 0.42 * band);
-  return { neurons, heads };
+  const opened = focus ? rowOf(focus) : Infinity;
+  const pitch = (height - 2 * ROOM) / (2 * layers);
+  const down = (row: number) => (row + 0.5) * pitch + (row < opened ? 0 : row === opened ? ROOM : 2 * ROOM);
+  return { neurons: (layer: number) => down(layer * 2 + 1), heads: (layer: number) => down(layer * 2) };
 }
 
 export function layout(graph: Graph, width: number, height: number, layers: number, was?: Map<string, number>): Layout {
@@ -30,8 +32,7 @@ export function layout(graph: Graph, width: number, height: number, layers: numb
   const centre = left + span / 2;
   const top = graph.nodes.reduce((max, n) => (n.side === "focus" ? max : Math.max(max, n.flow)), 1e-9);
 
-  // A layer's heads sit in a row just above its neurons, so each row is seated on its own.
-  const rowOf = (n: GraphNode) => n.layer * 2 + (n.kind === "head" ? 0 : 1);
+  // Each row is seated on its own.
   const byLayer = new Map<number, GraphNode[]>();
   for (const n of graph.nodes) byLayer.set(rowOf(n), [...(byLayer.get(rowOf(n)) ?? []), n]);
 
