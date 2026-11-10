@@ -329,6 +329,21 @@ test("the baskets sort a neuron's evidence and take you to each", async ({ page 
   await expect(page.locator("#stream")).toBeInViewport();
 });
 
+test("the baskets sort a head's evidence the same way", async ({ page }) => {
+  await page.goto("/qwen3-8b/L20/h17");
+  const baskets = page.getByRole("navigation", { name: "Baskets" });
+  await expect(baskets.getByRole("button", { name: "Firings" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#firings")).toContainText("Looked at");
+  await expect(page.locator("#firings")).toContainText("How often");
+  await expect(page.locator("#weights")).toContainText("How it attends");
+  await expect(page.locator("#weights")).not.toContainText("In real text");
+  await expect(page.locator("#stream")).toContainText("Pushes the model to say");
+
+  await baskets.getByRole("button", { name: "Weights" }).click();
+  await expect(baskets.getByRole("button", { name: "Weights" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#weights")).toBeInViewport();
+});
+
 test("Distinctive swaps each read for its version against the layer, and is remembered", async ({ page }) => {
   await page.goto("/qwen3-8b/L8/n344");
   const distinctive = page.getByRole("switch", { name: "Distinctive" });

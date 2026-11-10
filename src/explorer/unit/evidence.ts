@@ -17,6 +17,13 @@ export const sideReads = (reads: LensRead[], side: "input" | "output") => reads.
 /** The tip on every "From its weights". */
 export const WEIGHTS = "What each lens reads from its weights, in the order this depth trusts them";
 
+/** The tip on a unit's Weights basket. */
+export const WEIGHTS_BASKET = "What the lenses read from its weights alone, with no text run through the model";
+
+/** The tips on a head's "How it attends" and "Copying". */
+export const ATTENDING = "How its weights choose where to look, and how well that matches what it does";
+export const COPYING = "How much it copies, read from its weights and tested at its top firings";
+
 /** The tip on "Beyond what it reads". */
 export const ORTH = "What its write says with everything it reads taken out: what it adds of its own";
 
@@ -46,6 +53,14 @@ export function agreement(lists: string[][]): Set<string> {
   const seen = new Map<string, number>();
   for (const list of lists) for (const key of new Set(list.map(stem))) seen.set(key, (seen.get(key) ?? 0) + 1);
   return new Set([...seen].filter(([key, n]) => n > 1 && key !== "").map(([key]) => key));
+}
+
+/** The stems two of a head's lists name: two read families, or a read and what it does in real text. */
+export function headAgreement(head: HeadDetail): Set<string> {
+  const families = new Map<string, string[]>();
+  for (const read of head.reads) if (read.trust !== "weak") families.set(family(read.col), [...(families.get(family(read.col)) ?? []), ...read.tokens.map(([token]) => token)]);
+  const measured = [[...head.drivers, ...head.peaks], [...head.keys, ...head.sources], head.outRz].map((list) => list.map(([token]) => token));
+  return agreement([...families.values(), ...measured]);
 }
 
 /** "94th" */

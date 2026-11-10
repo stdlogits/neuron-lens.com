@@ -61,6 +61,7 @@ unit's view shows all of its evidence on one page, with nothing behind a "more" 
 baskets under a bar that stays in reach: Firings (its images and sounds, its firings, what it does in real text, what the model says next there,
 how often and how hard), Weights (every read the labeller saw, with its test, and what it adds
 beyond what it reads) and Stream (what the residual holds where it fires, which never reached the labeller).
+A head has the same three: Firings also holds what it attends to and its attention pattern, Weights its QK and OV reads with how it attends and copies, and Stream what its own output says where it fires.
 Each read shows its normal list, or with the Distinctive switch beside English its layer-contrastive (z) list; a
 normal list left with nothing once hub tokens are gone shows its distinctive list instead (most of Stream's early reads).
 Left is always what comes in and right what goes out. Beside them the rail holds its connections: a

@@ -1,16 +1,18 @@
 <script lang="ts">
   import { Context, Swap } from "@stdlogits/ledger";
   import NeuronMedia from "../media/NeuronMedia.svelte";
+  import Basket from "./Basket.svelte";
   import BasketBar from "./BasketBar.svelte";
   import Faces from "./Faces.svelte";
   import Facts from "./Facts.svelte";
   import Group from "./Group.svelte";
   import NeuronColumns from "./NeuronColumns.svelte";
   import RealText from "./RealText.svelte";
+  import RealTextGrid from "./RealTextGrid.svelte";
   import Stream from "./Stream.svelte";
   import { useLens } from "../lens.svelte";
   import type { NeuronDetail } from "../../lib/data";
-  import { neuronStrength, oftenFacts } from "./evidence";
+  import { WEIGHTS_BASKET, neuronStrength, oftenFacts } from "./evidence";
 
   // A neuron: its two sides as the rows of the faces table, then the chosen side's evidence in three
   // baskets. Firings: where and how it fires. Weights: what the lenses read of its wiring. Stream:
@@ -36,7 +38,6 @@
   })));
   const panel = $props.id();
   const FIRINGS = "What it does in real text: where this side fires, what the model says next there, and how often and how hard";
-  const WEIGHTS_BASKET = "What the lenses read from its weights alone, with no text run through the model";
   const STREAM = "What the residual stream holds where this side fires, before and after its layer. None of this reached the labeller.";
   const baskets = $derived([
     { value: "firings", label: "Firings", hint: FIRINGS },
@@ -52,29 +53,26 @@
   <div class="side" id={panel} role="tabpanel" aria-label={rows[side].name}>
     <Swap key={side}>
       <div class="stack">
-        <section id="firings" class="basket">
-          <h3 class="title" data-tip={FIRINGS}>Firings</h3>
+        <Basket id="firings" title="Firings" tip={FIRINGS}>
           <NeuronMedia {pole} {layer} neuron={detail.n} />
           <div class="fires">
             {#each pole.contexts as context, i (i)}<Context {context} {i} />{:else}<p class="meta none">No firings recorded</p>{/each}
           </div>
-          <div class="measured"><RealText {pole} /></div>
+          <RealTextGrid><RealText {pole} /></RealTextGrid>
           <div class="figures">
             <Group title="How often" tip="Share of tokens it fires on, in all text and in each kind"><Facts facts={oftenFacts(pole.act, "it fires on")} /></Group>
             <Group title="How hard" tip="How large its activation gets"><Facts facts={neuronStrength(pole)} /></Group>
           </div>
-        </section>
+        </Basket>
 
-        <section id="weights" class="basket">
-          <h3 class="title" data-tip={WEIGHTS_BASKET}>Weights</h3>
+        <Basket id="weights" title="Weights" tip={WEIGHTS_BASKET}>
           <NeuronColumns {pole} measured={false} />
-        </section>
+        </Basket>
 
         {#if pole.stream}
-          <section id="stream" class="basket">
-            <h3 class="title" data-tip={STREAM}>Stream</h3>
+          <Basket id="stream" title="Stream" tip={STREAM}>
             <Stream {pole} reads={pole.stream} />
-          </section>
+          </Basket>
         {/if}
       </div>
     </Swap>
@@ -84,11 +82,7 @@
 <style>
   .unit { display: grid; gap: var(--s4); min-width: 0; }
   .stack { display: grid; gap: var(--s7); min-width: 0; }
-  .basket { display: grid; gap: var(--s4); min-width: 0; scroll-margin-top: var(--s8); }
-  .title { width: fit-content; cursor: help; font: var(--type-lead); font-family: var(--display); font-weight: 600; letter-spacing: -0.01em; }
   .fires { display: grid; gap: var(--s3); min-width: 0; }
-  .measured { display: flex; flex-wrap: wrap; align-items: start; gap: var(--s5) var(--s7); min-width: 0; }
-  .measured :global(.group) { flex: 1 1 200px; }
   .none { font-weight: 400; }
   .figures { display: flex; flex-wrap: wrap; align-items: start; gap: var(--s5) var(--s7); min-width: 0; }
 </style>
