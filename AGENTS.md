@@ -114,7 +114,8 @@ has the full invocation):
    only when a catalog's vocabulary, labels or contexts change.
 2. Gemma 4 only: `scripts/neurons/media.py <catalog> public/data/gemma-4-12b` packs the images and
    sounds of the collections whose licences allow showing them (its `ALLOWED` table), matched to the
-   catalog by SHA-1, and their credits. Others are linked, never hosted. `hosted.json` is keyed by document number,
+   catalog by SHA-1, and their credits. The synthetic images come from the catalog folder's `media/image_synth.parquet`,
+   which the Hub release leaves out. Others are linked, never hosted. `hosted.json` is keyed by document number,
    so rerun this whenever a catalog's `media/*_docs.parquet` change.
 3. `scripts/neurons/build-neuron-catalog.py <catalog> <tokenizer.json> public/data
    <translations.jsonl,...>` writes every neuron and head into `public/data/<model>/`, given every
