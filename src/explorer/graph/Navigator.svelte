@@ -28,29 +28,45 @@
     close: () => void;
   } = $props();
 
-  /** Room between rows at full size: a mark, the line of title under it, and a little air. */
-  const PITCH = 40;
-  /** The widest a title runs before it is cut short (Graph.svelte's .label). */
-  const LABEL = 200;
-  const height = $derived(2 * model.layers * PITCH + 18);
-  const depth = $derived(rows(graph, height, model.layers));
+  /** The widest a title sets before it wraps (Graph.svelte's .label), and its line's height. */
+  const LABEL = 150;
+  const LINE = 16;
 
-  // How wide each title sets, so the layout can leave it room.
+  // How each title sets: as wide as its longest line, on as many lines as it wraps to. A run of
+  // CJK may break between any two characters, as the browser breaks it; a word longer than a line breaks
+  // inside itself (the label's overflow-wrap).
   let pen: CanvasRenderingContext2D | null = null;
-  const measured = new Map<string, number>();
-  function measure(text: string) {
-    let width = measured.get(text);
-    if (width === undefined) {
-      pen ??= document.createElement("canvas").getContext("2d");
-      const face = getComputedStyle(document.documentElement).getPropertyValue("--text") || "sans-serif";
-      if (pen) pen.font = `600 12px ${face}`;
-      width = pen ? pen.measureText(text).width : text.length * 7;
-      measured.set(text, width);
+  const set = new Map<string, { width: number; lines: number }>();
+  const PIECE = /[\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]|[^\s\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]+|\s+/g;
+  function setting(text: string) {
+    let found = set.get(text);
+    if (found) return found;
+    pen ??= document.createElement("canvas").getContext("2d");
+    const face = getComputedStyle(document.documentElement).getPropertyValue("--text") || "sans-serif";
+    if (pen) pen.font = `600 12px ${face}`;
+    const width = (piece: string) => (pen ? pen.measureText(piece).width : piece.length * 7);
+    let lines = 1;
+    let line = 0;
+    let widest = 0;
+    for (const piece of text.match(PIECE) ?? []) {
+      const w = width(piece);
+      if (/^\s+$/.test(piece)) { if (line > 0) line += w; continue; }
+      if (line > 0 && line + w > LABEL) { widest = Math.max(widest, line); lines += 1; line = 0; }
+      if (w > LABEL) { lines += Math.ceil(w / LABEL) - 1; line = w % LABEL; widest = LABEL; continue; }
+      line += w;
     }
-    return Math.min(LABEL, width);
+    found = { width: Math.min(LABEL, Math.max(widest, line)), lines };
+    set.set(text, found);
+    return found;
   }
   const nameOf = (n: GraphNode) => (n.kind === "head" ? headId(n.layer, n.index) : `${neuronId(n.layer, n.index)} ${n.pole > 0 ? "+" : "−"}`);
-  const open: Open = { gap: 18, reach: (n) => (measure(n.wire?.title || nameOf(n)) + 2) / 2 };
+  const titleOf = (n: GraphNode) => n.wire?.title || nameOf(n);
+  /** Half a title's width on its backing (Graph.svelte's .label padding), for the layout to leave room across. */
+  const open: Open = { gap: 12, reach: (n) => setting(titleOf(n)).width / 2 + 5 };
+  /** Rows stand as far apart as the graph's tallest title needs: the mark above it, the title, air, and the next row's mark. */
+  const pitch = $derived(26 + LINE * Math.max(1, ...graph.nodes.map((n) => setting(titleOf(n)).lines)));
+  const height = $derived(2 * model.layers * pitch + 18);
+  const depth = $derived(rows(graph, height, model.layers));
 
   // The view: the graph's x and y at full size map to x · k + tx, y · k + ty on screen.
   let view = $state<HTMLDivElement>();
@@ -60,6 +76,9 @@
   /** A re-centring glides; a drag or a zoom follows the hand. */
   let gliding = $state(false);
   let centred: string | null = null;
+  /** Where the unit sat when last centred on, and whether the view has been moved since. */
+  let centredAt = 0;
+  let moved = false;
   const MIN = 0.12;
   const MAX = 3;
   const clamp = (value: number) => Math.min(MAX, Math.max(MIN, value));
@@ -69,15 +88,17 @@
     if (!view || !focus) return;
     const box = view.getBoundingClientRect();
     gliding = glide;
+    moved = false;
+    centredAt = focus.kind === "head" ? depth.heads(focus.layer) : depth.neurons(focus.layer);
     tx = box.width / 2;
-    ty = box.height * 0.45 - (focus.kind === "head" ? depth.heads(focus.layer) : depth.neurons(focus.layer)) * k;
+    ty = box.height * 0.45 - centredAt * k;
   }
-  // A new unit at the centre: glide to it (the first, jump).
+  // A new unit at the centre: glide to it (the first, jump). Rows that open up as titles arrive keep it there, unless the view was moved.
   function laid(placed: Layout) {
     const focus = placed.nodes.find((n) => n.side === "focus");
-    if (!view || !focus || focus.key === centred) return;
-    centre(centred !== null);
-    centred = focus.key;
+    if (!view || !focus) return;
+    if (focus.key !== centred) { centre(centred !== null); centred = focus.key; }
+    else if (!moved && focus.y !== centredAt) centre();
   }
 
   function zoom(to: number, x?: number, y?: number, glide = false) {
@@ -87,6 +108,7 @@
     const py = y ?? box.height / 2;
     const next = clamp(to);
     gliding = glide;
+    moved = true;
     tx = px - ((px - tx) * next) / k;
     ty = py - ((py - ty) * next) / k;
     k = next;
@@ -99,6 +121,7 @@
       zoom(k * Math.exp(-event.deltaY * 0.01), event.clientX - box.left, event.clientY - box.top);
     } else {
       gliding = false;
+      moved = true;
       tx -= event.deltaX;
       ty -= event.deltaY;
     }
@@ -121,6 +144,7 @@
       if (travelled > 4) {
         if (!view.hasPointerCapture(event.pointerId)) view.setPointerCapture(event.pointerId);
         gliding = false;
+        moved = true;
         tx += now.x - was.x;
         ty += now.y - was.y;
       }
@@ -176,7 +200,7 @@
   });
 
   // Layer numbers down the left, every layer once there's room for each, and each band's name where it starts.
-  const every = $derived(2 * PITCH * k >= 18 ? 1 : 2 * PITCH * k >= 7 ? 5 : 10);
+  const every = $derived(2 * pitch * k >= 18 ? 1 : 2 * pitch * k >= 7 ? 5 : 10);
   const ticks = $derived(Array.from({ length: model.layers }, (_, layer) => layer).filter((layer) => layer % every === 0));
 </script>
 

@@ -43,6 +43,7 @@
   $effect(() => {
     const next = graph;
     const across = width;
+    void HEIGHT;
     if (across <= 0) return;
     untrack(() => {
       const placed = layout(next, across, HEIGHT, model.layers, next.settled ? undefined : stage.targets(), open);
@@ -180,18 +181,21 @@
   .focus { z-index: 1; }
   .focus i { outline-color: var(--ink); }
   .dim i { opacity: 0.25; }
-  /* A title under its mark, as wide as the layout left room for (LABEL in Navigator.svelte). */
+  /* A title under its mark, wrapped at the width the layout left it (LABEL in Navigator.svelte), on a
+     backing of the page's own paper so the links behind it don't cross its words. */
   .label {
     position: absolute;
     top: calc(100% + 3px);
     left: 50%;
-    max-width: 200px;
-    overflow: hidden;
+    width: max-content;
+    max-width: 160px;
+    padding: 1px 5px;
+    border-radius: var(--r-chip);
+    background: color-mix(in oklch, var(--paper) 84%, transparent);
     color: var(--ink2);
     font: var(--type-meta);
     text-align: center;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+    overflow-wrap: anywhere;
     translate: -50% 0;
     scale: var(--label-scale, 1);
     transform-origin: top center;

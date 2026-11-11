@@ -23,7 +23,8 @@ What the site draws for itself, in Ledger:
   (Value, Query or Key). A path through any other head goes by its value, and a path into a head's query or key stops there,
   because what those set is where the head looks.
 - The full-screen graph (`src/explorer/graph/Navigator.svelte`, at a unit's address with `?graph`): the same marks, links
-  and motion at their own size, with each unit's title under its mark and its row spaced to fit them, moved like a map (drag or
+  and motion at their own size, with each unit's whole title wrapped under its mark on a backing of the page's paper, the
+  rows as far apart as the tallest title needs, moved like a map (drag or
   scroll, pinch or ⌘/ctrl-scroll or the zoom buttons). Zoomed far out, only the strongest dozen keep their titles, drawn
   at a size that still reads. The bar over it holds the unit, the views and the reach; the depth axis down the left names
   the bands; the credit sits at the foot, so a screenshot carries it.
