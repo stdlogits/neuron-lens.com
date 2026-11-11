@@ -1,12 +1,18 @@
-// The models the explorer covers: their shape, and what the neuron-lens findings say to trust at
-// each depth (Qwen3-8B: findings §6, §7, §11, §12; Gemma 4 12B: §13-§16). The builder writes each
-// layer's band key into index.json; the words for each band live here.
+// The models the explorer covers: their shape, and their depth bands. Every model has the same three,
+// set by which lens works on each side of its neurons (scripts/neurons/bands.py, from the neuron-lens
+// findings §3, §7 and §13): early layers read through the S-lens on both sides, middle layers still
+// read what drives a neuron through the S-lens but its write through the R-lens, and late layers read
+// both through the R-lens. The builder's profile holds the same layers and lights each read by them;
+// the words for each band live here.
 
 export type ModelId = "qwen3-8b" | "gemma-4-12b";
 export type Modality = "image" | "audio";
 
+/** A read, and what it shows: the About page's line for one side of a neuron in a band. */
+export type BandRead = [read: string, shows: string];
+
 export interface BandInfo {
-  key: string;
+  key: "early" | "middle" | "late";
   first: number;
   last: number;
   name: string;
@@ -14,6 +20,9 @@ export interface BandInfo {
   short: string;
   summary: string;
   reading: string;
+  /** Which read to use for what drives a neuron, and for what it writes. */
+  drives: BandRead;
+  writes: BandRead;
 }
 
 export interface ModelInfo {
@@ -45,39 +54,22 @@ export const MODELS: Record<ModelId, ModelInfo> = {
     heads: 32,
     bands: [
       {
-        key: "embed", first: 0, last: 0, name: "Token layer", short: "Token",
-        summary: "Neurons here mostly respond to one literal input token.",
-        reading: "The input-token read (in·S) names the firing token for 85% of poles. Writes are weak this early.",
+        key: "early", first: 0, last: 3, name: "Early layers", short: "Early",
+        summary: "Neurons respond to the input token, and write back what they detect.",
+        reading: "The S-lens works on both sides: in·S names the firing token for 22–73% of the poles that fire, and out·S what the neuron writes back for 18–35%.",
+        drives: ["S-lens", "the literal token"], writes: ["S-lens", "what it detects, written back"],
       },
       {
-        key: "early", first: 1, last: 7, name: "Early layers", short: "Early",
-        summary: "Neurons respond to input tokens a few positions back, and often write back what they detect.",
-        reading: "Trust the input-token reads (in·S). From about L4, the write read (out·R) predicts what pushing the neuron does.",
+        key: "middle", first: 4, last: 8, name: "Middle layers", short: "Middle",
+        summary: "Neurons still respond to the input token, but what they write already moves the output.",
+        reading: "in·S names the firing token for 16–28% of poles, while out·R predicts what pushing the neuron does (median r 0.45–0.50).",
+        drives: ["S-lens", "the literal token"], writes: ["R-lens", "what steering does"],
       },
       {
-        key: "crossover", first: 8, last: 8, name: "Crossover", short: "Cross",
-        summary: "The layer where the input-token reads and the concept reads both carry signal.",
-        reading: "Both lenses read both sides here, and agree most. Tokens they share are the strongest evidence.",
-      },
-      {
-        key: "concept", first: 9, last: 12, name: "Concept layers", short: "Concept",
-        summary: "Neurons respond to concepts more than to literal tokens.",
-        reading: "The concept read (in·R) takes over from in·S, which has gone to noise. out·R predicts steering, rarely the next word.",
-      },
-      {
-        key: "middle", first: 13, last: 20, name: "Middle layers", short: "Middle",
-        summary: "Neurons here respond to context more than to any one token: the strongest single-token swap reaches about 9% of a typical firing.",
-        reading: "Read in·R and in·S's distinctive list, with the examples and exact drivers beside them. out·R predicts what pushing the neuron does.",
-      },
-      {
-        key: "predict", first: 21, last: 31, name: "Prediction layers", short: "Predict",
-        summary: "Neurons fire just before a predictable word, and many write that word.",
-        reading: "in·R is often the word about to come next. From about L23 the write read names the next word.",
-      },
-      {
-        key: "suppress", first: 32, last: 35, name: "Suppression layers", short: "Suppress",
-        summary: "Many neurons push down the word the model is about to say, to calibrate it.",
-        reading: "Read both sides' writes: a side whose top tokens are the next word holds it back.",
+        key: "late", first: 9, last: 35, name: "Late layers", short: "Late",
+        summary: "Both what drives a neuron and what it writes read as output words.",
+        reading: "The R-lens works on both sides: in·R names what drives a neuron for 5–42% of poles, and out·R predicts what pushing it does (median r 0.57–1.00). From L23 out·R also names the next word, for 10–31% of poles; from L32 some neurons hold it back.",
+        drives: ["R-lens", "and the exact drivers"], writes: ["R-lens", "what steering does; the next word from L23"],
       },
     ],
     writeVerbs: [[3, "Writes (weak this early)"], [20, "When pushed, it promotes"], [31, "It predicts the next word"], [35, "It predicts or holds back the next word"]],
@@ -96,24 +88,22 @@ export const MODELS: Record<ModelId, ModelInfo> = {
     heads: 16,
     bands: [
       {
-        key: "token", first: 0, last: 4, name: "Token layers", short: "Token",
-        summary: "Neurons here mostly respond to one literal input token.",
-        reading: "The input-token read (in·S) names the firing token for 40–95% of poles here. Writes are too weak to read this early.",
+        key: "early", first: 0, last: 10, name: "Early layers", short: "Early",
+        summary: "Neurons respond to the input token. What they write is too small to read yet.",
+        reading: "in·S names the firing token for 5–85% of poles: most at L0–L1, fading by L9 and back at L10. Neither lens predicts what a push of natural size does (median r under 0.1).",
+        drives: ["S-lens", "the literal token, fading by L9"], writes: ["Nothing", "too weak to read"],
       },
       {
-        key: "early", first: 5, last: 13, name: "Early layers", short: "Early",
-        summary: "Neurons respond to tokens a few positions back. The input-token read fades by L9, then returns at L10–L13, where many neurons write back what they detect.",
-        reading: "Trust in·S at L10–L13, and the write's footprint (out·S) at L11–L13. From L11 the write read (out·R) predicts what pushing the neuron does.",
+        key: "middle", first: 11, last: 13, name: "Middle layers", short: "Middle",
+        summary: "Neurons still respond to the input token, but what they write already moves the output.",
+        reading: "in·S names the firing token for 27–42% of poles and out·S what they write back for 11–20%, while out·R predicts what pushing a neuron does (median r 0.39–0.55).",
+        drives: ["S-lens", "the literal token"], writes: ["R-lens", "what steering does"],
       },
       {
-        key: "middle", first: 14, last: 32, name: "Middle layers", short: "Middle",
-        summary: "Neurons here respond to context, and many to images: image concepts meet their names in text at these depths.",
-        reading: "Read the examples and the words that set it off in real text first: the concept read (in·R) fails on this model. out·R still predicts what pushing the neuron does, though rarely the next word.",
-      },
-      {
-        key: "late", first: 33, last: 47, name: "Late layers", short: "Late",
-        summary: "Many neurons write the word the model is about to say.",
-        reading: "out·R names the next word for 22–36% of poles at L33–L40, fewer after. Input reads are weak here: trust the examples.",
+        key: "late", first: 14, last: 47, name: "Late layers", short: "Late",
+        summary: "What a neuron writes reads as output words; what drives it reads as no single token.",
+        reading: "out·R predicts what pushing a neuron does (median r 0.43–1.00), and names the next word for 21–32% of poles at L33–L40. No weight read of the input works here: in·S has faded, and this model's in·R fails. Read the firings.",
+        drives: ["Firings", "the input reads fail here"], writes: ["R-lens", "what steering does; the next word at L33–40"],
       },
     ],
     writeVerbs: [[10, "Writes (weak this early)"], [32, "When pushed, it promotes"], [47, "It predicts the next word"]],

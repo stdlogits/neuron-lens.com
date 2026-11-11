@@ -42,6 +42,8 @@ export class Lens {
   readonly layer = $derived<number>(this.route.layer ?? this.model.start[this.unit]);
   /** Every neuron of the layer, not only the easiest. */
   readonly all = $derived<boolean>(this.unit === "neurons" && this.route.all);
+  /** The unit's connections, full screen. */
+  readonly graphOpen = $derived<boolean>(this.route.index !== null && this.route.graph === true);
   readonly band = $derived(bandOf(this.model, this.layer));
   readonly tint = $derived(depthColor(this.model, this.layer));
   /** Gemma 4's every sixth layer attends globally; the rest within a window. */
@@ -242,7 +244,8 @@ export class Lens {
   // ---------- going places
 
   /** The address of a place in this model (or another). */
-  hrefFor = (place: Partial<Omit<ExploreRoute, "page">>) => href({ ...this.route, layer: this.layer, ...place, page: "explore" });
+  /** Anywhere but the full-screen graph, unless it is asked for. */
+  hrefFor = (place: Partial<Omit<ExploreRoute, "page">>) => href({ ...this.route, layer: this.layer, graph: false, ...place, page: "explore" });
   unitHref = (unit: Unit, layer: number, index: number | null) => this.hrefFor({ unit, layer, index, all: unit === "neurons" && this.all });
 
   setModel = (model: ModelId) => {
@@ -252,6 +255,11 @@ export class Lens {
   setUnit = (unit: Unit) => {
     if (unit === this.unit) return;
     go(this.hrefFor({ unit, index: null, all: false }));
+  };
+  /** Open the unit's connections full screen, or close them back to its page (which takes the place of the full-screen entry). */
+  setGraph = (open: boolean) => {
+    if (open === this.graphOpen) return;
+    go(this.hrefFor({ graph: open }), { replace: !open });
   };
   setAll = (all: boolean) => {
     if (all === this.all) return;

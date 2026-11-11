@@ -9,7 +9,7 @@
 // offset, so a walk that keeps growing, a click on a neighbour or a change of view takes over from
 // wherever things are, without a hitch. Nothing waits for any of it: every node is a link from the start.
 import { FAST, GLIDE, IN, OUT, ease, reducedMotion } from "@stdlogits/ledger";
-import type { Layout, Placed } from "./layout";
+import { families, type Layout, type Placed } from "./layout";
 import type { Graph, GraphEdge } from "./trace";
 
 export interface Seated extends Placed {
@@ -91,29 +91,21 @@ interface Strand {
   painted: { d: string; opacity: string; dash: string };
 }
 
-/** Each node's way back to the unit: its nearest neighbour, the strongest of them if several are as near. */
-function spanning(graph: Graph, focus: string | null) {
-  const links = new Map<string, { other: string; flow: number }[]>();
-  const add = (a: string, b: string, flow: number) => links.set(a, [...(links.get(a) ?? []), { other: b, flow }]);
+/** How many links each node is from the unit, by the shortest way. */
+function hops(graph: Graph, focus: string | null) {
+  const links = new Map<string, string[]>();
   for (const edge of graph.edges) {
-    add(edge.from, edge.to, edge.flow);
-    add(edge.to, edge.from, edge.flow);
+    links.set(edge.from, [...(links.get(edge.from) ?? []), edge.to]);
+    links.set(edge.to, [...(links.get(edge.to) ?? []), edge.from]);
   }
-  const found = new Map<string, { hop: number; parent: string | null; flow: number }>();
+  const found = new Map<string, number>();
   if (focus === null) return found;
-  found.set(focus, { hop: 0, parent: null, flow: Infinity });
+  found.set(focus, 0);
   let ring = [focus];
   for (let hop = 1; ring.length; hop += 1) {
-    const next = new Set<string>();
-    for (const key of ring) {
-      for (const { other, flow } of links.get(key) ?? []) {
-        const held = found.get(other);
-        if (held && held.hop < hop) continue;
-        if (!held || flow > held.flow) found.set(other, { hop, parent: key, flow });
-        next.add(other);
-      }
-    }
-    ring = [...next];
+    const next: string[] = [];
+    for (const key of ring) for (const other of links.get(key) ?? []) if (!found.has(other)) { found.set(other, hop); next.push(other); }
+    ring = next;
   }
   return found;
 }
@@ -149,9 +141,11 @@ export class Stage {
     const instant = snap || (typeof document !== "undefined" && document.hidden);
 
     const focus = graph.nodes.find((n) => n.side === "focus")?.key ?? null;
-    const tree = spanning(graph, focus);
+    const hop = hops(graph, focus);
+    // What each node buds from and sits under: the same family the layout seats it by.
+    const family = families(graph);
     const want = new Map(placed.nodes.map((node) => [node.key, node]));
-    const seated = (node: Placed): Seated => ({ ...node, hop: tree.get(node.key)?.hop ?? 1 });
+    const seated = (node: Placed): Seated => ({ ...node, hop: hop.get(node.key) ?? 1 });
 
     // Gone first: each withdraws into what it budded from.
     let leaves = false;
@@ -173,7 +167,7 @@ export class Stage {
       const seat = this.seats.get(node.key);
       if (!seat) { fresh.push(node); continue; }
       seat.node = seated(node);
-      seat.parent = tree.get(node.key)?.parent ?? seat.parent;
+      seat.parent = family.get(node.key)?.parent ?? seat.parent;
       if (seat.leaving) { seat.leaving = false; seat.shown.go(1, now, FAST); }
       if (instant || calm) {
         seat.x.jump(node.x); seat.y.jump(node.y); seat.w.jump(node.w); seat.h.jump(node.h);
@@ -184,14 +178,15 @@ export class Stage {
     }
 
     // What is new buds from its parent, ring by ring, strongest first.
-    fresh.sort((a, b) => (tree.get(a.key)?.hop ?? 1) - (tree.get(b.key)?.hop ?? 1) || b.flow - a.flow);
-    const deepest = Math.max(1, ...fresh.map((node) => tree.get(node.key)?.hop ?? 1));
+    const ring = (key: string) => family.get(key)?.depth ?? 1;
+    fresh.sort((a, b) => ring(a.key) - ring(b.key) || b.flow - a.flow);
+    const deepest = Math.max(1, ...fresh.map((node) => ring(node.key)));
     const step = Math.min(HOP, CASCADE / deepest);
     const start = leaves && !instant && !calm ? now + OUT / 2 : now;
     const siblings = new Map<string, number>();
     const freshKeys = new Set<string>();
     for (const node of fresh) {
-      const parent = tree.get(node.key)?.parent ?? (node.key === focus ? null : focus);
+      const parent = family.get(node.key)?.parent ?? (node.key === focus ? null : focus);
       const from = parent ? this.seats.get(parent) : undefined;
       const rank = siblings.get(parent ?? "") ?? 0;
       siblings.set(parent ?? "", rank + 1);

@@ -25,37 +25,16 @@
     loadIndex(id).then((index) => { layers[id] = index.layerMeta; }, () => { failed = true; });
   });
 
-  // What to read in each band, for each half of a pole (the findings' "which read to use where"):
-  // the read, then what it shows. Lens reads are tinted; the rest are not.
-  type Read = [read: string, shows: string];
-  const TRUST: Record<ModelId, Record<string, { drives: Read; writes: Read }>> = {
-    "qwen3-8b": {
-      embed: { drives: ["S-lens", "the literal token"], writes: ["S-lens", "the tokens it detects"] },
-      early: { drives: ["S-lens", "literal tokens"], writes: ["S-lens", "the tokens it detects; the R-lens from about L4"] },
-      crossover: { drives: ["Both lenses", "agreeing most"], writes: ["Both lenses", "agreeing most"] },
-      concept: { drives: ["R-lens", "concepts, and the exact drivers"], writes: ["R-lens", "what steering does, rarely what follows"] },
-      middle: { drives: ["R-lens", "and the S-lens's distinctive list, with firings and exact drivers beside them"], writes: ["R-lens", "what steering does"] },
-      predict: { drives: ["R-lens", "and the exact drivers"], writes: ["R-lens", "the next token, from about L23"] },
-      suppress: { drives: ["R-lens", "and the exact drivers"], writes: ["R-lens", "the next token, held back"] },
-    },
-    "gemma-4-12b": {
-      token: { drives: ["S-lens", "literal tokens"], writes: ["Nothing", "too weak to read"] },
-      early: { drives: ["S-lens", "fading by L9, back at L10–13"], writes: ["R-lens", "what steering does, from L11"] },
-      middle: { drives: ["Exact drivers", "and firings: the R-lens input read fails on this model"], writes: ["R-lens", "what steering does"] },
-      late: { drives: ["Examples", "input reads are weak"], writes: ["R-lens", "the next word, at L33–40"] },
-    },
-  };
-  const trust = $derived(TRUST[modelId][band.key] ?? null);
   const isLens = (read: string) => /lens/.test(read);
   const tabs = $derived(model.bands.map((b) => ({ value: b.key, label: b.short, hint: `${b.name}, ${bandRange(b)}` })));
 </script>
 
 <Part id="depth" title="Depth" onnear={() => (wanted = true)}>
   {#snippet caption()}
-    <p>No one kind of evidence works everywhere.</p>
-    <p>In early  layers, the stream is mostly the input token, so the S-lens works well.</p>
-    <p>In late layers, the stream is mostly the output token, so the R-lens works well instead.</p>
-    <p>In between, most units respond to wider context, and no single token says much about them. There, read the lenses alongside the firings.</p>
+    <p>No one kind of evidence works everywhere. Each model's layers fall into three bands, by which lens works on each side of a neuron.</p>
+    <p>In early layers, the stream is mostly the input token, so the S-lens reads both what drives a neuron and what it writes.</p>
+    <p>In middle layers, a neuron still responds to the input token, but what it writes already moves the output, so the R-lens reads its write.</p>
+    <p>In late layers, the stream is mostly about the output, so the R-lens reads both sides. Many neurons there respond to wider context, and no single token says much about them: read the lenses alongside the firings.</p>
   {/snippet}
   <div class="spec">
     <Segmented options={models} value={modelId} onchange={(id) => (modelId = id)} label="Model" />
@@ -94,16 +73,14 @@
       <div class="band" style:--tint={depthColor(model, Math.round((band.first + band.last) / 2))}>
         <p class="name">{band.name}<span class="meta">{bandRange(band)}</span></p>
         <p class="lead">{band.summary}</p>
-        {#if trust}
-          <div class="trust">
-            {#each [{ half: "What drives it", read: trust.drives }, { half: "What it writes", read: trust.writes }] as cell (cell.half)}
-              <div class="cell">
-                <p class="meta">{cell.half}</p>
-                <p><b class="read" class:lens={isLens(cell.read[0])}>{cell.read[0]}</b> {cell.read[1]}</p>
-              </div>
-            {/each}
-          </div>
-        {/if}
+        <div class="trust">
+          {#each [{ half: "What drives it", read: band.drives }, { half: "What it writes", read: band.writes }] as cell (cell.half)}
+            <div class="cell">
+              <p class="meta">{cell.half}</p>
+              <p><b class="read" class:lens={isLens(cell.read[0])}>{cell.read[0]}</b> {cell.read[1]}</p>
+            </div>
+          {/each}
+        </div>
         <a class="prose-link open" href="/{modelId}/L{band.first}">Open layer {band.first}</a>
       </div>
     </Swap>

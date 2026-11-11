@@ -50,6 +50,22 @@ test("a deep link loads that neuron", async ({ page }) => {
   expect(path(page)).toBe("/qwen3-8b/L8/n344");
 });
 
+test("a unit's connections open full screen at ?graph and close back to its page", async ({ page }) => {
+  await page.goto("/qwen3-8b/L8/n344");
+  await page.getByRole("button", { name: "Full screen, with every title" }).click();
+  await expect(page).toHaveURL(/\/qwen3-8b\/L8\/n344\?graph$/);
+  const navigator = page.getByRole("dialog", { name: /^Connections of L8·n344/ });
+  await expect(navigator).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(navigator).toHaveCount(0);
+  expect(path(page)).toBe("/qwen3-8b/L8/n344");
+
+  // A deep link opens it directly, and the canonical address leaves it out.
+  await page.goto("/qwen3-8b/L8/n344?graph");
+  await expect(navigator).toBeVisible();
+  await expect(page.locator("link[rel=canonical]")).toHaveAttribute("href", /\/qwen3-8b\/L8\/n344$/);
+});
+
 test("a deep link loads that head", async ({ page }) => {
   const layer = page.waitForRequest((request) => request.url().endsWith("/data/qwen3-8b/heads/L20.json"));
   await page.goto("/qwen3-8b/L20/h17");
@@ -146,7 +162,7 @@ test("clicking a layer in the atlas opens that layer", async ({ page }) => {
   await page.mouse.click(bar.x + bar.width / 2, bar.y + bar.height / 2);
   await expect(page).toHaveURL(new RegExp(`/gemma-4-12b/L23/n${middle[1]}$`));
   await expect(atlas(page)).toHaveAttribute("aria-valuenow", "23");
-  await expect(atlas(page)).toHaveAttribute("aria-valuetext", new RegExp(`^Layer 23, Middle layers, neuron ${middle[1]}$`));
+  await expect(atlas(page)).toHaveAttribute("aria-valuetext", new RegExp(`^Layer 23, Late layers, neuron ${middle[1]}$`));
   await expect(unitHeading(page, `L23·n${middle[1]}`)).toBeVisible();
 
   // Each choice is a history entry.

@@ -14,7 +14,8 @@ files. It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now
 - `src/explorer/`: the explorer. `lens.svelte.ts` is its state (get it with `useLens()`): it reads the
   address, loads what that place needs and changes place only by going to another address. The rest
   are its parts: `Atlas` (and `atlas/`), `graph/` (the unit's connections: `trace.ts` walks them,
-  `layout.ts` places them, `stage.ts` moves them, `Graph` draws them, `Connections` is the rail), `UnitView` (and `unit/`), `Search`
+  `layout.ts` places them, `stage.ts` moves them, `Graph` draws them, `Connections` is the rail, `Navigator` the same graph full
+  screen), `UnitView` (and `unit/`), `Search`
   (and `search/`), `media/`.
 - `src/pages/`: About, Credits, the missing page.
 - `src/lib/`: `data.ts` (the catalog's types and loaders), `models.ts` (each model's shape, its depth
@@ -40,7 +41,7 @@ files. It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now
 
 Addresses: `/`, `/<model>`, `/<model>/L<layer>`, `/<model>/L<layer>/n<neuron>` (`?all` lists every
 neuron of the layer), `/<model>/heads`, `/<model>/L<layer>/heads`, `/<model>/L<layer>/h<head>`,
-`/about`, `/credits`. Anything else is the missing page. Bare addresses are Qwen3-8B.
+`/about`, `/credits`. A unit's address with `?graph` opens its connections full screen. Anything else is the missing page. Bare addresses are Qwen3-8B.
 
 ## Design
 
@@ -64,12 +65,17 @@ beyond what it reads) and Stream (what the residual holds where it fires, which 
 A head has the same three: Firings also holds what it attends to and its attention pattern, Weights its QK and OV reads with how it attends and copies, and Stream what its own output says where it fires.
 Each read shows its normal list, or with the Distinctive switch beside English its layer-contrastive (z) list; a
 normal list left with nothing once hub tokens are gone shows its distinctive list instead (most of Stream's early reads).
+Every model has the same three depth bands, set by which lens works on each side of a neuron (`scripts/neurons/bands.py`):
+early layers read what drives it and what it writes through the S-lens, middle layers what drives it through the S-lens
+and its write through the R-lens, late layers both through the R-lens. A read through the other lens is quiet until
+pointed at, and comes last, unless its own test passes for that unit; so is a read the findings say fails on that model.
 Left is always what comes in and right what goes out. Beside them the rail holds its connections: a
 directed graph at true depth, and its strongest links in words. Wired to, driven by and fires with are
 three relations and stay three views (findings §17). A head has no wired to, because two heads meet through a matrix and not a dot product;
 what drives it is split over its three inputs, so its views are Value, Query, Key and Fires with. A link's sign has no colour of its own, since the one
-hue is depth: a link that pushes against is grey and dashed. Phone widths down to 320 px must not scroll
-sideways.
+hue is depth: a link that pushes against is grey and dashed. Full screen, the graph keeps its marks' size, leaves
+room beside every mark for its title and moves like a map; zoomed far out, only the strongest few keep their titles.
+Phone widths down to 320 px must not scroll sideways.
 
 `main.ts` loads `@stdlogits/ledger/ledger.css`, then `site.css`, and installs `translator` with
 `setTranslator` before mounting. The dev server serves Ledger as source rather than pre-bundling it
@@ -86,8 +92,8 @@ it. `scripts/site/meta.ts`, a Vite plugin, writes all of it, from `src/lib/model
 explorer, the catalog as a schema.org `Dataset` with its Hub release as its id, a9lim under a9l.im's
 person id, and treetown and Standard Logits under standardlogits.com's); a short summary in `#app` for readers without script (hidden by
 `@media (scripting: enabled)` and cleared by `main.ts`); `/llms.txt` from `scripts/site/llms.md`;
-`/sitemap.xml`; and the web app manifest. `App.svelte` sets each view's canonical link (`?all`
-dropped) and marks the missing page `noindex`. There is no `og:url`: every address is served this
+`/sitemap.xml`; and the web app manifest. `App.svelte` sets each view's canonical link (`?all` and
+`?graph` dropped) and marks the missing page `noindex`. There is no `og:url`: every address is served this
 page, so a static one would name the home page for all of them.
 
 The site describes the project and points at the Hub release; it never writes a unit's data as text
@@ -121,9 +127,11 @@ has the full invocation):
 3. `scripts/neurons/build-neuron-catalog.py <catalog> <tokenizer.json> public/data
    <translations.jsonl,...>` writes every neuron and head into `public/data/<model>/`, given every
    translation run that applies (a term means the same whichever model's run translated it). The
-   model's profile (geometry, the labeller's reading plan, depth bands) sits at the top of the builder;
-   the site's words for the bands live in `src/lib/models.ts`. `NEURON_LAYERS=8,21` builds a subset for
-   development.
+   model's profile (geometry, depth bands, the reads that fail on it) sits at the top of the builder;
+   the bands come from `scripts/neurons/bands.py <neuron-lens data/summary> <model>`, which reads
+   them off neuron-lens's per-layer census and steering checks, and `src/lib/models.ts` holds the same
+   layers with the site's words for them. A new model's bands come from rerunning it. `NEURON_LAYERS=8,21`
+   builds a subset for development.
 
 Labels come from neuron-lens's `scripts/10_labels.py`, per model. The builder also works without them:
 titles then fall back to a unit's media label or its peak tokens.

@@ -13,7 +13,7 @@ the + poles first) and ``heads/<table>.parquet`` (a row per head) for its tables
 ``neurons/{image,audio}/``, ``neurons/{image,audio}_optimised.parquet``, ``heads/{image,audio}.parquet`` and ``media/*_docs.parquet``.
 Every neuron and head is written, with everything the page would otherwise compute baked in: decoded
 tokens, the hub filter, merged variants, strength percentiles, which reads to trust at each depth
-(the labeller's plan, so the page shows the evidence Haiku saw), the tokens two lenses (or a lens and
+(each depth band's lens on each side, ``BAND_LENSES``), the tokens two lenses (or a lens and
 a measurement) agree on, the translations from ``translate.py`` (every run's ``translations.jsonl``
 under ``.neuron-lens/``, comma-separated: a term means the same whichever model's run translated it), and for Gemma 4 each
 pole's image and sound evidence.
@@ -59,32 +59,25 @@ from tokenizers import Tokenizer
 
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
-# Per model: its geometry; neuron-lens's 10_labels.py reading plan by depth (the last layer of each
-# step, then the reads shown, primary first); the page's depth bands (last layer, key); the layer from
-# which a write's shape is read (§5); and which head-test column to use. With 16 heads a layer no
-# Gemma 4 head passes a false-discovery test (findings §13), so its heads use the uncorrected p.
+# Per model: its geometry; its depth bands (last layer, key), from scripts/neurons/bands.py; the reads
+# the findings say fail on it at every depth; the layer from which a write's shape is read (§5); and
+# which head-test column to use. With 16 heads a layer no Gemma 4 head passes a false-discovery test
+# (findings §13), so its heads use the uncorrected p. Gemma 4's `read_R` is the rows times the input
+# norm's weight, which fails there (findings §13).
 PROFILES = {
     "qwen3-8b": {
         "name": "Qwen3-8B", "layers": 36, "mlp": 12288, "heads": 32,
-        "in": [(4, ["read_S", "read_S_z"]), (7, ["read_S_z", "read_S"]), (8, ["read_S", "read_S_z", "read_R", "read_R_z"]),
-               (12, ["read_R", "read_R_z"]), (20, ["read_R_z", "read_R"]), (35, ["read_R", "read_R_z", "read_S_z"])],
-        "out": [(4, ["write_R_z", "write_S_z"]), (20, ["write_R", "write_R_z", "write_S_z"]), (35, ["write_R", "write_R_z"])],
-        "ov": [(8, ["ov_S", "ov_R"]), (35, ["ov_R"])],
-        "ov_S_trusted": 20,
-        "bands": [(0, "embed"), (7, "early"), (8, "crossover"), (12, "concept"), (20, "middle"), (31, "predict"), (35, "suppress")],
+        "bands": [(3, "early"), (8, "middle"), (35, "late")], "broken": [],
         "late": 21, "head_test": "q", "global": [], "media": [], "pinned": [(8, 344)],
     },
     "gemma-4-12b": {
         "name": "Gemma 4 12B", "layers": 48, "mlp": 15360, "heads": 16,
-        "in": [(4, ["read_S", "read_S_z"]), (13, ["read_S_z", "read_S"]), (32, ["read_S_z", "read_R_z"]), (47, ["read_S_z", "read_R"])],
-        "out": [(4, ["write_R_z", "write_S_z"]), (13, ["write_S", "write_R", "write_R_z"]), (32, ["write_R", "write_R_z"]),
-                (47, ["write_R", "write_R_z"])],
-        "ov": [(13, ["ov_S", "ov_R"]), (47, ["ov_R"])],
-        "ov_S_trusted": 13,
-        "bands": [(4, "token"), (13, "early"), (32, "middle"), (47, "late")],
+        "bands": [(10, "early"), (13, "middle"), (47, "late")], "broken": ["read_R"],
         "late": 33, "head_test": "p", "global": list(range(5, 48, 6)), "media": ["image", "audio"], "pinned": [(33, 12225), (14, 8313), (37, 7165)],
     },
 }
+# Which lens each band reads a neuron through: (what drives it, what it writes). A head's OV map is its write.
+BAND_LENSES = {"early": ("S", "S"), "middle": ("S", "R"), "late": ("R", "R")}
 
 KEEP_PER_LAYER = 40
 DOC_BLOCK = 2048
@@ -201,21 +194,21 @@ def by_depth(steps, L):
     return next(v for last, v in steps if L <= last)
 
 
-def neuron_plan(L):
-    """(input reads, output reads) shown at this depth, primary first: 10_labels.py's plan."""
-    return by_depth(P["in"], L), by_depth(P["out"], L)
+def neuron_lit(L):
+    """The reads a neuron at this depth is read through, the plain read of each side first: its band's
+    lens on each side (``BAND_LENSES``). The page shows the rest quieter."""
+    read, write = BAND_LENSES[band(L)]
+    return [f"read_{read}", f"write_{write}", f"read_{read}_z", f"write_{write}_z"]
 
 
 def head_header(L):
-    """A head file's reads: the plan's OV reads, then QK, then the other OV family (weak past the
-    model's early layers)."""
-    ov = by_depth(P["ov"], L)
-    primary = {ov[0], "qk_S"}
-    trusted = (set(ov) | {f"{c}_neg" for c in ov} | {"qk_S_neg", "qk_self_S"}
-               | ({"ov_S", "ov_S_neg"} if L <= P["ov_S_trusted"] else set()))
-    fams = [f for f in ("ov_R", "ov_R_neg", "ov_S", "ov_S_neg") if f.split("_neg")[0] in ov]
-    fams += ["qk_S", "qk_S_neg", "qk_self_S"] + [f for f in ("ov_R", "ov_R_neg", "ov_S", "ov_S_neg") if f not in fams]
-    return read_header([c for f in fams for c in (f, f"{f}_z") if c in HEAD_READS], primary, trusted, by_family=True)
+    """A head file's reads: its OV map through its band's write lens, then QK (always read through the
+    S-lens), then the OV map through the other lens."""
+    ov = f"ov_{BAND_LENSES[band(L)][1]}"
+    other = "ov_R" if ov == "ov_S" else "ov_S"
+    fams = [ov, f"{ov}_neg", "qk_S", "qk_S_neg", "qk_self_S", other, f"{other}_neg"]
+    trusted = {ov, f"{ov}_neg", "qk_S", "qk_S_neg", "qk_self_S"}
+    return read_header([c for f in fams for c in (f, f"{f}_z") if c in HEAD_READS], {ov, "qk_S"}, trusted, by_family=True)
 
 
 def band(L):
@@ -458,8 +451,8 @@ OPTIMISED = {m: optimised(m) for m in P["media"]}
 
 
 def neuron_layer(L):
-    ins, outs = neuron_plan(L)
-    trusted = ins + outs
+    lit = neuron_lit(L)
+    trusted = [c for c in lit if c.removesuffix("_z") not in P["broken"]]
     path = lambda t: f"{catalog}/neurons/{t}/L{L:02d}.parquet"
     if not os.path.exists(path("reads")):
         print(f"L{L:02d}: no reads, skipped", flush=True)
@@ -522,9 +515,10 @@ def neuron_layer(L):
         s.discard("")
         return s
 
-    header = read_header(trusted + [c for c in NEURON_READS if c not in trusted], {ins[0], outs[0]}, set(trusted))
-    orth_header = matched_reads(ORTH_READS, set(trusted))
-    stream_header = matched_reads(STREAM_READS, set(trusted), primary={"pred"}) if firings is not None else []
+    header = read_header(trusted + [c for c in NEURON_READS if c not in trusted], {c for c in trusted if not c.endswith("_z")}, set(trusted))
+    # A measurement of the stream is as trusted as its band's lens, even where the weight read through that lens fails.
+    orth_header = matched_reads(ORTH_READS, set(lit))
+    stream_header = matched_reads(STREAM_READS, set(lit), primary={"pred"}) if firings is not None else []
     flow = {c: col(firings, c).astype(float) for c in ("parallel", "orthogonal", "n_firings")} if firings is not None else None
     cos_gate, cos_up = col(reads, "cos_write_gate").astype(float), col(reads, "cos_write_up").astype(float)
 

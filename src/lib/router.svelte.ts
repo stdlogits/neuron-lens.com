@@ -2,7 +2,8 @@
 //   /                              the default model, at its starting layer
 //   /gemma-4-12b                   a model
 //   /gemma-4-12b/L33               a layer's neurons, easiest first
-//   /gemma-4-12b/L33/n12225        a neuron (?all lists every neuron of the layer)
+//   /gemma-4-12b/L33/n12225        a neuron (?all lists every neuron of the layer; ?graph opens its
+//                                  connections full screen, as it does a head's)
 //   /gemma-4-12b/heads             heads, at the model's starting layer for heads
 //   /gemma-4-12b/L35/heads         a layer's heads
 //   /gemma-4-12b/L35/h14           a head
@@ -22,6 +23,8 @@ export interface ExploreRoute {
   index: number | null;
   /** Neurons only: list every neuron of the layer, not just the easiest. */
   all: boolean;
+  /** A unit's connections, full screen. */
+  graph?: boolean;
 }
 export type Route = ExploreRoute | { page: "about" } | { page: "credits" } | { page: "missing" };
 
@@ -52,8 +55,9 @@ export function parse(pathname: string, search = ""): Route {
   const unit = third.match(/^([nh])(\d{1,5})$/);
   if (!unit) return MISSING;
   const index = Number(unit[2]);
-  if (unit[1] === "h") return index < model.heads ? { ...route, unit: "heads", index, all: false } : MISSING;
-  return index < model.mlp ? { ...route, index } : MISSING;
+  const graph = query.has("graph");
+  if (unit[1] === "h") return index < model.heads ? { ...route, unit: "heads", index, all: false, graph } : MISSING;
+  return index < model.mlp ? { ...route, index, graph } : MISSING;
 }
 
 /** drowse.ai's query addresses: ?model=&layer=&neuron= or &head=, &unit=heads, &all=1. */
@@ -87,8 +91,10 @@ export function href(route: Route): string {
     return `/${model}${unit === "heads" ? "/heads" : ""}${all ? "?all" : ""}`;
   }
   const base = `/${model}/L${layer}`;
-  if (unit === "heads") return index === null ? `${base}/heads` : `${base}/h${index}`;
-  return `${index === null ? base : `${base}/n${index}`}${all ? "?all" : ""}`;
+  const graph = index !== null && route.graph ? "graph" : "";
+  if (unit === "heads") return index === null ? `${base}/heads` : `${base}/h${index}${graph ? `?${graph}` : ""}`;
+  const query = [all ? "all" : "", graph].filter(Boolean).join("&");
+  return `${index === null ? base : `${base}/n${index}`}${query ? `?${query}` : ""}`;
 }
 
 export const router = $state<{ route: Route }>({ route: { page: "explore", model: DEFAULT_MODEL, layer: null, unit: "neurons", index: null, all: false } });

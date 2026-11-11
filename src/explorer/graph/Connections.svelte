@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { LabelText, Meter, MorphText, Segmented, Swap, Tabs, expand, fadeIn } from "@stdlogits/ledger";
+  import { IconButton, LabelText, Meter, MorphText, Segmented, Swap, Tabs, expand, fadeIn } from "@stdlogits/ledger";
   import Graph from "./Graph.svelte";
+  import Navigator from "./Navigator.svelte";
   import { focusOf, headInput, nodeKey, trace, type Graph as GraphData, type Mode, type Reach } from "./trace";
   import { useLens } from "../lens.svelte";
   import { depthColor } from "../../lib/models";
@@ -132,6 +133,10 @@
   const listKey = $derived(`${graph?.nodes.find((node) => node.side === "focus")?.key ?? ""}/${shownMode}`);
 
   const hrefFor = (kind: "neuron" | "head", layer: number, index: number) => lens.unitHref(kind === "head" ? "heads" : "neurons", layer, index);
+  // In the full-screen graph, a unit's mark opens it there.
+  const graphHref = (kind: "neuron" | "head", layer: number, index: number) => lens.hrefFor({ unit: kind === "head" ? "heads" : "neurons", layer, index, all: kind === "neuron" && lens.all, graph: true });
+  const focusNode = $derived(graph?.nodes.find((node) => node.side === "focus") ?? null);
+  const focusName = $derived(focusNode ? (focusNode.kind === "head" ? headId(focusNode.layer, focusNode.index) : `${neuronId(focusNode.layer, focusNode.index)} ${focusNode.pole > 0 ? "+" : "−"}`) : "");
   const shownValue = (value: number) => {
     if (shownMode === "with") return `${Math.round(value * 5)} of 5`;
     if (shownMode === "weights") return `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(2)}`;
@@ -160,6 +165,7 @@
   <div class="tools">
     {#if modes.length > 1}<Segmented options={modes} value={shownMode} onchange={(value: Mode) => (mode = value)} label="Which connections" />{/if}
     <div class="reach" class:off={shownMode === "with"} inert={shownMode === "with"}><Tabs options={reaches} value={reach} onchange={(value: string) => (reach = value as Reach)} label="How far" /></div>
+    <IconButton icon="expand" label="Full screen, with every title" onclick={() => lens.setGraph(true)} />
   </div>
 
   {#if mix}
@@ -169,7 +175,11 @@
     </div>
   {/if}
 
-  {#if graph}
+  {#if graph && lens.graphOpen}
+    <Navigator {graph} model={lens.model} mode={shownMode} modes={modes} onmode={(value: Mode) => (mode = value)} {reach} {reaches} onreach={(value: Reach) => (reach = value)}
+      {hovered} {point} href={graphHref} name={focusName} title={focusWire?.title ?? ""} close={() => lens.setGraph(false)} />
+  {/if}
+  {#if graph && !lens.graphOpen}
     <Graph {graph} model={lens.model} mode={shownMode} href={hrefFor} {hovered} {point} />
     <ul class="key meta" aria-label="Key">
       <li data-tip="One side of a neuron. The larger it is, the more of the flow runs through it"><i class="dot"></i>Neuron</li>

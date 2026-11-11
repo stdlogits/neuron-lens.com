@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onDestroy, untrack } from "svelte";
+  import { fadeIn, fadeOut } from "@stdlogits/ledger";
   import { bandOf, depthColor, type ModelInfo } from "../../lib/models";
   import { headId, neuronId, percent } from "../../lib/data";
-  import { layout, rows } from "./layout";
+  import { layout, rows, type Layout, type Setting } from "./layout";
   import { Stage, type Seated, type Shown } from "./stage";
   import { headInput, type Graph, type GraphEdge, type Mode } from "./trace";
 
@@ -11,7 +12,7 @@
   // colour of its layer and as large as the flow through it; a link is as heavy as its flow, grey and
   // dashed where it pushes against. Pointing at a unit lights what connects it to the centre. The
   // stage (stage.ts) owns where everything is and how it moves; this owns what each thing looks like.
-  let { graph, model, mode, href, hovered, point }: {
+  let { graph, model, mode, href, hovered, point, height = 780, setting, labels = false, labelScale = 1, axis = true, onlaid }: {
     graph: Graph;
     model: ModelInfo;
     mode: Mode;
@@ -19,10 +20,21 @@
     hovered: string | null;
     /** The pointer has come to this unit, or left (null). */
     point: (key: string | null) => void;
+    height?: number;
+    /** How the layout sets it out: the navigator's leaves it at its own size, with room for each label. */
+    setting?: Setting;
+    /** Each unit's title beside it, or only these units'. */
+    labels?: boolean | Set<string>;
+    /** How much larger than the marks the titles are drawn: zoomed out, the few left keep a size that reads. */
+    labelScale?: number;
+    /** The layer numbers down the left. */
+    axis?: boolean;
+    /** Where it was laid out. */
+    onlaid?: (placed: Layout) => void;
   } = $props();
 
   let width = $state(0);
-  const HEIGHT = 780;
+  const HEIGHT = $derived(height);
   let shown = $state.raw<Shown>({ nodes: [], edges: [] });
   const stage = new Stage(() => (shown = stage.shown()));
   onDestroy(() => stage.destroy());
@@ -33,10 +45,11 @@
     const across = width;
     if (across <= 0) return;
     untrack(() => {
-      const placed = layout(next, across, HEIGHT, model.layers, next.settled ? undefined : stage.targets());
-      const snap = laidOut > 0 && across !== laidOut;
+      const placed = layout(next, across, HEIGHT, model.layers, next.settled ? undefined : stage.targets(), setting);
+      const snap = laidOut > 0 && across !== laidOut && setting?.fit !== false;
       laidOut = across;
       shown = stage.update(next, placed, snap);
+      onlaid?.(placed);
     });
   });
   const seat = (el: HTMLElement, key: string) => stage.attachNode(el, key);
@@ -90,11 +103,11 @@
     const way = n.hop === 1 ? "Directly" : `${n.hop} links`;
     return `${way} ${n.side === "up" ? "upstream" : "downstream"} in the weights`;
   }
-  const ticks = $derived(Array.from({ length: model.layers }, (_, layer) => layer).filter((layer) => layer % 5 === 0));
+  const ticks = $derived(axis ? Array.from({ length: model.layers }, (_, layer) => layer).filter((layer) => layer % 5 === 0) : []);
   const depth = $derived(rows(graph, HEIGHT, model.layers));
 </script>
 
-<div class="graph" bind:clientWidth={width} style:height={`${HEIGHT}px`}>
+<div class="graph" bind:clientWidth={width} style:height={`${HEIGHT}px`} style:--label-scale={labelScale}>
   {#if width > 0}
     {#each ticks as layer, i (layer)}<span class="tick" style:--i={i} style:top={`${depth.neurons(layer)}px`} data-tip-title={`Layer ${layer}`} data-tip={bandOf(model, layer).name}>{layer}</span>{/each}
     <svg width={width} height={HEIGHT} aria-hidden="true">
@@ -126,14 +139,14 @@
         onpointerleave={() => point(null)}
         onfocus={() => point(node.key)}
         onblur={() => point(null)}
-      ><i style:background={depthColor(model, node.layer)}></i></a>
+      ><i style:background={depthColor(model, node.layer)}></i>{#if labels === true || (labels instanceof Set && labels.has(node.key))}<span class="label" in:fadeIn out:fadeOut>{node.wire?.title || nameOf(node)}</span>{/if}</a>
     {/each}
   {/if}
 </div>
 
 <style>
   .graph { position: relative; min-width: 0; }
-  svg { position: absolute; inset: 0; pointer-events: none; }
+  svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
   path { fill: none; stroke-linecap: round; transition: opacity var(--in) var(--ease), stroke-width var(--glide) var(--ease), stroke var(--glide) var(--ease); }
   path.against { stroke: var(--ink3); stroke-dasharray: 3 3; }
   .tick {
@@ -167,6 +180,26 @@
   .focus { z-index: 1; }
   .focus i { outline-color: var(--ink); }
   .dim i { opacity: 0.25; }
+  /* A title beside its mark, as wide as the layout left room for (LABEL in Navigator.svelte). */
+  .label {
+    position: absolute;
+    top: 50%;
+    left: calc(100% + 6px);
+    max-width: 220px;
+    overflow: hidden;
+    color: var(--ink2);
+    font: var(--type-meta);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    translate: 0 -50%;
+    scale: var(--label-scale, 1);
+    transform-origin: left center;
+    pointer-events: none;
+    transition: opacity var(--in) var(--ease), color var(--fast) var(--ease);
+  }
+  .focus .label { color: var(--ink); font-weight: 600; }
+  .hot .label { color: var(--ink); }
+  .dim .label { opacity: 0.25; }
   .hot i { scale: 1.3; }
   .node:active i { scale: 0.92; }
   @media (hover: hover) { .node:hover i { scale: 1.3; } }
