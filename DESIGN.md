@@ -36,6 +36,9 @@ What the site draws for itself, in Ledger:
   What stays glides, what goes withdraws into what it budded from, and any change takes over from wherever things are.
   A frame moves each mark by a transform alone, and draws the links as strokes on one canvas (`ink.ts`), in
   the navigator under its view so they stay sharp at any zoom, so a large graph moves as smoothly on a slow machine.
+  In the navigator the canvas also paints each title's frosted glass (the titles are text alone), and a pan moves one
+  layer holding the marks and the canvas by a translation, so panning paints nothing; marks don't take hover while the
+  view moves, and during a pinch the titles scale with the graph, back to one size on screen once it rests.
   Reduced motion keeps the fades and drops the rest.
 
 The explorer's one credit is "Labels by Claude Haiku 5.5".

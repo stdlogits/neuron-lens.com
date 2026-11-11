@@ -13,9 +13,11 @@
 // only moved; its mark grows inside it by a transform, so no frame lays the page out again. The links are
 // strokes on one canvas (ink.ts), which this restyles on the same clock: their weight and colour glide,
 // and lighting what connects a unit fades them, as their CSS transitions did when they were elements.
+// In the navigator each title is text alone: the canvas paints the frosted glass behind it (ink.ts), in
+// step with the title's fade in and out and its dimming, so moving the view blurs nothing again.
 import { FAST, GLIDE, IN, OUT, ease, reducedMotion } from "@stdlogits/ledger";
-import type { Ink, Stroke } from "./ink";
-import type { Layout, Placed } from "./layout";
+import type { Frost, Ink, Mark, Stroke } from "./ink";
+import type { Layout, Placed, Spot } from "./layout";
 import type { Graph, GraphEdge } from "./trace";
 
 export interface Seated extends Placed {
@@ -85,8 +87,8 @@ interface Seat {
   el: HTMLElement | null;
   /** The mark inside it, which grows and shrinks by a transform within the box. */
   mark: HTMLElement | null;
-  /** This frame's place. */
-  ax: number; ay: number; aw: number; ah: number;
+  /** This frame's place, and how much of it shows. */
+  ax: number; ay: number; aw: number; ah: number; alpha: number;
   painted: { transform: string; width: string; height: string; opacity: string; scale: string };
   /** Whether it has to be painted again: it moved this frame, or was given a new place or look. */
   stale: boolean;
@@ -106,6 +108,19 @@ interface Strand {
   /** This frame's stroke, for the canvas. */
   stroke: Stroke;
   stale: boolean;
+}
+
+/** A title beside a mark (the navigator's), whose glass the canvas paints. */
+interface Title {
+  key: string;
+  spot: Spot;
+  /** Its box before the zoom's counter-scale, in CSS pixels. */
+  w: number; h: number;
+  /** Fading in or out, as its transitions do; dimmed with its mark while another unit is lit. */
+  shown: Tween;
+  dim: Tween;
+  leaving: boolean;
+  frost: Frost;
 }
 
 /** Each node's way back to the unit: its nearest neighbour, the strongest of them if several are as near. */
@@ -136,6 +151,8 @@ function spanning(graph: Graph, focus: string | null) {
 }
 
 const unit = (value: number) => Math.max(0, Math.min(1, value));
+/** How far a title (and its mark) fades while another unit is lit: Graph.svelte's .dim. */
+const DIM = 0.25;
 /** Which seats moved in the frame being painted. */
 const moved = new Map<object, boolean>();
 
@@ -151,15 +168,62 @@ export class Stage {
   private landing = 0;
   private ink: Ink | null = null;
   private look: ((edge: GraphEdge) => Look) | null = null;
+  private titles = new Set<Title>();
+  private dimmed: (key: string) => boolean = () => false;
+  private tint: (seat: Seated) => string = () => "";
+  private sizes: ResizeObserver | null = null;
+  /** How much the titles are scaled against the marks (Graph.svelte's labelScale). */
+  private titleScale = 1;
+  private sized = new Map<Element, Title>();
 
   /** `changed`: what is shown has lost something that finished leaving. */
   constructor(private changed: () => void) {}
 
-  /** The canvas the links are drawn on, and how each should look. */
-  draw(ink: Ink | null, look: (edge: GraphEdge) => Look) {
+  /** The canvas the links are drawn on, how each should look, which titles are dimmed, and each mark's colour (for the glass to blur). */
+  draw(ink: Ink | null, look: (edge: GraphEdge) => Look, dimmed: (key: string) => boolean = () => false, tint: (seat: Seated) => string = () => "") {
     this.ink = ink;
     this.look = look;
+    this.dimmed = dimmed;
+    this.tint = tint;
     this.restyle(false);
+  }
+
+  /** An action's body for a title: the canvas paints its glass while it is shown. */
+  attachTitle(el: HTMLElement, [key, spot]: [string, Spot]) {
+    const now = performance.now();
+    const calm = reducedMotion();
+    const title: Title = {
+      key, spot, w: el.offsetWidth, h: el.offsetHeight,
+      shown: new Tween(1), dim: new Tween(this.dimmed(key) ? DIM : 1), leaving: false,
+      frost: { x: 0, y: 0, w: 0, h: 0, r: 0, alpha: 0 },
+    };
+    title.shown.from(-1, now, calm ? FAST : IN);
+    this.titles.add(title);
+    this.sizes ??= new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const held = this.sized.get(entry.target);
+        const box = entry.borderBoxSize?.[0];
+        if (!held || !box) continue;
+        held.w = box.inlineSize;
+        held.h = box.blockSize;
+      }
+      this.later();
+    });
+    this.sized.set(el, title);
+    this.sizes.observe(el);
+    this.run();
+    return {
+      update: ([, next]: [string, Spot]) => { if (next !== title.spot) { title.spot = next; this.later(); } },
+      destroy: () => {
+        this.sizes?.unobserve(el);
+        this.sized.delete(el);
+        title.leaving = true;
+        // As the title's own fade out: gone at once under reduced motion.
+        if (calm) title.shown.jump(0);
+        else title.shown.leave(0, performance.now(), OUT);
+        this.run();
+      },
+    };
   }
 
   /** Each link takes its look again (a unit lit, the graph's strongest link changed, a theme): weight and colour glide, opacity fades. */
@@ -167,7 +231,24 @@ export class Stage {
     const now = performance.now();
     const calm = reducedMotion();
     for (const strand of this.strands.values()) if (!strand.leaving) this.style(strand, now, animate && !calm ? GLIDE : 0, animate ? (calm ? FAST : IN) : 0);
+    for (const title of this.titles) {
+      const target = this.dimmed(title.key) ? DIM : 1;
+      if (animate) title.dim.go(target, now, calm ? FAST : IN);
+      else title.dim.jump(target);
+    }
     this.paint(now);
+    this.run();
+  }
+
+  /** The titles' scale against the marks changed: their glass follows. */
+  scaleTitles(scale: number) {
+    if (scale === this.titleScale) return;
+    this.titleScale = scale;
+    this.later();
+  }
+
+  /** Redraw once, on the next frame, however many titles changed side or size before it. */
+  private later() {
     this.run();
   }
 
@@ -276,7 +357,7 @@ export class Stage {
         node: seated(node),
         x: new Tween(node.x), y: new Tween(node.y), w: new Tween(node.w), h: new Tween(node.h), shown: new Tween(1),
         born, parent, leaving: false, el: null, mark: null,
-        ax: node.x, ay: node.y, aw: node.w, ah: node.h,
+        ax: node.x, ay: node.y, aw: node.w, ah: node.h, alpha: 0,
         painted: { transform: "", width: "", height: "", opacity: "", scale: "" },
         stale: true,
       };
@@ -367,6 +448,7 @@ export class Stage {
     cancelAnimationFrame(this.frame);
     clearTimeout(this.fallback);
     this.frame = 0;
+    this.sizes?.disconnect();
   }
 
   private run() {
@@ -395,6 +477,13 @@ export class Stage {
       if (strand.leaving && (!strand.shown.live || !this.seats.has(strand.edge.from) || !this.seats.has(strand.edge.to))) { this.strands.delete(key); gone = true; }
       else if (strand.shown.live || strand.drawn.live || strand.width.live || strand.alpha.live || strand.blend.live) moving = true;
     }
+    for (const title of this.titles) {
+      // Its fades run out here too: one whose mark has gone isn't painted, and would otherwise keep every frame coming.
+      title.shown.at(now);
+      title.dim.at(now);
+      if (title.leaving && !title.shown.live) this.titles.delete(title);
+      else if (title.shown.live || title.dim.live) moving = true;
+    }
     if (gone) this.changed();
     if (moving) this.run();
   };
@@ -420,11 +509,49 @@ export class Stage {
   }
 
   private paintLinks() {
-    this.ink?.draw(this.strokes());
+    const { ink } = this;
+    if (!ink) return;
+    if (!this.titles.size) { ink.draw(this.strokes()); return; }
+    ink.draw(this.strokes(), this.frosts(performance.now(), this.titleScale, ink.chip()), this.marks());
   }
 
   private *strokes() {
     for (const strand of this.strands.values()) yield strand.stroke;
+  }
+
+  /** Where each title's glass is this frame, in the graph's coordinates: by its mark, at the side Graph.svelte's
+   * .label puts it, scaled against the marks as the title is (s), as visible as the title. */
+  private *frosts(now: number, s: number, chip: number) {
+    for (const title of this.titles) {
+      const seat = this.seats.get(title.key);
+      const { frost } = title;
+      if (!seat) { frost.alpha = 0; continue; }
+      const gap = 3 * s;
+      const w = title.w * s;
+      const h = title.h * s;
+      const bw = seat.w.target;
+      const bh = seat.h.target;
+      if (title.spot === "below" || title.spot === "above") {
+        frost.x = seat.ax - w / 2;
+        frost.y = title.spot === "below" ? seat.ay + bh / 2 + gap : seat.ay - bh / 2 - gap - h;
+      } else {
+        frost.x = title.spot === "right" ? seat.ax + bw / 2 + gap : seat.ax - bw / 2 - gap - w;
+        frost.y = seat.ay - h / 2;
+      }
+      frost.w = w;
+      frost.h = h;
+      frost.r = chip * s;
+      frost.alpha = seat.alpha * unit(title.shown.at(now)) * unit(title.dim.at(now));
+      yield frost;
+    }
+  }
+
+  /** The marks, as the glass sees them behind it. */
+  private *marks(): Generator<Mark> {
+    for (const seat of this.seats.values()) {
+      if (seat.alpha <= 0) continue;
+      yield { x: seat.ax, y: seat.ay, w: seat.aw, h: seat.ah, alpha: seat.alpha * (this.dimmed(seat.node.key) ? DIM : 1), color: this.tint(seat.node) };
+    }
   }
 
   private paintSeat(seat: Seat, now: number) {
@@ -432,7 +559,8 @@ export class Stage {
     seat.ay = seat.y.at(now);
     seat.aw = Math.max(0, seat.w.at(now));
     seat.ah = Math.max(0, seat.h.at(now));
-    const opacity = unit(seat.shown.at(now)).toFixed(2);
+    seat.alpha = unit(seat.shown.at(now));
+    const opacity = seat.alpha.toFixed(2);
     const { el, mark, painted } = seat;
     if (!el) return;
     // The box is the size the mark is going to, so it changes only with a new layout; the mark fills it at this frame's size.

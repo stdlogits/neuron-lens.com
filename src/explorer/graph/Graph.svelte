@@ -3,7 +3,7 @@
   import { fadeIn, fadeOut } from "@stdlogits/ledger";
   import { bandOf, depthColor, type ModelInfo } from "../../lib/models";
   import { headId, neuronId, percent } from "../../lib/data";
-  import { Ink, type View } from "./ink";
+  import { Ink, OVERSCAN, type View } from "./ink";
   import { layout, rows, type Layout, type Open, type Spot } from "./layout";
   import { Stage, type Look, type Seated, type Shown } from "./stage";
   import { headInput, type Graph, type GraphEdge, type Mode } from "./trace";
@@ -65,6 +65,7 @@
     });
   });
   const seat = (el: HTMLElement, key: string) => stage.attachNode(el, key);
+  const titled = (el: HTMLElement, place: [string, Spot]) => stage.attachTitle(el, place);
 
   const top = $derived(graph.edges.reduce((max, e) => Math.max(max, e.flow), 1e-9));
 
@@ -124,8 +125,6 @@
   /** How far the canvas reaches past the box above and below, so a link bending past a row at the edge isn't cut.
    * Not across: the marks keep inside the box's gutters (layout.ts), and a canvas wider than the box would widen a phone's page. */
   const MARGIN = 8;
-  /** How far past the screen the navigator's canvas draws, in CSS pixels. */
-  const OVERSCAN = 160;
   let ink = $state.raw<Ink | null>(null);
   function look(edge: GraphEdge): Look {
     const strength = Math.sqrt(Math.min(1, edge.flow / top));
@@ -141,10 +140,10 @@
   const canvas = $derived(surface?.canvas ?? own);
   $effect(() => {
     if (!canvas) return;
-    // The navigator's canvas draws past the screen, so a pan mostly slides it.
+    // The navigator's canvas draws past the screen, so a pan mostly moves what is drawn.
     const made = new Ink(canvas, () => stage.restyle(false), untrack(() => (surface ? OVERSCAN : 0)));
     ink = made;
-    untrack(() => stage.draw(made, look));
+    untrack(() => stage.draw(made, look, (key) => !!lit && !lit.nodes.has(key), (n) => depthColor(model, n.layer)));
     return () => {
       made.destroy();
       if (ink === made) ink = null;
@@ -154,13 +153,19 @@
   $effect(() => {
     if (!ink) return;
     if (surface) {
-      const resized = ink.resize(surface.width, surface.height);
-      if (!ink.slide(surface.view) || resized) untrack(() => stage.redraw());
+      ink.resize(surface.width, surface.height);
+      ink.setView(surface.view);
+      untrack(() => stage.redraw());
     } else {
       ink.resize(width, HEIGHT + 2 * MARGIN);
       ink.setView({ k: 1, tx: 0, ty: MARGIN });
       untrack(() => stage.redraw());
     }
+  });
+  // The titles' scale against the marks, for their glass.
+  $effect(() => {
+    const scale = labelScale;
+    if (ink) untrack(() => stage.scaleTitles(scale));
   });
   // A unit lit or let go, the strongest link changed, a new model's colours: every link takes its look again.
   $effect(() => {
@@ -191,7 +196,7 @@
         onpointerleave={() => point(null)}
         onfocus={() => point(node.key)}
         onblur={() => point(null)}
-      ><i style:background={depthColor(model, node.layer)}></i>{#if labels?.has(node.key)}<span class="label {labels.get(node.key)}" in:fadeIn out:fadeOut>{node.wire?.title || nameOf(node)}</span>{/if}</a>
+      ><i style:background={depthColor(model, node.layer)}></i>{#if labels?.has(node.key)}<span class="label {labels.get(node.key)}" use:titled={[node.key, labels.get(node.key)!]} in:fadeIn out:fadeOut>{node.wire?.title || nameOf(node)}</span>{/if}</a>
     {/each}
   {/if}
 </div>
@@ -230,8 +235,9 @@
   .focus { z-index: 1; }
   .focus i { outline-color: var(--ink); }
   .dim i { opacity: 0.25; }
-  /* A title by its mark, where the navigator found room for it, one size on screen at any zoom: wrapped
-     at LABEL (Navigator.svelte) on the tip's frosted glass, so links behind it blur rather than cross its words. */
+  /* A title by its mark, where the navigator found room for it, one size on screen at any zoom, wrapped at
+     LABEL (Navigator.svelte). Its frosted glass, the tip's, is painted on the links' canvas behind it (ink.ts),
+     where moving the view costs nothing; a backdrop-filter on each title blurred anew every frame. */
   .label {
     --s: var(--label-scale, 1);
     position: absolute;
@@ -239,9 +245,6 @@
     max-width: 160px;
     padding: 1px 5px;
     border-radius: var(--r-chip);
-    background: color-mix(in oklch, var(--paper) 72%, transparent);
-    -webkit-backdrop-filter: blur(20px) saturate(1.6);
-    backdrop-filter: blur(20px) saturate(1.6);
     color: var(--ink2);
     font: var(--type-meta);
     text-align: center;
@@ -260,7 +263,4 @@
   .hot i { scale: 1.3; }
   .node:active i { scale: 0.92; }
   @media (hover: hover) { .node:hover i { scale: 1.3; } }
-  /* Without a blur behind it, the glass would let the links show through: make it solid instead, as the tip does. */
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .label { background: var(--paper); } }
-  @media (prefers-reduced-transparency: reduce) { .label { background: var(--paper); } }
 </style>

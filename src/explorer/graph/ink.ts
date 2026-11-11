@@ -20,8 +20,26 @@ export interface Stroke {
   drawn: number;
 }
 
+/** How far past the screen the navigator's canvas draws, in CSS pixels: a pan within it moves what is drawn, and only past it draws again. */
+export const OVERSCAN = 256;
+
 /** The view: graph coordinates x, y land at x · k + tx, y · k + ty on the canvas, in CSS pixels. */
 export interface View { k: number; tx: number; ty: number }
+/** A title's glass: its box and corner radius in graph coordinates, and how visible the title is (0–1). */
+export interface Frost { x: number; y: number; w: number; h: number; r: number; alpha: number }
+/** A mark, centred at x, y, as the glass sees it behind a title. */
+export interface Mark { x: number; y: number; w: number; h: number; alpha: number; color: string }
+
+/** The glass: Ledger's tip, `paper` at 72% over what is behind it, blurred 20 px and saturated 1.6. A browser
+ * blurs a backdrop within the element's own box, so what is behind a title fades to a haze of its own colours
+ * there. The same here: what is behind each title, saturated, averaged down to a sample about every SAMPLE px
+ * across its box and smoothed back up over it, taken from a copy at a quarter of the canvas's resolution. */
+const GLASS = 0.72;
+const SATURATE = 1.6;
+const SAMPLE = 16;
+const QUARTER = 0.25;
+/** The haze canvas's width: wide enough for every title's cell in a few rows, and for the GPU to keep it. */
+const ATLAS = 1024;
 
 /** About how long a link is, for drawing part of it. */
 function length(s: Stroke) {
@@ -47,8 +65,6 @@ export class Ink {
   private height = 0;
   private ratio = 1;
   private view: View = { k: 1, tx: 0, ty: 0 };
-  /** The view last drawn under, which a pan slides the drawing from until it runs past the overscan. */
-  private drawn: View | null = null;
   /** A colour, as the page resolves it (canvas takes no custom properties), for as long as the theme holds. */
   private colors = new Map<string, string>();
   private probe: HTMLElement;
@@ -57,7 +73,7 @@ export class Ink {
   private changed: () => void;
 
   /** `restyle`: the page's colours changed (a theme switch), so whatever was resolved must be again. `pad`:
-   * how far past its box on each side it draws, so a pan can slide the drawing rather than draw it again. */
+   * how far past its box on each side it draws, so a pan can move what is drawn rather than draw it again. */
   constructor(private canvas: HTMLCanvasElement, private restyle: () => void, private pad = 0) {
     this.ctx = canvas.getContext("2d");
     // Outside the markup Svelte keeps, under the root that holds the colour tokens.
@@ -78,13 +94,21 @@ export class Ink {
     this.probe.remove();
   }
 
+  /** Ledger's chip radius, in CSS pixels. */
+  chip() {
+    return parseFloat(this.color("var(--r-chip)", "--r-chip")) || 6;
+  }
+
   /** A CSS colour (custom properties, color-mix and all) as one the canvas can take. */
-  color(css: string): string {
+  color(css: string, property?: string): string {
     let found = this.colors.get(css);
     if (found === undefined) {
-      this.probe.style.color = "";
-      this.probe.style.color = css;
-      found = getComputedStyle(this.probe).color || "#888";
+      if (property) found = getComputedStyle(this.probe).getPropertyValue(property).trim();
+      else {
+        this.probe.style.color = "";
+        this.probe.style.color = css;
+        found = getComputedStyle(this.probe).color || "#888";
+      }
       this.colors.set(css, found);
     }
     return found;
@@ -103,7 +127,6 @@ export class Ink {
     canvas.style.width = `${width + 2 * pad}px`;
     canvas.style.height = `${height + 2 * pad}px`;
     if (pad) { canvas.style.left = `${-pad}px`; canvas.style.top = `${-pad}px`; }
-    this.drawn = null;
     return true;
   }
 
@@ -111,23 +134,9 @@ export class Ink {
     this.view = view;
   }
 
-  /** Move to a view by sliding what is drawn, if the view only panned and not past the overscan: true if that did. */
-  slide(view: View) {
-    this.view = view;
-    const { drawn, pad } = this;
-    if (!drawn || !pad || drawn.k !== view.k) return false;
-    const dx = view.tx - drawn.tx;
-    const dy = view.ty - drawn.ty;
-    if (Math.abs(dx) > pad || Math.abs(dy) > pad) return false;
-    this.canvas.style.transform = dx || dy ? `translate(${dx}px, ${dy}px)` : "";
-    return true;
-  }
-
-  draw(strokes: Iterable<Stroke>) {
+  draw(strokes: Iterable<Stroke>, frosts?: Iterable<Frost>, marks?: Iterable<Mark>) {
     const { ctx, view, ratio, pad } = this;
     if (!ctx) return;
-    this.drawn = view;
-    if (this.canvas.style.transform) this.canvas.style.transform = "";
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.setTransform(ratio * view.k, 0, 0, ratio * view.k, ratio * (view.tx + pad), ratio * (view.ty + pad));
@@ -161,5 +170,124 @@ export class Ink {
     }
     if (dash) ctx.setLineDash([]);
     ctx.globalAlpha = 1;
+    if (frosts) this.frost(frosts, marks ?? []);
+  }
+
+  // The offscreen canvases the glass is made in: what is behind it, small; that saturated; every title's haze,
+  // packed side by side on one canvas large enough that the browser keeps it on the GPU, so making the glass never
+  // reads a canvas back from the GPU (a small one is kept in memory, and each title's haze then cost a round trip).
+  private behind: HTMLCanvasElement | null = null;
+  private vivid: HTMLCanvasElement | null = null;
+  private haze: HTMLCanvasElement | null = null;
+  private clear = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-transparency: reduce)") : null;
+
+  /** Each title's glass, over the links and under its words: what is behind it as a haze, then paper over that.
+   * Where transparency is turned down the paper is solid, as the tip's is. */
+  private frost(frosts: Iterable<Frost>, marks: Iterable<Mark>) {
+    const { ctx, canvas, view, ratio, pad } = this;
+    if (!ctx) return;
+    const shown = [...frosts].filter((f) => f.alpha > 0.002);
+    if (!shown.length) return;
+    const paper = this.color("var(--paper)");
+    const toView = () => ctx.setTransform(ratio * view.k, 0, 0, ratio * view.k, ratio * (view.tx + pad), ratio * (view.ty + pad));
+    const source = this.clear?.matches ? null : this.backdrop(marks);
+
+    // Where each title's box is on the canvas, in device pixels, and its cell of the haze: a sample about every
+    // SAMPLE px across it, with a sample's border of what is just outside, so smoothing it up stays within the cell.
+    interface Cell { f: Frost; x: number; y: number; w: number; h: number; nx: number; ny: number; cx: number; cy: number }
+    const cells: Cell[] = [];
+    let cx = 0;
+    let cy = 0;
+    let row = 0;
+    for (const f of shown) {
+      const x = Math.max(0, Math.floor(ratio * (f.x * view.k + view.tx + pad)));
+      const y = Math.max(0, Math.floor(ratio * (f.y * view.k + view.ty + pad)));
+      const w = Math.min(canvas.width - x, Math.ceil(ratio * f.w * view.k));
+      const h = Math.min(canvas.height - y, Math.ceil(ratio * f.h * view.k));
+      const nx = Math.max(1, Math.round(w / ratio / SAMPLE));
+      const ny = Math.max(1, Math.round(h / ratio / SAMPLE));
+      if (cx + nx + 2 > ATLAS) { cx = 0; cy += row; row = 0; }
+      cells.push({ f, x, y, w, h, nx, ny, cx: cx + 1, cy: cy + 1 });
+      cx += nx + 2;
+      row = Math.max(row, ny + 2);
+    }
+    let atlas: CanvasRenderingContext2D | null = null;
+    if (source) {
+      this.haze ??= document.createElement("canvas");
+      const height = Math.max(ATLAS / 2, cy + row);
+      if (this.haze.width !== ATLAS || this.haze.height < height) { this.haze.width = ATLAS; this.haze.height = height; }
+      atlas = this.haze.getContext("2d");
+      if (atlas) {
+        atlas.setTransform(1, 0, 0, 1, 0, 0);
+        atlas.clearRect(0, 0, ATLAS, cy + row);
+        atlas.imageSmoothingQuality = "high";
+        for (const c of cells) {
+          if (c.w <= 0 || c.h <= 0) continue;
+          const sx = c.w / c.nx;
+          const sy = c.h / c.ny;
+          atlas.drawImage(source, (c.x - sx) * QUARTER, (c.y - sy) * QUARTER, (c.w + 2 * sx) * QUARTER, (c.h + 2 * sy) * QUARTER, c.cx - 1, c.cy - 1, c.nx + 2, c.ny + 2);
+        }
+      }
+    }
+
+    ctx.imageSmoothingQuality = "high";
+    for (const c of cells) {
+      toView();
+      ctx.beginPath();
+      ctx.roundRect(c.f.x, c.f.y, c.f.w, c.f.h, c.f.r);
+      if (atlas && c.w > 0 && c.h > 0) {
+        // The haze in place of what was sharp behind it: cleared, then laid, as visible as the title.
+        ctx.save();
+        ctx.clip();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalAlpha = c.f.alpha;
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.fillRect(c.x, c.y, c.w, c.h);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.drawImage(this.haze!, c.cx, c.cy, c.nx, c.ny, c.x, c.y, c.w, c.h);
+        ctx.restore();
+        toView();
+      }
+      ctx.globalAlpha = c.f.alpha * (atlas ? GLASS : 1);
+      ctx.fillStyle = paper;
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /** What is behind the glass, a quarter the size and saturated: the links as drawn, and the marks. */
+  private backdrop(marks: Iterable<Mark>): HTMLCanvasElement | null {
+    const { canvas, view, ratio, pad } = this;
+    const width = Math.max(1, Math.ceil(canvas.width * QUARTER));
+    const height = Math.max(1, Math.ceil(canvas.height * QUARTER));
+    this.behind ??= document.createElement("canvas");
+    this.vivid ??= document.createElement("canvas");
+    const behind = this.behind.getContext("2d");
+    const vivid = this.vivid.getContext("2d");
+    if (!behind || !vivid) return null;
+    for (const c of [this.behind, this.vivid]) if (c.width !== width || c.height !== height) { c.width = width; c.height = height; }
+    behind.setTransform(1, 0, 0, 1, 0, 0);
+    behind.clearRect(0, 0, width, height);
+    behind.imageSmoothingQuality = "high";
+    behind.drawImage(canvas, 0, 0, width, height);
+    const scale = ratio * view.k * QUARTER;
+    behind.setTransform(scale, 0, 0, scale, ratio * (view.tx + pad) * QUARTER, ratio * (view.ty + pad) * QUARTER);
+    for (const m of marks) {
+      if (!m.color) continue;
+      behind.globalAlpha = m.alpha;
+      behind.fillStyle = this.color(m.color);
+      behind.beginPath();
+      behind.roundRect(m.x - m.w / 2, m.y - m.h / 2, m.w, m.h, Math.min(m.w, m.h) / 2);
+      behind.fill();
+    }
+    behind.globalAlpha = 1;
+    // Saturated where the canvas can filter; as it is where it can't (Safari before 18).
+    if (!("filter" in vivid)) return this.behind;
+    vivid.setTransform(1, 0, 0, 1, 0, 0);
+    vivid.clearRect(0, 0, width, height);
+    vivid.filter = `saturate(${SATURATE})`;
+    vivid.drawImage(this.behind, 0, 0);
+    vivid.filter = "none";
+    return this.vivid;
   }
 }

@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { GLIDE, IconButton, LabelText, Segmented, Tabs, ease, reducedMotion } from "@stdlogits/ledger";
   import Graph from "./Graph.svelte";
-  import type { View } from "./ink";
+  import { OVERSCAN, type View } from "./ink";
   import { rows, type Layout, type Open, type Placed, type Spot } from "./layout";
   import type { Graph as GraphData, GraphNode, Mode, Reach } from "./trace";
   import { bandOf, type ModelInfo } from "../../lib/models";
@@ -14,8 +14,10 @@
   // beside it. Rows are spaced so most fit at HOME; zooming in makes room for the rest. Drag (or scroll) to move,
   // pinch (or ⌘/ctrl and scroll, or + and −) to zoom; a unit's mark opens it here, re-centring the graph
   // on it. Its address is the unit's with ?graph, so Back and links work, and Escape closes it.
-  // The view moves once a frame, however many events ask it to: the marks by one transform, the links
-  // (drawn on a canvas of the view's own size, under the view, so they stay sharp) in the same frame.
+  // The view moves once a frame, however many events ask it to. The marks and the links (drawn on a canvas of the
+  // view's size, under the view, so they stay sharp) are laid out at a base view, and a pan moves only the layer
+  // that holds both, by a translation the compositor applies alone: nothing is painted or layered again until the
+  // pan runs past what the canvas drew around the screen, or the zoom changes, which lay them out at the view anew.
   let { graph, model, mode, modes, onmode, reach, reaches, onreach, hovered, point, href, name, title, close }: {
     graph: GraphData;
     model: ModelInfo;
@@ -126,6 +128,8 @@
   let tx = 0;
   let ty = 0;
   let shown = $state.raw<View>({ k: HOME, tx: 0, ty: 0 });
+  /** Where the marks and links were last laid out: `shown`, less a pan since. */
+  let base = $state.raw<View>({ k: HOME, tx: 0, ty: 0 });
   /** The zoom the titles are placed for: a glide's end at once, a pinch or a scroll once it rests. */
   let labelK = $state(HOME);
   let gliding = false;
@@ -133,15 +137,30 @@
   let glideStart = 0;
   let frame = 0;
   let resting = 0;
-  /** A drag or a scroll under way: the marks' layer is handed to the compositor, which moves it without
-   * painting it again. Never while zooming, where it would be scaled from a stale picture rather than drawn sharp. */
-  let panning = $state(false);
-  let panStill = 0;
-  function panned() {
-    if (!panning) panning = true;
-    clearTimeout(panStill);
-    panStill = window.setTimeout(() => (panning = false), 160);
+  /** Any move of the view under way (a pan or a zoom): marks sliding under a still pointer don't light up, show
+   * their tips or take hover, which would restyle the whole graph each time one passed; they do again once it rests. */
+  let moving = $state(false);
+  /** A pinch or a ⌘/ctrl-scroll under way: the titles keep the size they had and scale with the graph until it rests,
+   * as a map's labels do, rather than every title being restyled each frame of it. */
+  let zooming = $state(false);
+  let still = 0;
+  function stir(zoom = false) {
+    if (!moving) moving = true;
+    if (zoom && !zooming) zooming = true;
+    clearTimeout(still);
+    still = window.setTimeout(rest, 160);
   }
+  /** At rest again: the titles back to one size on screen, and the light out unless the pointer is still on a mark, which then lights it again. */
+  function rest() {
+    moving = false;
+    if (zooming) { zooming = false; labelK = shown.k; }
+    point(null);
+  }
+  /** How much the titles are scaled against the marks: one size on screen, except while a zoom is under way. */
+  const labelScale = $derived(1 / (zooming ? labelK : base.k));
+  /** While the view moves, what is lit stays lit: marks passing under the pointer neither light nor put out. */
+  const pointHere = (key: string | null) => { if (!moving) point(key); };
+  const panned = () => stir();
   function at(now: number): View {
     if (!gliding) return { k, tx, ty };
     const t = Math.min(1, (now - glideStart) / GLIDE);
@@ -158,6 +177,8 @@
         resting = window.setTimeout(() => (labelK = shown.k), 100);
       }
       shown = next;
+      // A zoom or a glide lays everything out at the view; a pan only once it nears the edge of what was drawn.
+      if (next.k !== base.k || gliding || Math.abs(next.tx - base.tx) > OVERSCAN * 0.75 || Math.abs(next.ty - base.ty) > OVERSCAN * 0.75) base = next;
     }
     if (gliding) frame = requestAnimationFrame(step);
   }
@@ -174,6 +195,7 @@
       cancelAnimationFrame(frame);
       frame = 0;
       shown = { k, tx, ty };
+      base = shown;
       labelK = k;
       return;
     }
@@ -182,7 +204,7 @@
   let viewWidth = $state(0);
   let viewHeight = $state(0);
   let links = $state<HTMLCanvasElement>();
-  const surface = $derived(links && viewWidth > 0 ? { canvas: links, width: viewWidth, height: viewHeight, view: shown } : null);
+  const surface = $derived(links && viewWidth > 0 ? { canvas: links, width: viewWidth, height: viewHeight, view: base } : null);
   let centred: string | null = null;
   /** Where the unit sat when last centred on, and whether the view has been moved since. */
   let centredAt = 0;
@@ -217,7 +239,7 @@
     const py = y ?? box.height / 2;
     const next = clamp(to);
     moved = true;
-    if (panning) { clearTimeout(panStill); panning = false; }
+    if (!glide) stir(true);
     tx = px - ((px - tx) * next) / k;
     ty = py - ((py - ty) * next) / k;
     k = next;
@@ -302,7 +324,7 @@
       document.documentElement.style.overflow = page;
       cancelAnimationFrame(frame);
       clearTimeout(resting);
-      clearTimeout(panStill);
+      clearTimeout(still);
     };
   });
 
@@ -315,16 +337,21 @@
 
 <div class="navigator" role="dialog" aria-modal="true" aria-label={`Connections of ${name}`} tabindex="-1" bind:this={dialog}>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="view" bind:this={view} bind:clientWidth={viewWidth} bind:clientHeight={viewHeight} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onclickcapture={click}>
-    <canvas class="links" bind:this={links} aria-hidden="true"></canvas>
-    <div class="canvas" class:panning style:transform={`translate(${shown.tx}px, ${shown.ty}px) scale(${shown.k})`}>
-      <Graph {graph} {model} {mode} {href} {hovered} {point} {height} {open} labels={spots} labelScale={1 / shown.k} axis={false} onlaid={laid} {surface} />
+  <div class="view" class:moving bind:this={view} bind:clientWidth={viewWidth} bind:clientHeight={viewHeight} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onclickcapture={click}>
+    <div class="pan" style:transform={`translate(${shown.tx - base.tx}px, ${shown.ty - base.ty}px)`}>
+      <canvas class="links" bind:this={links} aria-hidden="true"></canvas>
+      <div class="canvas" style:transform={`translate(${base.tx}px, ${base.ty}px) scale(${base.k})`}>
+        <Graph {graph} {model} {mode} {href} {hovered} point={pointHere} {height} {open} labels={spots} {labelScale} axis={false} onlaid={laid} {surface} />
+      </div>
     </div>
     <div class="axis" aria-hidden="true">
-      {#each model.bands as band (band.key)}
-        <span class="band" style:top={`${shown.ty + depth.heads(band.first) * shown.k}px`} style:height={`${(depth.neurons(band.last) - depth.heads(band.first)) * shown.k}px`}><b>{band.short}</b></span>
-      {/each}
-      {#each ticks as layer (layer)}<span class="tick" style:top={`${shown.ty + depth.neurons(layer) * shown.k}px`}>{layer}</span>{/each}
+      <!-- A pan moves the whole rule at once; only a zoom spaces it again. -->
+      <div class="rule" style:transform={`translateY(${shown.ty}px)`}>
+        {#each model.bands as band (band.key)}
+          <span class="band" style:top={`${depth.heads(band.first) * shown.k}px`} style:height={`${(depth.neurons(band.last) - depth.heads(band.first)) * shown.k}px`}><b>{band.short}</b></span>
+        {/each}
+        {#each ticks as layer (layer)}<span class="tick" style:top={`${depth.neurons(layer) * shown.k}px`}>{layer}</span>{/each}
+      </div>
     </div>
   </div>
 
@@ -351,10 +378,16 @@
   .navigator { position: fixed; inset: 0; z-index: 20; background: var(--paper); outline: none; }
   .view { position: absolute; inset: 0; overflow: hidden; cursor: grab; touch-action: none; overscroll-behavior: contain; }
   .view:active { cursor: grabbing; }
+  /* What moves every frame of a pan has a layer of its own and moves by a translation alone (the marks and links together,
+     the axis's rule), so moving it is the compositor's work and never makes the hundreds of marks and titles be painted or
+     layered again. The layer is never scaled, so it is never drawn from a stale picture: a zoom scales what is inside it. */
+  .pan { position: absolute; inset: 0; will-change: transform; }
   .links { position: absolute; top: 0; left: 0; pointer-events: none; }
   .canvas { position: absolute; top: 0; left: 0; width: 100%; transform-origin: 0 0; }
-  .canvas.panning { will-change: transform; }
-  .axis { position: absolute; top: 0; bottom: 0; left: 0; width: 64px; background: color-mix(in oklch, var(--paper) 92%, transparent); pointer-events: none; }
+  .axis { position: absolute; top: 0; bottom: 0; left: 0; width: 64px; overflow: hidden; background: color-mix(in oklch, var(--paper) 92%, transparent); pointer-events: none; }
+  .rule { position: absolute; inset: 0; will-change: transform; }
+  /* Off on the one layer, inherited by every mark, rather than set on each. */
+  .moving .pan { pointer-events: none; }
   .band { position: absolute; left: 0; width: 6px; border-radius: 0 3px 3px 0; background: var(--wash); }
   .band b { position: absolute; top: 0; left: 12px; color: var(--ink3); font: var(--type-head); white-space: nowrap; writing-mode: vertical-rl; }
   .tick {
