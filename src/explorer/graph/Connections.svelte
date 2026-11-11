@@ -3,7 +3,7 @@
   import { IconButton, LabelText, Meter, MorphText, Segmented, Swap, Tabs, expand, fadeIn } from "@stdlogits/ledger";
   import Graph from "./Graph.svelte";
   import Navigator from "./Navigator.svelte";
-  import { focusOf, headInput, nodeKey, trace, type Graph as GraphData, type Mode, type Reach } from "./trace";
+  import { focusOf, headInput, nodeKey, trace, type Graph as GraphData, type Mode, type Reach, type Take } from "./trace";
   import { useLens } from "../lens.svelte";
   import { depthColor } from "../../lib/models";
   import { headId, headOf, neuronId, percent, poleOf, type Link, type Through, type Wire } from "../../lib/data";
@@ -58,14 +58,35 @@
 
   // Wait for a neuron's detail so its clearer side is known; heads have one side.
   const ready = $derived(lens.selected !== null && (isHead || lens.neuronDetail !== null));
+  // The walk publishes the graph each time it reaches a layer, often several times a frame: it is taken as it
+  // stands, laid out and drawn once a frame (or after 100 ms, for a page given no frames).
   let latest: object | null = null;
   $effect(() => {
     if (!ready) return;
     const token = {};
     latest = token;
+    let queued: Take | null = null;
+    let frame = 0;
+    let timer = 0;
+    const flush = () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+      frame = timer = 0;
+      if (latest === token && queued) graph = queued();
+      queued = null;
+    };
+    const publish = (next: Take) => {
+      if (latest !== token) return;
+      queued = next;
+      if (!frame) { frame = requestAnimationFrame(flush); timer = window.setTimeout(flush, 100); }
+    };
     const focus = focusOf(lens.model, lens.unit, lens.layer, lens.selected!, lens.side === 0 ? 1 : -1);
-    void trace(lens.model, focus, shownMode, reach, (next) => { if (latest === token) graph = next; }, () => latest === token);
-    return () => { if (latest === token) latest = null; };
+    void trace(lens.model, focus, shownMode, reach, publish, () => latest === token);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+      if (latest === token) latest = null;
+    };
   });
 
   const nodeOf = $derived(new Map((graph?.nodes ?? []).map((node) => [node.key, node])));
@@ -163,58 +184,69 @@
 </script>
 
 <aside class="rail" aria-label="Connections">
-  <div class="tools">
-    {#if modes.length > 1}<Segmented options={modes} value={shownMode} onchange={(value: Mode) => (mode = value)} label="Which connections" />{/if}
-    <div class="reach" class:off={shownMode === "with"} inert={shownMode === "with"}><Tabs options={reaches} value={reach} onchange={(value: string) => (reach = value as Reach)} label="How far" /></div>
-    <IconButton icon="expand" label="Full screen, with every title" onclick={() => lens.setGraph(true)} />
+  <div class="figure">
+    <div class="tools">
+      {#if modes.length > 1}<Segmented options={modes} value={shownMode} onchange={(value: Mode) => (mode = value)} label="Which connections" />{/if}
+      <div class="reach" class:off={shownMode === "with"} inert={shownMode === "with"}><Tabs options={reaches} value={reach} onchange={(value: string) => (reach = value as Reach)} label="How far" /></div>
+      <IconButton icon="expand" label="Full screen, with every title" onclick={() => lens.setGraph(true)} />
+    </div>
+
+    {#if mix}
+      <div class="mix" data-tip={mixTip} transition:expand>
+        <div class="bar" aria-hidden="true"><i style:flex-grow={Math.max(mix[0], 0)}></i><i class="two" style:flex-grow={Math.max(mix[1], 0)}></i></div>
+        <p class="meta"><MorphText text={`Neurons ${signedPercent(mix[0])} · heads ${signedPercent(mix[1])} · embedding ${signedPercent(mix[2])}`} /></p>
+      </div>
+    {/if}
+
+    {#if graph && lens.graphOpen}
+      <Navigator {graph} model={lens.model} mode={shownMode} modes={modes} onmode={(value: Mode) => (mode = value)} {reach} {reaches} onreach={(value: Reach) => (reach = value)}
+        {hovered} {point} href={graphHref} name={focusName} title={focusWire?.title ?? ""} close={() => lens.setGraph(false)} />
+    {/if}
+    {#if graph && !lens.graphOpen}
+      <Graph {graph} model={lens.model} mode={shownMode} href={hrefFor} {hovered} {point} />
+      <ul class="key meta" aria-label="Key">
+        <li data-tip="One side of a neuron. The larger it is, the more of the flow runs through it"><i class="dot"></i>Neuron</li>
+        {#if showsHeads}<li data-tip="An attention head. It sits just above its layer's neurons, because it writes into their stream"><i class="bar"></i>Head</li>{/if}
+        {#if shownMode !== "with"}
+          <li data-tip="A link that raises what it leads to. The heavier it is, the more of the flow it carries"><i class="line"></i>Pushes for</li>
+          {#if showsAgainst}<li data-tip="A link that lowers what it leads to"><i class="line against"></i>Pushes against</li>{/if}
+        {/if}
+      </ul>
+    {:else}<div class="waiting" aria-hidden="true"></div>{/if}
   </div>
 
-  {#if mix}
-    <div class="mix" data-tip={mixTip} transition:expand>
-      <div class="bar" aria-hidden="true"><i style:flex-grow={Math.max(mix[0], 0)}></i><i class="two" style:flex-grow={Math.max(mix[1], 0)}></i></div>
-      <p class="meta"><MorphText text={`Neurons ${signedPercent(mix[0])} · heads ${signedPercent(mix[1])} · embedding ${signedPercent(mix[2])}`} /></p>
-    </div>
-  {/if}
-
-  {#if graph && lens.graphOpen}
-    <Navigator {graph} model={lens.model} mode={shownMode} modes={modes} onmode={(value: Mode) => (mode = value)} {reach} {reaches} onreach={(value: Reach) => (reach = value)}
-      {hovered} {point} href={graphHref} name={focusName} title={focusWire?.title ?? ""} close={() => lens.setGraph(false)} />
-  {/if}
-  {#if graph && !lens.graphOpen}
-    <Graph {graph} model={lens.model} mode={shownMode} href={hrefFor} {hovered} {point} />
-    <ul class="key meta" aria-label="Key">
-      <li data-tip="One side of a neuron. The larger it is, the more of the flow runs through it"><i class="dot"></i>Neuron</li>
-      {#if showsHeads}<li data-tip="An attention head. It sits just above its layer's neurons, because it writes into their stream"><i class="bar"></i>Head</li>{/if}
-      {#if shownMode !== "with"}
-        <li data-tip="A link that raises what it leads to. The heavier it is, the more of the flow it carries"><i class="line"></i>Pushes for</li>
-        {#if showsAgainst}<li data-tip="A link that lowers what it leads to"><i class="line against"></i>Pushes against</li>{/if}
-      {/if}
-    </ul>
-  {:else}<div class="waiting" aria-hidden="true"></div>{/if}
-
-  {#each sides as side (side.title)}
-    <section class="side">
-      <h3 class="head" data-tip={side.tip}>{side.title}</h3>
-      <Swap key={listKey}>
-        <div class="rows">
-          {#each side.rows as item, i (item.key)}
-            <a class="row rise" style:--i={i} class:on={hovered === item.key} href={item.href} onpointerenter={() => point(item.key)} onpointerleave={() => point(null)}>
-              <span class="id"><i class="swatch" style:background={depthColor(lens.model, item.layer)}></i>{item.name}{#if item.mirrored}<span class="mirror" data-tip="Its other side pushes the opposite way">±</span>{/if}{#if item.through.length}<span data-tip="The inputs of that head it reaches, strongest first">· {item.through.map((through) => THROUGH[through]).join(", ")}</span>{/if}</span>
-              <span class="value" data-tip={valueTip(side.title, item)}><Meter value={Math.abs(item.value) / top(side.rows)} label={valueTip(side.title, item)} />{shownValue(item.value)}</span>
-              <span class="title" class:low={item.low}>{#key item.title}<span in:fadeIn>{#if item.title}<LabelText text={item.title} />{:else}&nbsp;{/if}</span>{/key}</span>
-            </a>
-          {:else}
-            <p class="meta none">None</p>
-          {/each}
-        </div>
-      </Swap>
-    </section>
-  {/each}
+  <div class="lists">
+    {#each sides as side (side.title)}
+      <section class="side">
+        <h3 class="head" data-tip={side.tip}>{side.title}</h3>
+        <Swap key={listKey}>
+          <div class="rows">
+            {#each side.rows as item, i (item.key)}
+              <a class="row rise" style:--i={i} class:on={hovered === item.key} href={item.href} onpointerenter={() => point(item.key)} onpointerleave={() => point(null)}>
+                <span class="id"><i class="swatch" style:background={depthColor(lens.model, item.layer)}></i>{item.name}{#if item.mirrored}<span class="mirror" data-tip="Its other side pushes the opposite way">±</span>{/if}{#if item.through.length}<span data-tip="The inputs of that head it reaches, strongest first">· {item.through.map((through) => THROUGH[through]).join(", ")}</span>{/if}</span>
+                <span class="value" data-tip={valueTip(side.title, item)}><Meter value={Math.abs(item.value) / top(side.rows)} label={valueTip(side.title, item)} />{shownValue(item.value)}</span>
+                <span class="title" class:low={item.low}>{#key item.title}<span in:fadeIn>{#if item.title}<LabelText text={item.title} />{:else}&nbsp;{/if}</span>{/key}</span>
+              </a>
+            {:else}
+              <p class="meta none">None</p>
+            {/each}
+          </div>
+        </Swap>
+      </section>
+    {/each}
+  </div>
 </aside>
 
 <style>
   .rail { flex: 1 1 340px; max-width: 420px; display: grid; align-content: start; gap: var(--s5); min-width: 0; }
-  @media (max-width: 720px) { .rail { max-width: none; } }
+  .figure, .lists { display: grid; align-content: start; gap: var(--s5); min-width: 0; }
+  /* Beside the unit (Explorer.svelte's panes: 340 + 48 + 640 px) it is a column. Narrower, the unit takes
+     the whole width under it, so the rail takes a row of its own, and from 680 px its lists stand beside the
+     graph rather than under it, where the column would otherwise leave half the row empty. */
+  @container explorer (max-width: 1027.98px) { .rail { flex-basis: 100%; max-width: none; } }
+  @container explorer (min-width: 680px) and (max-width: 1027.98px) {
+    .rail { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--s7); }
+  }
   .tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s4); }
   .reach { transition: opacity var(--fast) var(--ease); }
   .reach.off { opacity: 0; }

@@ -29,8 +29,9 @@ The explorer reads a prebuilt catalog of static JSON (and, for Gemma 4, packs of
 on the site from `data.neuron-lens.com` (Cloudflare R2), in development from `catalog/`, which the dev
 server serves at `/data`. It is several gigabytes and not in the repository: `scripts/neurons/` builds
 it from the neuron-lens catalogs, and `scripts/catalog/upload.sh` puts it on R2 (see `AGENTS.md`, "The
-catalog"). Without it the dev server shows the explorer's shell and an error where the data goes; the
-e2e tests bring their own mock catalog (`e2e/fixtures`).
+catalog"). Without it the dev server shows the explorer's shell and an error where the data goes, unless
+it is started with `VITE_CATALOG=live` to read the live catalog; the e2e tests bring their own mock catalog
+(`e2e/fixtures`).
 
 ## Deploy
 

@@ -14,7 +14,7 @@ files. It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now
 - `src/explorer/`: the explorer. `lens.svelte.ts` is its state (get it with `useLens()`): it reads the
   address, loads what that place needs and changes place only by going to another address. The rest
   are its parts: `Atlas` (and `atlas/`), `graph/` (the unit's connections: `trace.ts` walks them,
-  `layout.ts` places them, `stage.ts` moves them, `Graph` draws them, `Connections` is the rail, `Navigator` the same graph full
+  `layout.ts` places them, `stage.ts` moves them, `Graph` draws them (its links on a canvas, `ink.ts`), `Connections` is the rail, `Navigator` the same graph full
   screen), `UnitView` (and `unit/`), `Search`
   (and `search/`), `media/`.
 - `src/pages/`: About, Credits, the missing page.
@@ -119,7 +119,8 @@ the manifest's icons. Rerun it when the mark, the card or Qwen3-8B's catalog cha
 The explorer reads static JSON (and Gemma 4's media packs), built into `catalog/<model>/` from the
 private neuron-lens catalogs (`~/Work/neuron-lens/data/catalog/<model>`, laid out as the Hub release
 `stdlogits/neuron-lens`) and gitignored like them (~6 GB, ~600 files). The dev server serves it at
-`/data/<model>/`; the site reads it from R2 (below, "On R2"). Stages, from the repository root (each
+`/data/<model>/`; the site reads it from R2 (below, "On R2"), and so does the dev server started with
+`VITE_CATALOG=live` (`src/lib/data.ts`), for work that needs real units but not a local build. Stages, from the repository root (each
 script's docstring has the full invocation):
 
 1. `scripts/neurons/translate.py` machine-translates non-English tokens, label terms, example contexts
@@ -154,6 +155,9 @@ links as far as it likes. `units-<pack>.bin` holds each neuron's detail as defla
 packs of at most 20 MiB. The builder inverts every `sources` table for what each pole and head drives (the
 catalog lists only what drives a unit). `heads/graph.bin` holds a record per head (`HEAD_WIRE`, 1004 bytes): what drives
 it through its value, its query and its key, what fires with it, and what it drives.
+The graph's walk (`trace.ts`) settles a layer before the next, so it reads ahead: what already clears the floor
+a few layers on is asked for at once, as a read that waits behind any needed now (`range` in `data.ts`) and
+moves up when it is. The graph comes out the same; All settles in about a third of the time.
 
 The types in `src/lib/data.ts` mirror the builder's output. Change both together, then regenerate the
 e2e mock catalog (`node e2e/fixtures/build.mjs`) so the specs see the new shape. The builder's `stem()`

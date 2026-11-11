@@ -3,8 +3,9 @@
   import { fadeIn, fadeOut } from "@stdlogits/ledger";
   import { bandOf, depthColor, type ModelInfo } from "../../lib/models";
   import { headId, neuronId, percent } from "../../lib/data";
+  import { Ink, type View } from "./ink";
   import { layout, rows, type Layout, type Open, type Spot } from "./layout";
-  import { Stage, type Seated, type Shown } from "./stage";
+  import { Stage, type Look, type Seated, type Shown } from "./stage";
   import { headInput, type Graph, type GraphEdge, type Mode } from "./trace";
 
   // The unit's directed graph, drawn at true depth: a band per layer down the page, so what feeds it
@@ -12,7 +13,9 @@
   // colour of its layer and as large as the flow through it; a link is as heavy as its flow, grey and
   // dashed where it pushes against. Pointing at a unit lights what connects it to the centre. The
   // stage (stage.ts) owns where everything is and how it moves; this owns what each thing looks like.
-  let { graph, model, mode, href, hovered, point, height = 780, open, labels = null, labelScale = 1, axis = true, onlaid }: {
+  // The links are drawn on a canvas (ink.ts): its own, behind the marks, or the navigator's, which sits
+  // outside its zoom and draws them under its view, so they stay sharp at any zoom.
+  let { graph, model, mode, href, hovered, point, height = 780, open, labels = null, labelScale = 1, axis = true, onlaid, surface }: {
     graph: Graph;
     model: ModelInfo;
     mode: Mode;
@@ -31,6 +34,8 @@
     axis?: boolean;
     /** Where it was laid out. */
     onlaid?: (placed: Layout) => void;
+    /** A canvas of the navigator's own to draw the links on, its size on screen, and its view of the graph. */
+    surface?: { canvas: HTMLCanvasElement; width: number; height: number; view: View } | null;
   } = $props();
 
   let width = $state(0);
@@ -39,6 +44,10 @@
   const stage = new Stage(() => (shown = stage.shown()));
   onDestroy(() => stage.destroy());
 
+  /** Each node's layer, for its links' colour: kept for as long as the model is, so a link leaving still finds its ends. */
+  const layers = new Map<string, number>();
+  let layersOf = "";
+
   let laidOut = 0;
   $effect(() => {
     const next = graph;
@@ -46,6 +55,8 @@
     void HEIGHT;
     if (across <= 0) return;
     untrack(() => {
+      if (layersOf !== model.id) { layers.clear(); layersOf = model.id; }
+      for (const n of next.nodes) layers.set(n.key, n.layer);
       const placed = layout(next, across, HEIGHT, model.layers, next.settled ? undefined : stage.targets(), open);
       const snap = laidOut > 0 && across !== laidOut && !open;
       laidOut = across;
@@ -54,10 +65,8 @@
     });
   });
   const seat = (el: HTMLElement, key: string) => stage.attachNode(el, key);
-  const strand = (el: SVGPathElement, key: string) => stage.attachEdge(el, key);
 
   const top = $derived(graph.edges.reduce((max, e) => Math.max(max, e.flow), 1e-9));
-  const layerOf = $derived(new Map(shown.nodes.map((n) => [n.key, n.layer])));
 
   // What connects the pointed-at unit to the centre: every link on a path through it.
   const lit = $derived.by(() => {
@@ -74,7 +83,9 @@
     const onward = new Map<string, GraphEdge[]>();
     for (const e of graph.edges) {
       const here = start.side === "up" ? e.from : e.to;
-      onward.set(here, [...(onward.get(here) ?? []), e]);
+      const list = onward.get(here);
+      if (list) list.push(e);
+      else onward.set(here, [e]);
     }
     const stack = [hovered];
     while (stack.length) {
@@ -106,24 +117,64 @@
   }
   const ticks = $derived(axis ? Array.from({ length: model.layers }, (_, layer) => layer).filter((layer) => layer % 5 === 0) : []);
   const depth = $derived(rows(graph, HEIGHT, model.layers));
+
+  // The links: as heavy as their flow, in the depth colour of their upstream end, grey and dashed where they
+  // push against; with a unit lit, what connects it stands out and the rest all but goes.
+  let own = $state<HTMLCanvasElement>();
+  /** How far the canvas reaches past the box above and below, so a link bending past a row at the edge isn't cut.
+   * Not across: the marks keep inside the box's gutters (layout.ts), and a canvas wider than the box would widen a phone's page. */
+  const MARGIN = 8;
+  /** How far past the screen the navigator's canvas draws, in CSS pixels. */
+  const OVERSCAN = 160;
+  let ink = $state.raw<Ink | null>(null);
+  function look(edge: GraphEdge): Look {
+    const strength = Math.sqrt(Math.min(1, edge.flow / top));
+    const against = edge.value < 0;
+    return {
+      color: ink ? ink.color(against ? "var(--ink3)" : depthColor(model, layers.get(edge.from) ?? 0)) : "",
+      width: 0.7 + 3.3 * strength,
+      alpha: lit ? (lit.edges.has(edge.key) ? 0.95 : 0.06) : 0.28 + 0.5 * strength,
+      against,
+    };
+  }
+  /** The canvas alone, so the navigator's view moving doesn't make the painter anew. */
+  const canvas = $derived(surface?.canvas ?? own);
+  $effect(() => {
+    if (!canvas) return;
+    // The navigator's canvas draws past the screen, so a pan mostly slides it.
+    const made = new Ink(canvas, () => stage.restyle(false), untrack(() => (surface ? OVERSCAN : 0)));
+    ink = made;
+    untrack(() => stage.draw(made, look));
+    return () => {
+      made.destroy();
+      if (ink === made) ink = null;
+    };
+  });
+  // Its size and view; then draw as things stand.
+  $effect(() => {
+    if (!ink) return;
+    if (surface) {
+      const resized = ink.resize(surface.width, surface.height);
+      if (!ink.slide(surface.view) || resized) untrack(() => stage.redraw());
+    } else {
+      ink.resize(width, HEIGHT + 2 * MARGIN);
+      ink.setView({ k: 1, tx: 0, ty: MARGIN });
+      untrack(() => stage.redraw());
+    }
+  });
+  // A unit lit or let go, the strongest link changed, a new model's colours: every link takes its look again.
+  $effect(() => {
+    void lit;
+    void top;
+    void model;
+    if (ink) untrack(() => stage.restyle());
+  });
 </script>
 
 <div class="graph" bind:clientWidth={width} style:height={`${HEIGHT}px`} style:--label-scale={labelScale}>
   {#if width > 0}
     {#each ticks as layer, i (layer)}<span class="tick" style:--i={i} style:top={`${depth.neurons(layer)}px`} data-tip-title={`Layer ${layer}`} data-tip={bandOf(model, layer).name}>{layer}</span>{/each}
-    <svg width={width} height={HEIGHT} aria-hidden="true">
-      {#each shown.edges as edge (edge.key)}
-        {@const on = lit?.edges.has(edge.key)}
-        <path
-          use:strand={edge.key}
-          pathLength={edge.value < 0 ? undefined : 1}
-          class:against={edge.value < 0}
-          style:stroke={edge.value < 0 ? undefined : depthColor(model, layerOf.get(edge.from) ?? 0)}
-          style:stroke-width={`${(0.7 + 3.3 * Math.sqrt(Math.min(1, edge.flow / top))).toFixed(2)}px`}
-          style:opacity={lit ? (on ? 0.95 : 0.06) : (0.28 + 0.5 * Math.sqrt(Math.min(1, edge.flow / top))).toFixed(2)}
-        />
-      {/each}
-    </svg>
+    {#if !surface}<canvas class="links" bind:this={own} style:left="0" style:top={`${-MARGIN}px`} aria-hidden="true"></canvas>{/if}
     {#each shown.nodes as node (node.key)}
       <a
         class="node"
@@ -147,9 +198,7 @@
 
 <style>
   .graph { position: relative; min-width: 0; }
-  svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
-  path { fill: none; stroke-linecap: round; transition: opacity var(--in) var(--ease), stroke-width var(--glide) var(--ease), stroke var(--glide) var(--ease); }
-  path.against { stroke: var(--ink3); stroke-dasharray: 3 3; }
+  .links { position: absolute; pointer-events: none; }
   .tick {
     position: absolute;
     left: 0;
@@ -166,7 +215,7 @@
     animation-delay: calc(var(--i) * 32ms);
   }
   @keyframes appear { from { opacity: 0; } }
-  /* The stage moves the link and fades it; what it looks like at any moment is the mark inside. */
+  /* The stage moves the link and fades it, at the size its mark is going to; the mark inside grows to fill it by a transform. */
   .node { position: absolute; left: 0; top: 0; display: block; }
   .node::after { content: ""; position: absolute; inset: -6px; }
   .node i {

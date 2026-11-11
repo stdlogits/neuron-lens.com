@@ -7,8 +7,9 @@ the short version for a first change.
 ## Running it
 
 Set up as in the README (`npm ci`, `npm run dev`). Without a catalog in `catalog/`, the dev server
-draws the explorer's shell and shows an error where the data should be. The e2e specs
-(`npm run test:e2e`) bring their own small mock catalog.
+draws the explorer's shell and shows an error where the data should be; `VITE_CATALOG=live npm run dev`
+reads the live catalog from `data.neuron-lens.com` instead, which is enough for any change that doesn't
+touch the catalog's build. The e2e specs (`npm run test:e2e`) bring their own small mock catalog.
 
 To see real units, build the catalog from neuron-lens's public Hub release,
 [`stdlogits/neuron-lens`](https://huggingface.co/datasets/stdlogits/neuron-lens): download a model's

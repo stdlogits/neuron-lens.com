@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { IconButton, LabelText, Segmented, Tabs } from "@stdlogits/ledger";
+  import { GLIDE, IconButton, LabelText, Segmented, Tabs, ease, reducedMotion } from "@stdlogits/ledger";
   import Graph from "./Graph.svelte";
+  import type { View } from "./ink";
   import { rows, type Layout, type Open, type Placed, type Spot } from "./layout";
   import type { Graph as GraphData, GraphNode, Mode, Reach } from "./trace";
   import { bandOf, type ModelInfo } from "../../lib/models";
@@ -13,6 +14,8 @@
   // beside it. Rows are spaced so most fit at HOME; zooming in makes room for the rest. Drag (or scroll) to move,
   // pinch (or ⌘/ctrl and scroll, or + and −) to zoom; a unit's mark opens it here, re-centring the graph
   // on it. Its address is the unit's with ?graph, so Back and links work, and Escape closes it.
+  // The view moves once a frame, however many events ask it to: the marks by one transform, the links
+  // (drawn on a canvas of the view's own size, under the view, so they stay sharp) in the same frame.
   let { graph, model, mode, modes, onmode, reach, reaches, onreach, hovered, point, href, name, title, close }: {
     graph: GraphData;
     model: ModelInfo;
@@ -79,7 +82,7 @@
   type Box = [number, number, number, number];
   const meets = (a: Box, b: Box) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
   const spots = $derived.by(() => {
-    const s = 1 / k;
+    const s = 1 / labelK;
     // Boxes in a grid of cells about a title's height on screen, so each test meets only its neighbours.
     const cell = 48 * s;
     const grid = new Map<number, [Box, number][]>();
@@ -115,13 +118,71 @@
     return out;
   });
 
-  // The view: the graph's x and y at full size map to x · k + tx, y · k + ty on screen.
+  // The view: the graph's x and y at full size map to x · k + tx, y · k + ty on screen. k, tx and ty are
+  // where it is going; `shown` is where it is this frame. A re-centring or a step of the zoom buttons
+  // glides there; a drag, a pinch or a scroll follows the hand.
   let view = $state<HTMLDivElement>();
-  let k = $state(HOME);
-  let tx = $state(0);
-  let ty = $state(0);
-  /** A re-centring glides; a drag or a zoom follows the hand. */
-  let gliding = $state(false);
+  let k = HOME;
+  let tx = 0;
+  let ty = 0;
+  let shown = $state.raw<View>({ k: HOME, tx: 0, ty: 0 });
+  /** The zoom the titles are placed for: a glide's end at once, a pinch or a scroll once it rests. */
+  let labelK = $state(HOME);
+  let gliding = false;
+  let glideFrom: View = { k: HOME, tx: 0, ty: 0 };
+  let glideStart = 0;
+  let frame = 0;
+  let resting = 0;
+  /** A drag or a scroll under way: the marks' layer is handed to the compositor, which moves it without
+   * painting it again. Never while zooming, where it would be scaled from a stale picture rather than drawn sharp. */
+  let panning = $state(false);
+  let panStill = 0;
+  function panned() {
+    if (!panning) panning = true;
+    clearTimeout(panStill);
+    panStill = window.setTimeout(() => (panning = false), 160);
+  }
+  function at(now: number): View {
+    if (!gliding) return { k, tx, ty };
+    const t = Math.min(1, (now - glideStart) / GLIDE);
+    if (t >= 1) { gliding = false; return { k, tx, ty }; }
+    const e = ease(t);
+    return { k: glideFrom.k + (k - glideFrom.k) * e, tx: glideFrom.tx + (tx - glideFrom.tx) * e, ty: glideFrom.ty + (ty - glideFrom.ty) * e };
+  }
+  function step(now: number) {
+    frame = 0;
+    const next = at(now);
+    if (next.k !== shown.k || next.tx !== shown.tx || next.ty !== shown.ty) {
+      if (next.k !== shown.k && !gliding) {
+        clearTimeout(resting);
+        resting = window.setTimeout(() => (labelK = shown.k), 100);
+      }
+      shown = next;
+    }
+    if (gliding) frame = requestAnimationFrame(step);
+  }
+  /** Go to k, tx, ty: gliding, or on the next frame. `now` shows it at once (the first centring, before anything is drawn). */
+  function apply(glide: boolean, now = false) {
+    const time = performance.now();
+    if (glide && !reducedMotion()) {
+      glideFrom = at(time);
+      glideStart = time;
+      gliding = true;
+      labelK = k;
+    } else gliding = false;
+    if (now) {
+      cancelAnimationFrame(frame);
+      frame = 0;
+      shown = { k, tx, ty };
+      labelK = k;
+      return;
+    }
+    if (!frame) frame = requestAnimationFrame(step);
+  }
+  let viewWidth = $state(0);
+  let viewHeight = $state(0);
+  let links = $state<HTMLCanvasElement>();
+  const surface = $derived(links && viewWidth > 0 ? { canvas: links, width: viewWidth, height: viewHeight, view: shown } : null);
   let centred: string | null = null;
   /** Where the unit sat when last centred on, and whether the view has been moved since. */
   let centredAt = 0;
@@ -130,15 +191,15 @@
   const MAX = 3;
   const clamp = (value: number) => Math.min(MAX, Math.max(MIN, value));
 
-  function centre(glide = true) {
+  function centre(glide = true, now = false) {
     const focus = graph.nodes.find((n) => n.side === "focus");
     if (!view || !focus) return;
     const box = view.getBoundingClientRect();
-    gliding = glide;
     moved = false;
     centredAt = focus.kind === "head" ? depth.heads(focus.layer) : depth.neurons(focus.layer);
     tx = box.width / 2;
     ty = box.height * 0.45 - centredAt * k;
+    apply(glide, now);
   }
   // A new unit at the centre: glide to it (the first, jump). Rows that open up as titles arrive keep it there, unless the view was moved.
   function laid(layout: Layout) {
@@ -155,11 +216,12 @@
     const px = x ?? box.width / 2;
     const py = y ?? box.height / 2;
     const next = clamp(to);
-    gliding = glide;
     moved = true;
+    if (panning) { clearTimeout(panStill); panning = false; }
     tx = px - ((px - tx) * next) / k;
     ty = py - ((py - ty) * next) / k;
     k = next;
+    apply(glide);
   }
 
   function wheel(event: WheelEvent) {
@@ -168,10 +230,11 @@
       const box = view!.getBoundingClientRect();
       zoom(k * Math.exp(-event.deltaY * 0.01), event.clientX - box.left, event.clientY - box.top);
     } else {
-      gliding = false;
       moved = true;
       tx -= event.deltaX;
       ty -= event.deltaY;
+      panned();
+      apply(false);
     }
   }
 
@@ -191,10 +254,11 @@
       travelled += Math.abs(now.x - was.x) + Math.abs(now.y - was.y);
       if (travelled > 4) {
         if (!view.hasPointerCapture(event.pointerId)) view.setPointerCapture(event.pointerId);
-        gliding = false;
         moved = true;
         tx += now.x - was.x;
         ty += now.y - was.y;
+        panned();
+        apply(false);
       }
     } else if (pointers.size === 2) {
       const other = [...pointers.entries()].find(([id]) => id !== event.pointerId)![1];
@@ -205,6 +269,7 @@
       zoom(k * (after / before), (now.x + other.x) / 2 - box.left, (now.y + other.y) / 2 - box.top);
       tx += (now.x - was.x) / 2;
       ty += (now.y - was.y) / 2;
+      apply(false);
     }
     pointers.set(event.pointerId, now);
   }
@@ -226,7 +291,7 @@
   onMount(() => {
     view!.addEventListener("wheel", wheel, { passive: false });
     if (centred === null && graph.nodes.some((n) => n.side === "focus")) {
-      centre(false);
+      centre(false, true);
       centred = graph.nodes.find((n) => n.side === "focus")!.key;
     }
     const page = document.documentElement.style.overflow;
@@ -235,11 +300,14 @@
     return () => {
       view?.removeEventListener("wheel", wheel);
       document.documentElement.style.overflow = page;
+      cancelAnimationFrame(frame);
+      clearTimeout(resting);
+      clearTimeout(panStill);
     };
   });
 
   // Layer numbers down the left, every layer once there's room for each, and each band's name where it starts.
-  const every = $derived(2 * pitch * k >= 18 ? 1 : 2 * pitch * k >= 7 ? 5 : 10);
+  const every = $derived(2 * pitch * shown.k >= 18 ? 1 : 2 * pitch * shown.k >= 7 ? 5 : 10);
   const ticks = $derived(Array.from({ length: model.layers }, (_, layer) => layer).filter((layer) => layer % every === 0));
 </script>
 
@@ -247,15 +315,16 @@
 
 <div class="navigator" role="dialog" aria-modal="true" aria-label={`Connections of ${name}`} tabindex="-1" bind:this={dialog}>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="view" bind:this={view} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onclickcapture={click}>
-    <div class="canvas" class:gliding style:transform={`translate(${tx}px, ${ty}px) scale(${k})`}>
-      <Graph {graph} {model} {mode} {href} {hovered} {point} {height} {open} labels={spots} labelScale={1 / k} axis={false} onlaid={laid} />
+  <div class="view" bind:this={view} bind:clientWidth={viewWidth} bind:clientHeight={viewHeight} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onclickcapture={click}>
+    <canvas class="links" bind:this={links} aria-hidden="true"></canvas>
+    <div class="canvas" class:panning style:transform={`translate(${shown.tx}px, ${shown.ty}px) scale(${shown.k})`}>
+      <Graph {graph} {model} {mode} {href} {hovered} {point} {height} {open} labels={spots} labelScale={1 / shown.k} axis={false} onlaid={laid} {surface} />
     </div>
     <div class="axis" aria-hidden="true">
       {#each model.bands as band (band.key)}
-        <span class="band" style:top={`${ty + depth.heads(band.first) * k}px`} style:height={`${(depth.neurons(band.last) - depth.heads(band.first)) * k}px`}><b>{band.short}</b></span>
+        <span class="band" style:top={`${shown.ty + depth.heads(band.first) * shown.k}px`} style:height={`${(depth.neurons(band.last) - depth.heads(band.first)) * shown.k}px`}><b>{band.short}</b></span>
       {/each}
-      {#each ticks as layer (layer)}<span class="tick" style:top={`${ty + depth.neurons(layer) * k}px`}>{layer}</span>{/each}
+      {#each ticks as layer (layer)}<span class="tick" style:top={`${shown.ty + depth.neurons(layer) * shown.k}px`}>{layer}</span>{/each}
     </div>
   </div>
 
@@ -282,8 +351,9 @@
   .navigator { position: fixed; inset: 0; z-index: 20; background: var(--paper); outline: none; }
   .view { position: absolute; inset: 0; overflow: hidden; cursor: grab; touch-action: none; overscroll-behavior: contain; }
   .view:active { cursor: grabbing; }
+  .links { position: absolute; top: 0; left: 0; pointer-events: none; }
   .canvas { position: absolute; top: 0; left: 0; width: 100%; transform-origin: 0 0; }
-  .canvas.gliding { transition: transform var(--glide) var(--ease); }
+  .canvas.panning { will-change: transform; }
   .axis { position: absolute; top: 0; bottom: 0; left: 0; width: 64px; background: color-mix(in oklch, var(--paper) 92%, transparent); pointer-events: none; }
   .band { position: absolute; left: 0; width: 6px; border-radius: 0 3px 3px 0; background: var(--wash); }
   .band b { position: absolute; top: 0; left: 12px; color: var(--ink3); font: var(--type-head); white-space: nowrap; writing-mode: vertical-rl; }

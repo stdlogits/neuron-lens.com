@@ -79,7 +79,8 @@
 </div>
 
 <style>
-  .explorer { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s7); min-width: 0; transition: --tint var(--glide) var(--ease); }
+  /* A container, so the panes below can lay themselves out by the width they have (Connections.svelte). */
+  .explorer { container: explorer / inline-size; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s7); min-width: 0; transition: --tint var(--glide) var(--ease); }
   .intro { display: grid; justify-items: start; gap: var(--s5); }
   h1 { font: var(--type-title); letter-spacing: -0.04em; }
   .figures { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s5); color: var(--ink3); font: var(--type-small); }

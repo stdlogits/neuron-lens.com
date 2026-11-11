@@ -54,14 +54,15 @@ export function layout(graph: Graph, width: number, height: number, layers: numb
   const half = (n: GraphNode) => { const { w } = marks.get(n.key)!; return open ? Math.max(w / 2, open.reach(n, w)) : w / 2; };
 
   // Each row is seated on its own.
+  const push = <K, V>(map: Map<K, V[]>, key: K, value: V) => { const list = map.get(key); if (list) list.push(value); else map.set(key, [value]); };
   const byLayer = new Map<number, GraphNode[]>();
-  for (const n of graph.nodes) byLayer.set(rowOf(n), [...(byLayer.get(rowOf(n)) ?? []), n]);
+  for (const n of graph.nodes) push(byLayer, rowOf(n), n);
 
   const x = new Map<string, number>();
   const neighbours = new Map<string, string[]>();
   for (const e of graph.edges) {
-    neighbours.set(e.from, [...(neighbours.get(e.from) ?? []), e.to]);
-    neighbours.set(e.to, [...(neighbours.get(e.to) ?? []), e.from]);
+    push(neighbours, e.from, e.to);
+    push(neighbours, e.to, e.from);
   }
 
   const seat = (list: GraphNode[]) => {

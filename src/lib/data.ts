@@ -8,8 +8,9 @@ import type { ContextLine } from "@stdlogits/ledger";
 import catalog from "./catalog.json";
 import type { ModelId, ModelInfo, Modality } from "./models";
 
-/** Where a model's catalog files are. */
-export const dataBase = (model: ModelId) => (import.meta.env.DEV ? `/data/${model}` : `${catalog.origin}/${model}/${catalog.builds[model]}`);
+/** Where a model's catalog files are. `VITE_CATALOG=live npm run dev` reads the live builds on R2 instead of a local copy. */
+const local = import.meta.env.DEV && import.meta.env.VITE_CATALOG !== "live";
+export const dataBase = (model: ModelId) => (local ? `/data/${model}` : `${catalog.origin}/${model}/${catalog.builds[model]}`);
 
 export type Unit = "neurons" | "heads";
 export type Trust = "primary" | "trusted" | "weak";
@@ -240,21 +241,40 @@ export const loadHeadIndex = (model: ModelId) => memo(`${model}/heads`, async ()
 
 // ---------- ranges: every unit's record is read out of a larger file
 
+// At most MAX_RANGES at once. A read asked for ahead of need (`later`, named by its memo key: the graph's
+// walk fetching what it will probably want next) takes a slot only while RESERVE stay free for reads needed
+// now and nothing needed now is waiting, and moves up the moment something needs it (`promote`), so looking
+// ahead never holds up a read that matters now.
 const MAX_RANGES = 16;
+const RESERVE = 4;
 let active = 0;
 const waiting: (() => void)[] = [];
+const later = new Map<string, () => void>();
 
-async function range(url: string, offset: number, length: number): Promise<ArrayBuffer> {
-  if (active >= MAX_RANGES) await new Promise<void>((go) => waiting.push(go));
-  active += 1;
+function promote(key: string) {
+  const go = later.get(key);
+  if (!go) return;
+  later.delete(key);
+  if (active < MAX_RANGES) { active += 1; go(); }
+  else waiting.push(go);
+}
+
+async function range(url: string, offset: number, length: number, ahead?: string): Promise<ArrayBuffer> {
+  const room = ahead === undefined ? MAX_RANGES : MAX_RANGES - RESERVE;
+  if (active >= room || (ahead !== undefined && waiting.length)) await new Promise<void>((go) => (ahead === undefined ? waiting.push(go) : later.set(ahead, go)));
+  else active += 1;
   try {
     const response = await fetch(url, { headers: { Range: `bytes=${offset}-${offset + length - 1}` } });
     if (!response.ok) throw new Error(`${url}: ${response.status}`);
     const buffer = await response.arrayBuffer();
     return response.status === 206 ? buffer : buffer.slice(offset, offset + length);
   } finally {
-    active -= 1;
-    waiting.shift()?.();
+    // Hand the slot straight on: to a read needed now, else to one asked for ahead while the reserve holds.
+    const now = waiting.shift();
+    const first = now ? undefined : later.entries().next().value;
+    if (now) now();
+    else if (first && active <= MAX_RANGES - RESERVE) { later.delete(first[0]); first[1](); }
+    else active -= 1;
   }
 }
 
@@ -353,16 +373,24 @@ export const poleOf = (mlp: number, id: number) => {
 export const headKey = (heads: number, layer: number, head: number) => layer * heads + head;
 export const headOf = (heads: number, id: number) => ({ layer: Math.floor(id / heads), head: id % heads });
 
-/** A pole's record: its title, where its detail is, and its connections. */
-export const loadPoleWire = (model: ModelId, id: number) => memo(`${model}/wire:${id}`, async () => {
-  const { wire, neuronsPerLayer: mlp, connections } = await loadIndex(model);
-  const { layer, neuron, pole } = poleOf(mlp, id);
-  return wireOf(await range(`${dataBase(model)}/neurons/L${pad(layer)}/graph.bin`, (neuron + (pole < 0 ? mlp : 0)) * wire, wire), connections, POLE_RELATIONS);
-});
-export const loadHeadWire = (model: ModelId, id: number) => memo(`${model}/head-wire:${id}`, async () => {
-  const { headWire, connections } = await loadIndex(model);
-  return wireOf(await range(`${dataBase(model)}/heads/graph.bin`, id * headWire, headWire), connections, HEAD_RELATIONS);
-});
+/** A pole's record: its title, where its detail is, and its connections. `ahead`: not needed yet, so it waits for what is. */
+export function loadPoleWire(model: ModelId, id: number, ahead = false) {
+  const key = `${model}/wire:${id}`;
+  if (!ahead) promote(key);
+  return memo(key, async () => {
+    const { wire, neuronsPerLayer: mlp, connections } = await loadIndex(model);
+    const { layer, neuron, pole } = poleOf(mlp, id);
+    return wireOf(await range(`${dataBase(model)}/neurons/L${pad(layer)}/graph.bin`, (neuron + (pole < 0 ? mlp : 0)) * wire, wire, ahead ? key : undefined), connections, POLE_RELATIONS);
+  });
+}
+export function loadHeadWire(model: ModelId, id: number, ahead = false) {
+  const key = `${model}/head-wire:${id}`;
+  if (!ahead) promote(key);
+  return memo(key, async () => {
+    const { headWire, connections } = await loadIndex(model);
+    return wireOf(await range(`${dataBase(model)}/heads/graph.bin`, id * headWire, headWire, ahead ? key : undefined), connections, HEAD_RELATIONS);
+  });
+}
 
 /** One neuron's detail, from where its record says it is. */
 export const loadNeuron = (model: ModelId, layer: number, neuron: number): Promise<NeuronDetail | null> => memo(`${model}/neuron:${layer}:${neuron}`, async () => {

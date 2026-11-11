@@ -56,6 +56,8 @@ export const headInput = (who: string, through: Through) => (through === 0 ? `wh
 export const nodeKey = (kind: "neuron" | "head", id: number) => `${kind[0]}${id}`;
 
 interface Walk { model: ModelInfo; flows: Map<string, GraphNode>; edges: Map<string, GraphEdge>; update: () => void; live: () => boolean }
+/** The graph as the walk stands when it is called: the caller takes it when it can draw it, not each time the walk grows. */
+export type Take = () => Graph;
 
 function node(walk: Walk, kind: "neuron" | "head", id: number, side: Side): GraphNode {
   const key = nodeKey(kind, id);
@@ -73,7 +75,11 @@ function node(walk: Walk, kind: "neuron" | "head", id: number, side: Side): Grap
   return found;
 }
 
-const wireOf = (walk: Walk, target: GraphNode) => (target.kind === "head" ? loadHeadWire(walk.model.id, target.id) : loadPoleWire(walk.model.id, target.id));
+const wireOf = (walk: Walk, target: GraphNode, ahead = false) => (target.kind === "head" ? loadHeadWire(walk.model.id, target.id, ahead) : loadPoleWire(walk.model.id, target.id, ahead));
+
+/** How many layers' worth of the walk to read ahead of it, and how many records at most each time. */
+const AHEAD = 4;
+const AHEAD_MOST = 32;
 
 /** Every link followed from a node, as its kind and the link. The unit's own query or key stands in for its value upstream. */
 function follow(wire: Wire, relations: Relation[], input?: "query" | "key"): { kind: "neuron" | "head"; link: Link }[] {
@@ -114,9 +120,22 @@ async function walkSide(walk: Walk, focus: GraphNode, side: Side, mode: Exclude<
     }
   };
 
+  // The walk must settle each layer before the next, since a node's flow is only known once everything above
+  // it has spread; but what already clears the floor a few layers on will most likely be followed, so its
+  // records are asked for now, behind anything needed at once (data.ts). The graph comes out the same, sooner.
+  const lookAhead = (from: number) => {
+    if (!walk.live() || budget <= 0) return;
+    const next = new Set(stops.slice(from, from + AHEAD));
+    const likely = [...walk.flows.values()]
+      .filter((n) => n.side === side && next.has(place(n)) && !done.has(n.key) && !n.wire && n.onward >= floor)
+      .sort((a, b) => b.onward - a.onward)
+      .slice(0, Math.min(budget, AHEAD_MOST));
+    for (const n of likely) wireOf(walk, n, true).catch(() => {});
+  };
+
   spread(focus, focus.wire!);
   walk.update();
-  for (const stop of stops) {
+  for (const [i, stop] of stops.entries()) {
     if (!walk.live() || budget <= 0) return;
     const ready = [...walk.flows.values()]
       .filter((n) => place(n) === stop && n.side === side && !done.has(n.key) && n.onward >= floor)
@@ -124,9 +143,11 @@ async function walkSide(walk: Walk, focus: GraphNode, side: Side, mode: Exclude<
       .slice(0, budget);
     if (!ready.length) continue;
     budget -= ready.length;
-    const wires = await Promise.all(ready.map(async (n) => {
+    const loading = Promise.all(ready.map(async (n) => {
       try { return await wireOf(walk, n); } catch { return null; }
     }));
+    lookAhead(i + 1);
+    const wires = await loading;
     if (!walk.live()) return;
     ready.forEach((n, i) => {
       done.add(n.key);
@@ -147,9 +168,9 @@ export function focusOf(model: ModelInfo, unit: "neurons" | "heads", layer: numb
 }
 
 /** Walk the graph around a unit, calling back as it grows. Stop by making `live` false. */
-export async function trace(model: ModelInfo, start: GraphNode, mode: Mode, reach: Reach, publish: (graph: Graph) => void, live: () => boolean) {
+export async function trace(model: ModelInfo, start: GraphNode, mode: Mode, reach: Reach, publish: (take: Take) => void, live: () => boolean) {
   const focus = { ...start, flow: 1, onward: 1 };
-  const walk: Walk = { model, flows: new Map([[focus.key, focus]]), edges: new Map(), live, update: () => publish(view(walk, focus, reach, false)) };
+  const walk: Walk = { model, flows: new Map([[focus.key, focus]]), edges: new Map(), live, update: () => publish(() => view(walk, focus, reach, false)) };
   const wire = await wireOf(walk, focus).catch(() => null);
   if (!live() || !wire) return;
   focus.wire = wire;
@@ -166,7 +187,9 @@ export async function trace(model: ModelInfo, start: GraphNode, mode: Mode, reac
   // Everything shown gets its title, strongest first.
   const shown = view(walk, focus, reach, false).nodes.map((n) => walk.flows.get(n.key)!).filter((n) => !n.wire);
   await Promise.all(shown.map(async (n) => { try { n.wire = await wireOf(walk, n); } catch { /* its id still shows */ } }));
-  if (live()) publish(view(walk, focus, reach, true));
+  if (!live()) return;
+  const settled = view(walk, focus, reach, true);
+  publish(() => settled);
 }
 
 /** The strongest nodes on each side, and the links among them. */

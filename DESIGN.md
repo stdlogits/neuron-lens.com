@@ -34,6 +34,8 @@ What the site draws for itself, in Ledger:
   340 ms in all, strongest first, each link growing with its node); the links that make it a graph draw in behind them; the
   finished graph untangles.
   What stays glides, what goes withdraws into what it budded from, and any change takes over from wherever things are.
+  A frame moves each mark by a transform alone, and draws the links as strokes on one canvas (`ink.ts`), in
+  the navigator under its view so they stay sharp at any zoom, so a large graph moves as smoothly on a slow machine.
   Reduced motion keeps the fades and drops the rest.
 
 The explorer's one credit is "Labels by Claude Haiku 5.5".
