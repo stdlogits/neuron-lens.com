@@ -24,7 +24,7 @@ What the site draws for itself, in Ledger:
   because what those set is where the head looks.
 - The full-screen graph (`src/explorer/graph/Navigator.svelte`, at a unit's address with `?graph`): the same marks, links
   and motion, opening at 1.5 times the rail's size and moved like a map (drag or scroll, pinch or ⌘/ctrl-scroll or the zoom
-  buttons). Titles stay one size on screen at any zoom, wrapped on a backing of the page's paper, and each sits where it
+  buttons). Titles stay one size on screen at any zoom, wrapped on the tip's frosted glass, and each sits where it
   touches no mark and no other title: the unit's first, then by flow, under its mark if it can, else over it or beside it.
   A title with no room waits for a closer zoom, and its tip still names it. Rows are spaced for a two-line title under
   each mark at the opening zoom. The bar over it holds the unit, the views and the reach; the depth axis down the left

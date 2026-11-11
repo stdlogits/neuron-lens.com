@@ -182,7 +182,7 @@
   .focus i { outline-color: var(--ink); }
   .dim i { opacity: 0.25; }
   /* A title by its mark, where the navigator found room for it, one size on screen at any zoom: wrapped
-     at LABEL (Navigator.svelte) on a backing of the page's own paper, so links behind it don't cross its words. */
+     at LABEL (Navigator.svelte) on the tip's frosted glass, so links behind it blur rather than cross its words. */
   .label {
     --s: var(--label-scale, 1);
     position: absolute;
@@ -190,7 +190,9 @@
     max-width: 160px;
     padding: 1px 5px;
     border-radius: var(--r-chip);
-    background: color-mix(in oklch, var(--paper) 84%, transparent);
+    background: color-mix(in oklch, var(--paper) 72%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(1.6);
+    backdrop-filter: blur(20px) saturate(1.6);
     color: var(--ink2);
     font: var(--type-meta);
     text-align: center;
@@ -209,4 +211,7 @@
   .hot i { scale: 1.3; }
   .node:active i { scale: 0.92; }
   @media (hover: hover) { .node:hover i { scale: 1.3; } }
+  /* Without a blur behind it, the glass would let the links show through: make it solid instead, as the tip does. */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .label { background: var(--paper); } }
+  @media (prefers-reduced-transparency: reduce) { .label { background: var(--paper); } }
 </style>
