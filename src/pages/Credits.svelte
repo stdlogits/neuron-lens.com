@@ -77,6 +77,16 @@
     ],
   };
 
+  const usedIn: Group = {
+    id: "used-in",
+    title: "Used in",
+    lines: [
+      { name: ext("Owl Evals", "https://github.com/maxsloef/owl-rewired-neurons"), detail: [ext("Max Loeffler")] },
+      { name: ext("The Chain Lens", "https://www.lesswrong.com/posts/Nr6fksEqqxNpdz6rk/the-chain-lens-interim"), detail: [ext("vgel, Raymond Douglas (ACS Research)")] },
+      { name: ext("Neuronpedia", "https://www.neuronpedia.org/blog/neurons-ica"), detail: [ext("Johnny Lin")] },
+    ],
+  };
+
   let media = $state<MediaCredits | null>(null);
   let mediaFailed = $state(false);
   onMount(() => { loadMediaCredits("gemma-4-12b").then((credits) => (media = credits), () => (mediaFailed = true)); });
@@ -94,6 +104,7 @@
       { id: "sounds", title: "Sounds", lines: collections("audio"), note: "Images and sounds from other collections are linked to their sources, never hosted here." },
     ] : []),
     software,
+    usedIn,
   ]);
 
   $effect(() => { document.title = "Credits · Neuron Lens"; });
