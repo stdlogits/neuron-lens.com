@@ -16,14 +16,15 @@
   let mode = $state<Mode>("context");
   let reach = $state<Reach>("far");
   let hovered = $state<string | null>(null);
-  // Moving from one unit to the next crossfades the light between them, rather than through the whole graph.
-  let letGo = 0;
+  // A unit lights what connects it once the pointer rests on it, so a pointer passing over the graph or
+  // the list leaves the light as it was rather than flashing the whole graph. Moving from one unit to
+  // the next crossfades the light between them, and it goes out a moment after the pointer leaves.
+  let wait = 0;
   function point(key: string | null) {
-    clearTimeout(letGo);
-    if (key) hovered = key;
-    else letGo = window.setTimeout(() => (hovered = null), 90);
+    clearTimeout(wait);
+    if (key !== hovered) wait = window.setTimeout(() => (hovered = key), key ? 120 : 90);
   }
-  onDestroy(() => clearTimeout(letGo));
+  onDestroy(() => clearTimeout(wait));
   let graph = $state.raw<GraphData | null>(null);
 
   const isHead = $derived(lens.unit === "heads");
