@@ -17,6 +17,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inflateSync } from "node:zlib";
+import catalog from "../src/lib/catalog.json" with { type: "json" };
 
 const root = resolve(fileURLToPath(import.meta.url), "../..");
 const DEFAULT_ORIGIN = "https://neuron-lens.com";
@@ -196,7 +197,7 @@ export async function checkAssets(origin, rules, html, buildDir) {
 
 // ---------- the catalog, on R2 under the builds src/lib/catalog.json names
 
-const catalog = JSON.parse(await readFile(resolve(root, "src/lib/catalog.json"), "utf8"));
+// `catalog` (imported above as the explorer imports it, src/lib/data.ts) is the site's own record of where its catalog is.
 const IMMUTABLE = "public, max-age=31536000, immutable";
 /** A file of a model's build, as a path on the data origin. */
 const dataPath = (model, file) => `/${model}/${catalog.builds[model]}/${file}`;
