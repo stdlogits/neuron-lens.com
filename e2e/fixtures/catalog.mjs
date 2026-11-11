@@ -1,5 +1,5 @@
-// Serves the mock catalog (e2e/fixtures/catalog, cut by build.mjs) in place of /data, the way Cloudflare
-// Pages serves the real one: JSON by path, graph records and packs by HTTP range (206), anything else 404.
+// Serves the mock catalog (e2e/fixtures/catalog, cut by build.mjs) in place of the dev server's /data,
+// the way R2 serves the real one: JSON by path, graph records and packs by HTTP range (206), anything else 404.
 // JavaScript rather than TypeScript: the project has no Node types, and this reads files.
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";

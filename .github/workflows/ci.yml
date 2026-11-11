@@ -1,7 +1,8 @@
 name: CI
 
 # The site's gates: svelte-check, the build and the e2e specs on the mock catalog. Deploys stay manual
-# (scripts/deploy.sh, from a machine with the catalog and a9's Cloudflare account).
+# (scripts/deploy.sh, from a machine signed in to a9's Cloudflare account; the catalog goes to R2 first,
+# with scripts/catalog/upload.sh).
 
 on:
   push:

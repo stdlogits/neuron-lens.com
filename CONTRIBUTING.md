@@ -36,8 +36,8 @@ CI runs `npm run check`, the build, and the e2e specs. It can't catch these:
 
 ## Pull requests
 
-Open them against `main`. Deploys are manual (`scripts/deploy.sh`, run from a machine that has the
-catalog), so a merged change reaches neuron-lens.com at the next deploy.
+Open them against `main`. Deploys are manual (`scripts/deploy.sh`, run from a machine signed in to
+the site's Cloudflare account), so a merged change reaches neuron-lens.com at the next deploy.
 
 Contributions are licensed under this repository's licence, [AGPL-3.0](LICENSE).
 

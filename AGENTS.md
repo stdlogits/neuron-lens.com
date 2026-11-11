@@ -105,7 +105,7 @@ page, so a static one would name the home page for all of them.
 
 The site describes the project and points at the Hub release; it never writes a unit's data as text
 or pages (a9's call: anyone who wants the data uses `stdlogits/neuron-lens`). `robots.txt` welcomes
-every crawler and keeps them out of `/data/`.
+every crawler; the catalog's own host, `data.neuron-lens.com`, has a robots.txt that keeps them out.
 
 `node scripts/site/render.mjs` draws the images into `public/`: the social card (`card.png`, from
 `scripts/site/card.html` in the site's own tokens: Qwen3-8B's atlas from the built catalog and
@@ -149,7 +149,7 @@ Each layer's neurons are two kinds of file, both read by HTTP range. `graph.bin`
 record per pole (`WIRE` in the builder, 800 bytes): its title, where its detail is, and its 16 strongest
 links per relation, ids and half-floats, so a pole's record costs one small request and the graph can follow
 links as far as it likes. `units-<pack>.bin` holds each neuron's detail as deflated JSON, end to end, in
-packs under 25 MiB. The builder inverts every `sources` table for what each pole and head drives (the
+packs of at most 20 MiB. The builder inverts every `sources` table for what each pole and head drives (the
 catalog lists only what drives a unit). `heads/graph.bin` holds a record per head (`HEAD_WIRE`, 1004 bytes): what drives
 it through its value, its query and its key, what fires with it, and what it drives.
 
