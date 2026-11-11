@@ -1,0 +1,13 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": ["https://neuron-lens.com", "https://neuron-lens.pages.dev", "https://*.neuron-lens.pages.dev"],
+        "methods": ["GET", "HEAD"],
+        "headers": ["range"]
+      },
+      "exposeHeaders": ["Content-Range", "Content-Length", "Accept-Ranges", "ETag"],
+      "maxAgeSeconds": 86400
+    }
+  ]
+}

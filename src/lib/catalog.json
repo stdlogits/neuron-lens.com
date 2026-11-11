@@ -1,0 +1,7 @@
+{
+  "origin": "https://data.neuron-lens.com",
+  "builds": {
+    "qwen3-8b": "",
+    "gemma-4-12b": ""
+  }
+}

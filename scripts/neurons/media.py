@@ -5,13 +5,13 @@ centre-cropped, documents and drawings letterboxed) and the middle 2.56 s of eac
 From the repository root:
 
     uv run --no-project --with-editable "$HOME/Work/neuron-lens[media]" python -I \
-        scripts/neurons/media.py ~/Work/neuron-lens/data/catalog/gemma-4-12b public/data/gemma-4-12b \
+        scripts/neurons/media.py ~/Work/neuron-lens/data/catalog/gemma-4-12b catalog/gemma-4-12b \
         [--sources fleurs,mnist] [--modality audio]
 
 ``--modality ""`` only rewrites the credits from the packs already on disk.
 
 The catalog dir is neuron-lens's ``data/catalog/gemma-4-12b``; the out dir is the model's data folder
-(``public/data/gemma-4-12b``). Each allowed source is streamed again with
+(``catalog/gemma-4-12b``). Each allowed source is streamed again with
 neuron-lens's own reader (``media_sets._take``: the same split, seed and count as the exemplar run),
 and an item is kept only when its bytes' SHA-1 matches its document's, so a page never shows an image
 or sound other than the one the catalog names. Synthetic images are the pixels the model saw, from the catalog

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Checks a deployed neuron-lens.com: every path answers as Cloudflare Pages should serve this build,
-// with the headers public/_headers sets and the files the site serves about itself, and the explorer
-// shows images and plays sounds under that CSP (the dev server sends no CSP, so only a deployed site
-// can fail that way).
+// with the headers public/_headers sets and the files the site serves about itself; the catalog builds
+// src/lib/catalog.json names answer from R2 as the explorer reads them; and the explorer shows images
+// and plays sounds under that CSP (the dev server sends no CSP, so only a deployed site can fail that way).
 //
 //   node scripts/verify-deployment.mjs [origin]      default https://neuron-lens.com
 //     --build dist     also require the live page to be this local build (scripts/deploy.sh passes it)
@@ -194,32 +194,61 @@ export async function checkAssets(origin, rules, html, buildDir) {
   }
 }
 
-export async function checkData(origin, rules) {
-  for (const model of ["qwen3-8b", "gemma-4-12b"]) {
-    const path = `/data/${model}/index.json`;
-    const response = await get(origin, path);
-    assert.equal(response.status, 200, `${path}: HTTP ${response.status}`);
+// ---------- the catalog, on R2 under the builds src/lib/catalog.json names
+
+const catalog = JSON.parse(await readFile(resolve(root, "src/lib/catalog.json"), "utf8"));
+const IMMUTABLE = "public, max-age=31536000, immutable";
+/** A file of a model's build, as a path on the data origin. */
+const dataPath = (model, file) => `/${model}/${catalog.builds[model]}/${file}`;
+/** A catalog file as the site fetches it: across origins, from the page at `site`. */
+const getData = (site, path, headers = {}) => get(catalog.origin, path, { Origin: site, ...headers });
+
+/** A build's file answers the site's origin (CORS) and is cached for good, since a build never changes. */
+function assertDataHeaders(response, site, path) {
+  assert.equal(response.headers.get("access-control-allow-origin"), site, `${catalog.origin}${path}: Access-Control-Allow-Origin ${response.headers.get("access-control-allow-origin")}, expected ${site}`);
+  assert.equal(response.headers.get("cache-control"), IMMUTABLE, `${catalog.origin}${path}: Cache-Control ${response.headers.get("cache-control")}`);
+}
+
+export async function checkData(site, rules) {
+  const csp = headersFor(rules, "/").find(([name]) => name.toLowerCase() === "content-security-policy")?.[1] ?? "";
+  const connect = (csp.match(/connect-src ([^;]*)/)?.[1] ?? "").split(/\s+/);
+  assert.ok(connect.includes(catalog.origin), `public/_headers: connect-src doesn't allow the catalog's origin ${catalog.origin}`);
+  for (const model of Object.keys(catalog.builds)) {
+    assert.ok(catalog.builds[model], `src/lib/catalog.json names no build for ${model}`);
+    const path = dataPath(model, "index.json");
+    const response = await getData(site, path);
+    assert.equal(response.status, 200, `${catalog.origin}${path}: HTTP ${response.status}`);
     assert.equal(mime(response), "application/json", `${path}: ${mime(response)}`);
-    assertHeaders(response, rules, path);
+    assertDataHeaders(response, site, path);
     const index = await response.json();
     assert.equal(index.id, model, `${path} names model ${index.id}`);
     assert.ok(Array.isArray(index.neurons) && index.neurons.length > 0, `${path} lists no neurons`);
   }
-  // public/data/404.html makes missing data a 404 rather than the app.
-  const path = `/data/qwen3-8b/neurons/L08/missing-${crypto.randomUUID().slice(0, 8)}.json`;
-  const missing = await get(origin, path);
-  assert.equal(missing.status, 404, `${path}: HTTP ${missing.status}, expected 404`);
-  assert.ok(!(await missing.text()).includes('id="app"'), `${path} answered with the app`);
+  const missing = dataPath("qwen3-8b", `neurons/L08/missing-${crypto.randomUUID().slice(0, 8)}.json`);
+  const gone = await getData(site, missing);
+  await gone.body?.cancel();
+  assert.equal(gone.status, 404, `${missing}: HTTP ${gone.status}, expected 404`);
+  // A browser that doesn't count a single range as a simple header asks first.
+  const preflight = await fetch(new URL(dataPath("qwen3-8b", "heads/graph.bin"), catalog.origin), {
+    method: "OPTIONS", headers: { Origin: site, "Access-Control-Request-Method": "GET", "Access-Control-Request-Headers": "range" }, signal: AbortSignal.timeout(30_000),
+  });
+  await preflight.body?.cancel();
+  assert.ok(preflight.ok, `a preflight for a range: HTTP ${preflight.status}`);
+  assert.equal(preflight.headers.get("access-control-allow-origin"), site, "a preflight for a range: Access-Control-Allow-Origin");
+  assert.match(preflight.headers.get("access-control-allow-headers") ?? "", /\brange\b/i, "a preflight for a range: Range isn't allowed");
+  const robots = await get(catalog.origin, "/robots.txt");
+  assert.equal(robots.status, 200, `${catalog.origin}/robots.txt: HTTP ${robots.status}`);
+  assert.match(await robots.text(), /^Disallow: \/$/m, `${catalog.origin}/robots.txt doesn't keep crawlers out`);
 }
 
 /** One image and one sound, cut from their packs by HTTP range as the explorer does. */
-export async function checkMediaRanges(origin, rules) {
+export async function checkMediaRanges(site) {
   for (const [modality, looks] of [
     ["image", (bytes) => startsWith(bytes, "RIFF") && startsWith(bytes, "WEBP", 8)],
     ["audio", (bytes) => startsWith(bytes, "ID3") || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)],
   ]) {
     // hosted.json (scripts/neurons/media.py) maps each shown document to [pack, offset, length].
-    const map = await get(origin, `/data/gemma-4-12b/media/${modality}/hosted.json`);
+    const map = await getData(site, dataPath("gemma-4-12b", `media/${modality}/hosted.json`));
     let range = [0, 0, 1024];
     let checkBytes = false;
     if (map.ok) {
@@ -227,37 +256,37 @@ export async function checkMediaRanges(origin, rules) {
       if (first) [range, checkBytes] = [first, true];
     } else await map.body?.cancel();
     const [pack, offset, length] = range;
-    const path = `/data/gemma-4-12b/media/${modality}/p${String(pack).padStart(3, "0")}.bin`;
-    const response = await get(origin, path, { Range: `bytes=${offset}-${offset + length - 1}` });
+    const path = dataPath("gemma-4-12b", `media/${modality}/p${String(pack).padStart(3, "0")}.bin`);
+    const response = await getData(site, path, { Range: `bytes=${offset}-${offset + length - 1}` });
     assert.equal(response.status, 206, `${path}: HTTP ${response.status} to a Range request, expected 206`);
     assert.match(response.headers.get("content-range") ?? "", new RegExp(`^bytes ${offset}-${offset + length - 1}/\\d+$`), `${path}: Content-Range`);
     const bytes = new Uint8Array(await response.arrayBuffer());
     assert.equal(bytes.length, length, `${path}: ${bytes.length} bytes for a range of ${length}`);
     if (checkBytes) assert.ok(looks(bytes), `${path}: the bytes at ${offset} aren't a ${modality === "image" ? "WebP" : "MP3"}`);
-    assertHeaders(response, rules, path);
+    assertDataHeaders(response, site, path);
   }
 }
 
 /** A neuron as the explorer reads it: its record from graph.bin, then its detail from the units pack that record names; and a head's record. */
-export async function checkGraphRanges(origin, rules) {
+export async function checkGraphRanges(site) {
   const read = async (path, offset, length) => {
-    const response = await get(origin, path, { Range: `bytes=${offset}-${offset + length - 1}` });
+    const response = await getData(site, path, { Range: `bytes=${offset}-${offset + length - 1}` });
     assert.equal(response.status, 206, `${path}: HTTP ${response.status} to a Range request, expected 206`);
     assert.match(response.headers.get("content-range") ?? "", new RegExp(`^bytes ${offset}-${offset + length - 1}/\\d+$`), `${path}: Content-Range`);
     const bytes = Buffer.from(await response.arrayBuffer());
     assert.equal(bytes.length, length, `${path}: ${bytes.length} bytes for a range of ${length}`);
-    assertHeaders(response, rules, path);
+    assertDataHeaders(response, site, path);
     return bytes;
   };
   for (const [model, layer, neuron, head] of [["qwen3-8b", 8, 344, 8 * 32 + 3], ["gemma-4-12b", 33, 12225, 33 * 16 + 5]]) {
-    const { wire, headWire } = await (await get(origin, `/data/${model}/index.json`)).json();
-    const folder = `/data/${model}/neurons/L${String(layer).padStart(2, "0")}`;
-    const record = await read(`${folder}/graph.bin`, neuron * wire, wire);
+    const { wire, headWire } = await (await getData(site, dataPath(model, "index.json"))).json();
+    const folder = `neurons/L${String(layer).padStart(2, "0")}`;
+    const record = await read(dataPath(model, `${folder}/graph.bin`), neuron * wire, wire);
     const [pack, offset, length] = [record[2], record.readUInt32LE(4), record.readUInt32LE(8)];
     assert.ok(length > 0, `${model} L${layer} n${neuron}: its record names no detail`);
-    const detail = JSON.parse(inflateSync(await read(`${folder}/units-${String(pack).padStart(2, "0")}.bin`, offset, length)).toString("utf8"));
+    const detail = JSON.parse(inflateSync(await read(dataPath(model, `${folder}/units-${String(pack).padStart(2, "0")}.bin`), offset, length)).toString("utf8"));
     assert.equal(detail.n, neuron, `${model} L${layer} n${neuron}: its record leads to neuron ${detail.n}`);
-    const firstSource = (await read(`/data/${model}/heads/graph.bin`, head * headWire, headWire)).readUInt32LE(128);
+    const firstSource = (await read(dataPath(model, "heads/graph.bin"), head * headWire, headWire)).readUInt32LE(128);
     assert.notEqual(firstSource, 0xffffffff, `${model} head ${head}: its record names no source`);
   }
 }
@@ -383,9 +412,9 @@ async function main() {
     steps.push(
       ["HTML and its headers", async () => { html = await checkHtml(opts.origin, rules, opts.build); }],
       ["assets, theme-preflight.js, robots.txt, the site's files", () => checkAssets(opts.origin, rules, html, opts.build)],
-      ["catalog JSON and missing data", () => checkData(opts.origin, rules)],
-      ["media packs by range", () => checkMediaRanges(opts.origin, rules)],
-      ["neurons by range", () => checkGraphRanges(opts.origin, rules)],
+      ["the catalog on R2: its builds, CORS, missing files", () => checkData(opts.origin, rules)],
+      ["media packs by range", () => checkMediaRanges(opts.origin)],
+      ["neurons by range", () => checkGraphRanges(opts.origin)],
     );
   }
   if (opts.browser) steps.push(["browser smoke: images, a sound, no CSP violation", () => browserSmoke(opts.origin)]);

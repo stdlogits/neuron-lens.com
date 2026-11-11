@@ -5,13 +5,14 @@
 # with "! Name" before setting it again.
 #
 # CSP: scripts only from this origin (Ledger's theme-preflight.js is served as a file for that reason:
-# no inline scripts); inline styles because Svelte sets style attributes; images and sounds from blob:
+# no inline scripts); fetches from this origin and the catalog's (R2, src/lib/catalog.json's origin);
+# inline styles because Svelte sets style attributes; images and sounds from blob:
 # because the explorer turns each one cut from a media pack into a blob: URL, and images from data:
 # for the optimised patches the catalog carries inline. The dev server sends none of this, so a CSP
 # mistake only shows on the deployed site.
 
 /*
-  Content-Security-Policy: default-src 'self'; base-uri 'none'; connect-src 'self' https://cloudflareinsights.com; font-src 'self'; form-action 'none'; frame-ancestors 'none'; img-src 'self' data: blob:; media-src 'self' blob:; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'
+  Content-Security-Policy: default-src 'self'; base-uri 'none'; connect-src 'self' https://data.neuron-lens.com https://cloudflareinsights.com; font-src 'self'; form-action 'none'; frame-ancestors 'none'; img-src 'self' data: blob:; media-src 'self' blob:; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'
   Cross-Origin-Opener-Policy: same-origin
   Permissions-Policy: accelerometer=(), bluetooth=(), browsing-topics=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), magnetometer=(), microphone=(), midi=(), payment=(), publickey-credentials-get=(), serial=(), usb=(), xr-spatial-tracking=()
   Referrer-Policy: same-origin
@@ -47,8 +48,3 @@
 /assets/*
   ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable
-
-# The catalog changes only when it is rebuilt and redeployed, which is rare.
-/data/*
-  ! Cache-Control
-  Cache-Control: public, max-age=14400, stale-while-revalidate=86400

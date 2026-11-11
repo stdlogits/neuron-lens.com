@@ -26,14 +26,17 @@ files. It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now
 - `@stdlogits/ledger` (below, "Design"): the tokens, faces and base styles, motion, the tip, the
   theme and the shared pieces (`Segmented`, `Tabs`, `Token`, `Swap`, `MorphText`, `Icon`, …).
 - `public/`: copied into the build as is. `_headers` (CSP, security headers, caching), `robots.txt`,
-  the mark (`favicon.svg`) and the images drawn from it and the card (below), `data/` (the catalog,
-  gitignored except `data/404.html`). `vite.config.ts` serves Ledger's `theme-preflight.js` beside them
+  the mark (`favicon.svg`) and the images drawn from it and the card (below). `vite.config.ts` serves Ledger's `theme-preflight.js` beside them
   (it applies the stored theme before first paint; a file, not inline, because the CSP allows no inline
   script); `index.html` gives it the theme's key.
-- `scripts/neurons/`: the catalog's build (below). `scripts/site/`: what the site says about itself
-  (below). `scripts/deploy.sh`, `scripts/verify-deployment.mjs`: deploy and the live check.
+- `catalog/` (gitignored): the built catalog, which the dev server serves at `/data` and the site reads
+  from R2 (below, "The catalog").
+- `scripts/neurons/`: the catalog's build (below). `scripts/catalog/`: its upload to R2, the bucket's
+  CORS rules and robots.txt, and the dev server's `/data`. `scripts/site/`: what the site says about
+  itself (below). `scripts/deploy.sh`, `scripts/verify-deployment.mjs`: deploy and the live check;
+  `scripts/wrangler.sh`: the account and sign-in every Wrangler call uses.
 - `e2e/`: Playwright specs on a mock catalog (`e2e/fixtures/catalog`, committed: a few units cut from
-  `public/data` by `e2e/fixtures/build.mjs`, ~0.5 MB).
+  `catalog/` by `e2e/fixtures/build.mjs`, ~0.5 MB).
 - `CONTRIBUTING.md`, `SECURITY.md`, `.github/` (CI, the issue forms, Dependabot for CI's actions): what
   the repository tells people outside it. CONTRIBUTING repeats this file's rules that CI can't check,
   so change it with them. Security reports go through private advisories only, with no email. The
@@ -60,15 +63,19 @@ hold the words). The only credit in the explorer is "Labels by Claude Haiku 5.5"
 labeller's note on the chosen labels, which is evidence for them, not an explanation of the site. A
 unit's view shows all of its evidence on one page, with nothing behind a "more" button, sorted into
 baskets under a bar that stays in reach: Firings (its images and sounds, its firings, what it does in real text, what the model says next there,
-how often and how hard), Weights (every read the labeller saw, with its test, and what it adds
+how often and how hard), Weights (every read the labeller saw, and what it adds
 beyond what it reads) and Stream (what the residual holds where it fires, which never reached the labeller).
 A head has the same three: Firings also holds what it attends to and its attention pattern, Weights its QK and OV reads with how it attends and copies, and Stream what its own output says where it fires.
+A head's QK diagonal, a token at the query seeking an earlier copy of itself, is read twice: with the query through the S-lens
+(the token it holds: duplicate-token heads) and through the R-lens (the token it is about to say: copy suppression's lookup).
+Each model trusts the first up to a layer and the second from the next (`self` in the builder's profile, from neuron-lens findings §11 and §13).
 Each read shows its normal list, or with the Distinctive switch beside English its layer-contrastive (z) list; a
 normal list left with nothing once hub tokens are gone shows its distinctive list instead (most of Stream's early reads).
 Every model has the same three depth bands, set by which lens works on each side of a neuron (`scripts/neurons/bands.py`):
 early layers read what drives it and what it writes through the S-lens, middle layers what drives it through the S-lens
 and its write through the R-lens, late layers both through the R-lens. A read through the other lens is quiet until
-pointed at, and comes last, unless its own test passes for that unit; so is a read the findings say fails on that model.
+pointed at, and comes last; so is a read the findings say fails on that model. The catalog keeps no per-unit test of a read
+(neuron-lens: a read that misses a unit's firings isn't wrong for it), so the site shows none and nothing lifts a read out of quiet.
 Left is always what comes in and right what goes out. Beside them the rail holds its connections: a
 directed graph at true depth, and its strongest links in words. Wired to, driven by and fires with are
 three relations and stay three views (findings §17). A head has no wired to, because two heads meet through a matrix and not a dot product;
@@ -107,11 +114,11 @@ the manifest's icons. Rerun it when the mark, the card or Qwen3-8B's catalog cha
 
 ## The catalog
 
-The explorer reads static JSON (and Gemma 4's media packs) from `public/data/<model>/`, served at
-`/data/<model>/`. It is built from the private neuron-lens catalogs
-(`~/Work/neuron-lens/data/catalog/<model>`, laid out as the Hub release `stdlogits/neuron-lens`) and is
-gitignored like them (~6 GB, ~600 files). Stages, from the repository root (each script's docstring
-has the full invocation):
+The explorer reads static JSON (and Gemma 4's media packs), built into `catalog/<model>/` from the
+private neuron-lens catalogs (`~/Work/neuron-lens/data/catalog/<model>`, laid out as the Hub release
+`stdlogits/neuron-lens`) and gitignored like them (~6 GB, ~600 files). The dev server serves it at
+`/data/<model>/`; the site reads it from R2 (below, "On R2"). Stages, from the repository root (each
+script's docstring has the full invocation):
 
 1. `scripts/neurons/translate.py` machine-translates non-English tokens, label terms, example contexts
    and media captions with Claude Haiku 5.5 on the Batch API (`collect`, `pilot`, `submit --cap`,
@@ -119,19 +126,21 @@ has the full invocation):
    `.neuron-lens/<model>` by default (gitignored); `--parts` and `--known` let a later run (a model's
    labels, once labelled, as in `.neuron-lens/gemma-4-12b-labels`) skip what earlier runs sent. Rerun it
    only when a catalog's vocabulary, labels or contexts change.
-2. Gemma 4 only: `scripts/neurons/media.py <catalog> public/data/gemma-4-12b` packs the images and
+2. Gemma 4 only: `scripts/neurons/media.py <catalog> catalog/gemma-4-12b` packs the images and
    sounds of the collections whose licences allow showing them (its `ALLOWED` table), matched to the
    catalog by SHA-1, and their credits. The synthetic images come from the catalog folder's `media/image_synth.parquet`,
    which the Hub release leaves out. Others are linked, never hosted. `hosted.json` is keyed by document number,
    so rerun this whenever a catalog's `media/*_docs.parquet` change.
-3. `scripts/neurons/build-neuron-catalog.py <catalog> <tokenizer.json> public/data
-   <translations.jsonl,...>` writes every neuron and head into `public/data/<model>/`, given every
+3. `scripts/neurons/build-neuron-catalog.py <catalog> <tokenizer.json> catalog
+   <translations.jsonl,...>` writes every neuron and head into `catalog/<model>/`, given every
    translation run that applies (a term means the same whichever model's run translated it). The
    model's profile (geometry, depth bands, the reads that fail on it) sits at the top of the builder;
    the bands come from `scripts/neurons/bands.py <neuron-lens data/summary> <model>`, which reads
    them off neuron-lens's per-layer census and steering checks, and `src/lib/models.ts` holds the same
    layers with the site's words for them. A new model's bands come from rerunning it. `NEURON_LAYERS=8,21`
    builds a subset for development.
+4. `scripts/catalog/upload.sh <model>` puts the build on R2 and names it in `src/lib/catalog.json`;
+   commit that and deploy (below, "On R2").
 
 Labels come from neuron-lens's `scripts/10_labels.py`, per model. The builder also works without them:
 titles then fall back to a unit's media label or its peak tokens.
@@ -149,21 +158,35 @@ e2e mock catalog (`node e2e/fixtures/build.mjs`) so the specs see the new shape.
 keys the search file and the variants a unit agrees on; the explorer computes the same keys with
 Ledger's `stem()`, so the two must stay the same.
 
-`public/data/404.html` makes a missing data file answer 404 rather than the app. There must be no
-top-level `404.html`: Pages serves `index.html` for every path without a file only while there isn't
-one.
+### On R2
+
+The site reads each model's catalog from the R2 bucket `neuron-lens-data` in a9's account, served at
+`https://data.neuron-lens.com` (a custom domain on the zone), under the build that `src/lib/catalog.json`
+names: `/<model>/<build>/…`, the build being the first 12 hex digits of a hash over the build's files.
+A build never changes once up, so its files are cached for good (`immutable`), a page reads one build
+throughout (a graph record and the units pack it points into always agree), and a new build goes live
+with the deploy that names it. `scripts/catalog/upload.sh` sends a build (8 files at a time, resuming
+from its log in `catalog/.uploads/` if interrupted, `index.json` last), checks it answers, and names it;
+`deploy.sh` refuses to deploy a `catalog.json` whose builds aren't up. Older builds stay in the bucket
+until deleted, at R2's storage price (10 GB free, then $0.015/GB-month; reads past 10 million a month
+$0.36 a million; no egress fees). The bucket's CORS rules (`scripts/catalog/cors.json`) let
+neuron-lens.com and its `pages.dev` previews read it, with ranges, and its robots.txt keeps crawlers
+out. Cloudflare's edge caches the `.bin` files (ranges cut from its copy); JSON goes to R2 each time
+unless a cache rule for the hostname says otherwise. There must be no top-level `404.html`: Pages
+serves `index.html` for every path without a file only while there isn't one.
 
 ## Images and sounds, and the CSP
 
-Each image and sound shown is cut from a media pack by an HTTP range request (Pages answers 206) and
+Each image and sound shown is cut from a media pack by an HTTP range request (R2 answers 206) and
 shown from a `blob:` URL; optimised patches come inline as `data:` images, and optimised sounds are
-made into `blob:` WAVs. The CSP in `public/_headers` allows exactly that (`img-src 'self' data: blob:`,
-`media-src 'self' blob:`). The dev server sends no CSP, so a page that breaks under it only breaks once
+made into `blob:` WAVs. The CSP in `public/_headers` allows exactly that (`connect-src` the catalog's
+origin, `img-src 'self' data: blob:`, `media-src 'self' blob:`). The dev server sends no CSP, so a page that breaks under it only breaks once
 deployed: any new way of showing fetched bytes (another scheme, another origin, a worker, inline
 script) needs `_headers` changed with it, and a check of the deployed page's console.
 `scripts/verify-deployment.mjs` reads `_headers` itself, so the two can't drift.
 
-Pages caps a site at 20,000 files (Free plan) and a file at 25 MiB; media packs stay under both.
+Pages caps a site at 20,000 files (Free plan) and a file at 25 MiB, which the build no longer comes near;
+the builder still keeps units packs under 20 MiB, so a range is cut from a file the edge caches whole.
 
 ## Testing
 
@@ -178,8 +201,9 @@ CI (`.github/workflows/ci.yml`) runs `npm ci`, `check`, `build` and the e2e spec
   and unit view are marked `test.fixme` until those parts settle.
 - `node scripts/verify-deployment.mjs <origin>` checks a deployed site: status codes, the headers from
   `_headers`, the JSON-LD and the files the site serves about itself (icons, card, manifest, llms.txt,
-  sitemap; byte for byte against `dist` when deploying), catalog JSON, 404s for missing data, 206
-  ranges on graph records, units packs and media packs, immutable assets, then a
+  sitemap; byte for byte against `dist` when deploying), immutable assets; on the data origin each
+  named build's `index.json`, CORS (a range's preflight too), immutable caching, a 404 for a missing
+  file, robots.txt, and 206 ranges on graph records, units packs and media packs; then a
   Chromium smoke that a Gemma neuron's images load and a sound plays with no CSP violation. Its
   selectors are constants at the top of its browser section.
 
@@ -188,13 +212,14 @@ CI (`.github/workflows/ci.yml`) runs `npm ci`, `check`, `build` and the e2e spec
 `scripts/deploy.sh` (`npm run deploy`) deploys to the Cloudflare Pages project `neuron-lens` in a9's
 own Cloudflare account, production branch `main`, then verifies `https://neuron-lens.com`. The
 Cloudflare user logged in on this machine reaches that account and also the one that hosts drowse.ai,
-so the script pins every Wrangler call to `CLOUDFLARE_ACCOUNT_ID`, which it requires (from the
-environment or `~/.config/cloudflare/neuron-lens.env`, outside the repo). It signs in with
-`CLOUDFLARE_API_TOKEN` when set (then Wrangler gets an empty home), else with the machine's
-`wrangler login`, and passes Wrangler no other credential variable and an empty `.env`. Never run a
-Wrangler command for this site without that account ID.
+so `scripts/wrangler.sh` (which `deploy.sh` and `scripts/catalog/upload.sh` source) pins every Wrangler
+call to `CLOUDFLARE_ACCOUNT_ID`, which it requires (from the environment or
+`~/.config/cloudflare/neuron-lens.env`, outside the repo). It signs in with `CLOUDFLARE_API_TOKEN` when
+set (then Wrangler gets an empty home), else with the machine's `wrangler login`, and passes Wrangler no
+other credential variable and an empty `.env`. Never run a Wrangler command for this site without that
+account ID.
 
-It refuses a dirty tree, a HEAD not on `origin/main`, or a missing catalog; runs `npm ci`, `check` and
+It refuses a dirty tree, a HEAD not on `origin/main`, or a `catalog.json` build that isn't on R2; runs `npm ci`, `check` and
 `build`; checks `dist` against Pages' file limits; uploads with the pinned Wrangler
 (`--commit-hash` HEAD); and waits for the live site to serve this build before verifying it.
 `--dry-run` stops before the upload. The Pages project and the custom domain must exist in that
@@ -205,5 +230,4 @@ sets `Referrer-Policy: same-origin` and `X-Frame-Options: SAMEORIGIN`, so `_head
 (the CSP's `frame-ancestors 'none'` still forbids framing), and its HSTS setting (a9's) replaces the
 header with `max-age=31536000; includeSubDomains; preload`, which `_headers` repeats (a year is the
 least the preload list accepts). Its Browser Cache TTL (4 hours) raises a
-shorter `max-age` (and `no-cache` on images), so `/data/*` and the site's images ask for 4 hours
-themselves.
+shorter `max-age` (and `no-cache` on images), so the site's images ask for 4 hours themselves.

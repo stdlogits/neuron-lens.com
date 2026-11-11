@@ -2,7 +2,7 @@
 // Draws the site's images into public/: the social card (card.png, from scripts/site/card.html) and
 // the icons made from the mark (public/favicon.svg): favicon.ico, apple-touch-icon.png and the
 // manifest's icons. The card's atlas comes from the built catalog, so run it after the catalog is in
-// public/data, and again when the mark, the card or Qwen3-8B's catalog changes.
+// catalog/, and again when the mark, the card or Qwen3-8B's catalog changes.
 //
 //   node scripts/site/render.mjs
 
@@ -20,7 +20,7 @@ const UNIT = { layer: 8, n: 344 };
 
 /** Qwen3-8B's atlas: each layer's easiest neurons, the labeller's surest first, shaded by rank in the model. */
 async function atlas() {
-  const index = JSON.parse(await readFile(at("public/data/qwen3-8b/index.json"), "utf8"));
+  const index = JSON.parse(await readFile(at("catalog/qwen3-8b/index.json"), "utf8"));
   const scores = Float64Array.from(index.neurons.map((row) => row[4])).sort();
   const shade = (score) => {
     let below = 0;

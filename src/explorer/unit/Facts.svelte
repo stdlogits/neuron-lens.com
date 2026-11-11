@@ -7,7 +7,7 @@
 
 <dl class="facts">
   {#each facts as fact (fact.k)}
-    <div class:off={fact.off}>
+    <div>
       <dt data-tip={fact.tip}>{fact.k}</dt>
       <dd>{fact.v}</dd>
     </div>
@@ -20,5 +20,4 @@
   dt { color: var(--ink3); font: var(--type-meta); font-weight: 400; }
   dt[data-tip] { cursor: help; }
   dd { margin: 0; color: var(--ink); font: var(--type-control); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .off dd { color: var(--ink3); font-weight: 400; }
 </style>

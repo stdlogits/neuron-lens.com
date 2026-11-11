@@ -15,5 +15,5 @@
     "allowImportingTsExtensions": true,
     "checkJs": false
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte", "vite.config.ts", "scripts/site/**/*.ts", "e2e/**/*.ts", "playwright.config.ts"]
+  "include": ["src/**/*.ts", "src/**/*.svelte", "vite.config.ts", "scripts/site/**/*.ts", "scripts/catalog/**/*.ts", "e2e/**/*.ts", "playwright.config.ts"]
 }

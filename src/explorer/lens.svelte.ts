@@ -4,8 +4,8 @@
 // and the search's matches are the only state outside the address.
 import { getContext, setContext, untrack } from "svelte";
 import {
-  FLAG_AUDIO, FLAG_CROSSMODAL, FLAG_DETECTOR, FLAG_IMAGE, FLAG_PREDICTS, FLAG_SUPPRESSES, ROLES, describeRole,
-  ROLE_CARRIES, ROLE_COPY, ROLE_DUPLICATE, ROLE_INDUCTION, ROLE_NAMES, ROLE_NEXT, ROLE_PREVIOUS, ROLE_SINK,
+  FLAG_AUDIO, FLAG_CROSSMODAL, FLAG_DETECTOR, FLAG_IMAGE, FLAG_PREDICTS, FLAG_SUPPRESSES, ROLES,
+  ROLE_CARRIES, ROLE_DUPLICATE, ROLE_INDUCTION, ROLE_NAMES, ROLE_PREVIOUS, ROLE_SINK,
   formatCount, headId, loadHeadIndex, loadHeadLayer, loadIndex, loadLayerIndex, loadNeuron, loadScores, neuronId,
   type CatalogIndex, type HeadDetail, type HeadRow, type IndexRow, type NeuronDetail, type Unit,
 } from "../lib/data";
@@ -26,7 +26,7 @@ const MEDIA_FILTERS: Filter[] = [
   { value: "audio", label: "Sound", neurons: FLAG_AUDIO, hint: "A side fires reliably on one kind of sound" },
   { value: "crossmodal", label: "Text and media", neurons: FLAG_CROSSMODAL, hint: "Its image or sound label holds in text too: the words fire it, and both lenses read them" },
 ];
-const HEAD_ROLES = [ROLE_INDUCTION, ROLE_DUPLICATE, ROLE_PREVIOUS, ROLE_NEXT, ROLE_COPY, ROLE_SINK, ROLE_CARRIES, ROLE_NAMES];
+const HEAD_ROLES = [ROLE_INDUCTION, ROLE_DUPLICATE, ROLE_PREVIOUS, ROLE_SINK, ROLE_CARRIES, ROLE_NAMES];
 
 /** Search matches, as "layer:index" keys, lit up on the atlas and in the list. */
 export interface Matches { neurons: Set<string>; heads: Set<string> }
@@ -75,7 +75,7 @@ export class Lens {
   readonly filters = $derived.by<Filter[]>(() => {
     if (this.unit === "heads") {
       const present = (this.heads ?? []).reduce((bits, row) => bits | row[9], 0);
-      return [{ value: "all", label: "All", hint: "Every head, whatever it does" }, ...ROLES.filter((role) => HEAD_ROLES.includes(role.bit) && (present & role.bit)).map((role) => ({ value: String(role.bit), label: role.short, heads: role.bit, hint: describeRole(role, this.model) }))];
+      return [{ value: "all", label: "All", hint: "Every head, whatever it does" }, ...ROLES.filter((role) => HEAD_ROLES.includes(role.bit) && (present & role.bit)).map((role) => ({ value: String(role.bit), label: role.short, heads: role.bit, hint: role.describe }))];
     }
     return this.model.media.length ? [...NEURON_FILTERS, ...MEDIA_FILTERS] : NEURON_FILTERS;
   });

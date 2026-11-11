@@ -5,18 +5,16 @@
   import Facts from "./Facts.svelte";
   import type { Pole } from "../../lib/data";
   import { reading } from "../../lib/reading.svelte";
-  import { ORTH, WEIGHTS, neuronTests, oneOfEach, sideReads, weightFacts } from "./evidence";
+  import { ORTH, WEIGHTS, oneOfEach, sideReads, weightFacts } from "./evidence";
 
   // A neuron side's evidence under its two columns: under Fires on every read of what it reads,
-  // under Writes every read of what it writes and of what it adds beyond that. Each read carries its
-  // test. The About page draws it as is, naming its columns and, with `measured`, what it fires on in real text.
+  // under Writes every read of what it writes and of what it adds beyond that. The About page draws it as is, naming its columns and, with `measured`, what it fires on in real text.
   let { pole, named = false, measured = true }: { pole: Pole; named?: boolean; measured?: boolean } = $props();
 
   const reads = $derived(oneOfEach(pole.reads, reading.distinctive));
   const orth = $derived(oneOfEach(pole.orth, reading.distinctive));
   const inputs = $derived(sideReads(reads, "input"));
   const outputs = $derived(sideReads(reads, "output"));
-  const tests = $derived(neuronTests(pole));
   const facts = $derived(weightFacts(pole));
 </script>
 
@@ -24,13 +22,13 @@
   <span aria-hidden="true"></span>
   <div class="col">
     <h3 class="col-head head">Fires on</h3>
-    {#if inputs.length}<Group title="From its weights" tip={WEIGHTS}><Reads reads={inputs} {tests} /></Group>{/if}
+    {#if inputs.length}<Group title="From its weights" tip={WEIGHTS}><Reads reads={inputs} /></Group>{/if}
     {#if measured}<RealText {pole} next={false} />{/if}
     {#if !measured && facts.length}<Group title="Against what it reads" tip="How its write lines up with what it reads, from its weights"><Facts {facts} /></Group>{/if}
   </div>
   <div class="col">
     <h3 class="col-head head">Writes</h3>
-    {#if outputs.length}<Group title="From its weights" tip={WEIGHTS}><Reads reads={outputs} {tests} /></Group>{/if}
+    {#if outputs.length}<Group title="From its weights" tip={WEIGHTS}><Reads reads={outputs} /></Group>{/if}
     {#if !measured && orth.length}<Group title="Beyond what it reads" tip={ORTH}><Reads reads={orth} /></Group>{/if}
   </div>
 </div>

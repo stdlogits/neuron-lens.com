@@ -4,7 +4,7 @@
   import { Swap } from "@stdlogits/ledger";
   import Faces from "../../explorer/unit/Faces.svelte";
   import { neuronTags } from "../../explorer/unit/evidence";
-  import { describeRole, loadHeadIndex, loadHeadLayer, loadLayerIndex, loadNeuron, rolesOf, type HeadDetail, type NeuronDetail } from "../../lib/data";
+  import { loadHeadIndex, loadHeadLayer, loadLayerIndex, loadNeuron, rolesOf, type HeadDetail, type NeuronDetail } from "../../lib/data";
   import { MODELS, depthColor } from "../../lib/models";
   import { GROUPS, OWL } from "./specimens";
 
@@ -25,7 +25,7 @@
     loadLayerIndex(OWL.model, OWL.layer).then((rows) => { neuronTagList = neuronTags(rows.find((r) => r[1] === OWL.n)?.[5] ?? 0); }, () => undefined);
     loadHeadIndex(GROUPS.model).then((rows) => {
       const row = rows.find((r) => r[0] === GROUPS.layer && r[1] === GROUPS.h);
-      headTagList = row ? rolesOf(row[9]).map((role) => ({ label: role.short, tip: describeRole(role, gemma) })) : [];
+      headTagList = row ? rolesOf(row[9]).map((role) => ({ label: role.short, tip: role.describe })) : [];
     }, () => undefined);
   }
 

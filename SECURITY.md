@@ -1,7 +1,7 @@
 # Security Policy
 
 This policy covers neuron-lens.com: the static site this repository builds, its response headers
-(`public/_headers`), and the catalog and media packs it serves under `/data/`. The analysis behind the
+(`public/_headers`), and the catalog and media packs it serves from `data.neuron-lens.com`. The analysis behind the
 catalog and its Hub release belong to [neuron-lens](https://github.com/stdlogits/neuron-lens), and the
 shared design pieces belong to [Ledger](https://github.com/stdlogits/ledger).
 

@@ -58,7 +58,7 @@
         <button type="button" class="retry" onclick={() => lens.retry()}>Try again</button>
       </div>
     {:else if showing === "unit" && held?.head}
-      <HeadUnit head={held.head} model={held.model} labelled={held.labelled} groupSize={held.groupSize} />
+      <HeadUnit head={held.head} labelled={held.labelled} groupSize={held.groupSize} />
     {:else if showing === "unit" && held?.neuron}
       <NeuronUnit detail={held.neuron} layer={held.layer} labelled={held.labelled} />
     {:else}

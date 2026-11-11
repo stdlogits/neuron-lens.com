@@ -6,7 +6,7 @@ the short version for a first change.
 
 ## Running it
 
-Set up as in the README (`npm ci`, `npm run dev`). Without a catalog in `public/data/`, the dev server
+Set up as in the README (`npm ci`, `npm run dev`). Without a catalog in `catalog/`, the dev server
 draws the explorer's shell and shows an error where the data should be. The e2e specs
 (`npm run test:e2e`) bring their own small mock catalog.
 

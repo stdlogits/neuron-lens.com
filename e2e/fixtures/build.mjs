@@ -1,8 +1,8 @@
-// Cuts the e2e mock catalog (e2e/fixtures/catalog/<model>/) from the real one in public/data: the few
+// Cuts the e2e mock catalog (e2e/fixtures/catalog/<model>/) from the real one in catalog/: the few
 // units the specs visit, with everything they name and nothing else. Run it again when the catalog's
 // format changes or the specs need another unit:
 //
-//   node e2e/fixtures/build.mjs [public/data]
+//   node e2e/fixtures/build.mjs [catalog]
 //
 // What it keeps, per model (KEEP below): some of the easiest neurons of a layer, deep-linked neurons
 // (with their layer's All list cut to them and the layer's top few), and some heads of a layer. Token
@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import { deflateSync, inflateSync } from "node:zlib";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const source = resolve(process.argv[2] ?? resolve(here, "../../public/data"));
+const source = resolve(process.argv[2] ?? resolve(here, "../../catalog"));
 const target = resolve(here, "catalog");
 
 /** easiest: layer -> how many of its easiest neurons; neurons: [layer, neuron] deep links; heads: layer -> how many, plus named ones. */

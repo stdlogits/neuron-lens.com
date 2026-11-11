@@ -4,8 +4,9 @@ test-results/
 playwright-report/
 .wrangler/
 .DS_Store
-# The built catalog (several GB) is made by scripts/neurons from the private neuron-lens catalogs.
-public/data/*
-!public/data/404.html
+# The built catalog (several GB) is made by scripts/neurons from the private neuron-lens catalogs
+# and uploaded to R2 (scripts/catalog); the dev server serves it at /data.
+/catalog/
+/catalog.old/
 # Translation runs: each keeps its state and Batch API results here.
 .neuron-lens/

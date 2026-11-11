@@ -34,8 +34,6 @@ export interface ModelInfo {
   bands: BandInfo[];
   /** By depth: (last layer, the heading over a neuron's output read). */
   writeVerbs: [number, string][];
-  /** The head tests' statistic: a false-discovery q, or (with too few heads a layer for one) an uncorrected p. */
-  headTest: "q" | "p";
   /** Every sixth layer of Gemma 4 attends globally; the others within a window. */
   globalLayers: number[];
   media: Modality[];
@@ -73,7 +71,6 @@ export const MODELS: Record<ModelId, ModelInfo> = {
       },
     ],
     writeVerbs: [[3, "Writes (weak this early)"], [20, "When pushed, it promotes"], [31, "It predicts the next word"], [35, "It predicts or holds back the next word"]],
-    headTest: "q",
     globalLayers: [],
     media: [],
     examples: ["owl", "Bible", "she", "money", "圣经", "L20h17"],
@@ -107,7 +104,6 @@ export const MODELS: Record<ModelId, ModelInfo> = {
       },
     ],
     writeVerbs: [[10, "Writes (weak this early)"], [32, "When pushed, it promotes"], [47, "It predicts the next word"]],
-    headTest: "p",
     globalLayers: [5, 11, 17, 23, 29, 35, 41, 47],
     media: ["image", "audio"],
     examples: ["panda", "mosque", "Arabic", "rain", "熊猫", "L28h6"],

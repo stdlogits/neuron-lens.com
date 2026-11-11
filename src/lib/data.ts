@@ -1,10 +1,15 @@
-// The catalog the explorer reads. The files are prebuilt by scripts/neurons/build-neuron-catalog.py
-// from the neuron-lens catalogs and served as static JSON under /data.
+// The catalog the explorer reads, prebuilt by scripts/neurons/build-neuron-catalog.py from the
+// neuron-lens catalogs. The dev server serves the local copy (catalog/<model>) at /data/<model>; the
+// site reads each model's build from R2 at the data origin, under the build's own name in catalog.json
+// (scripts/catalog/upload.sh writes it). A build's files never change, so a page reads one build
+// throughout, and a new one starts with the deploy that names it.
 
 import type { ContextLine } from "@stdlogits/ledger";
+import catalog from "./catalog.json";
 import type { ModelId, ModelInfo, Modality } from "./models";
 
-export const DATA_BASE = "/data";
+/** Where a model's catalog files are. */
+export const dataBase = (model: ModelId) => (import.meta.env.DEV ? `/data/${model}` : `${catalog.origin}/${model}/${catalog.builds[model]}`);
 
 export type Unit = "neurons" | "heads";
 export type Trust = "primary" | "trusted" | "weak";
@@ -13,7 +18,7 @@ export type NeuronColumn =
   | "write_S" | "write_S_z" | "write_R" | "write_R_z";
 export type HeadColumn =
   | "ov_R" | "ov_R_z" | "ov_R_neg" | "ov_R_neg_z" | "ov_S" | "ov_S_z" | "ov_S_neg" | "ov_S_neg_z"
-  | "qk_S" | "qk_S_z" | "qk_S_neg" | "qk_S_neg_z" | "qk_self_S" | "qk_self_S_z";
+  | "qk_S" | "qk_S_z" | "qk_S_neg" | "qk_S_neg_z" | "qk_self_S" | "qk_self_S_z" | "qk_self_R" | "qk_self_R_z";
 /** What a pole adds beyond what it reads: the write's reads with its gate and up rows removed (findings §18). */
 export type OrthColumn = "write_orth_R" | "write_orth_R_z" | "write_orth_S" | "write_orth_S_z";
 /** What the stream holds at a pole's firings: entering its MLP, written by its layer, and the model's next word. */
@@ -35,7 +40,6 @@ export interface LensRead extends ReadInfo {
   tokens: LensToken[];
 }
 
-export type NeuronSide = "read_S" | "read_R" | "write_S" | "write_R";
 export interface NeuronLabel { fires: string; fc: number; writes: string; wc: number; note: string }
 export interface Pole {
   pole: 1 | -1;
@@ -61,8 +65,6 @@ export interface Pole {
   flow?: [number | null, number | null, number];
   /** The cosine of its write with the gate and up sides of what it reads. */
   cos: [number | null, number | null];
-  /** Each side's q-value against its own target (`neuronTests`): under 0.05, the read names it. */
-  legible: Record<NeuronSide, number>;
   silent: boolean;
   detector: "token" | "next" | null;
   shape?: { kurtPct: number; skew: number; kind: "predicts" | "suppresses" | null };
@@ -100,7 +102,8 @@ export interface HeadDetail {
   pattern: [number, number, number, number, number];
   roles: number;
   act: { top: number; max: number; rate: number; slices: [number, number, number, number] };
-  copy: { ovR: number; ovS: number; self: number; qkOv: number; qkCtx: number };
+  /** Copying scores of its OV map; its QK diagonal's median with the query through the S-lens and (from L1) the R-lens; how well QK·S ranks what it attends to in real text, and what OV·R copies. */
+  copy: { ovR: number | null; ovS: number | null; selfS: number | null; selfR: number | null; qkOv: number | null; qkCtx: number | null };
   reads: LensRead[];
   /** What its firings write in context (the R-lens read of its actual output, layer-contrastive). */
   outRz: LensToken[];
@@ -112,7 +115,6 @@ export interface HeadDetail {
   sources: [string, number][];
   /** Top firings: the text with the token marked ⟦ ⟧ and the attended token ⟪ ⟫, then its English and language when translated. */
   contexts: ContextLine[];
-  legible: { ov_R: number; ov_copy: number; ov_S: number; qk_S: number };
   /** Share of top firings on one query token, and on one attended token. */
   modes: [number, number];
   score: number;
@@ -196,7 +198,7 @@ function memo<T>(key: string, make: () => Promise<T>): Promise<T> {
   return pending;
 }
 
-const load = <T>(model: ModelId, name: string) => memo(`${model}/${name}`, () => fetch(`${DATA_BASE}/${model}/${name}`).then((response) => {
+const load = <T>(model: ModelId, name: string) => memo(`${model}/${name}`, () => fetch(`${dataBase(model)}/${name}`).then((response) => {
   if (!response.ok) throw new Error(`${name}: ${response.status}`);
   return response.json() as Promise<T>;
 }));
@@ -355,11 +357,11 @@ export const headOf = (heads: number, id: number) => ({ layer: Math.floor(id / h
 export const loadPoleWire = (model: ModelId, id: number) => memo(`${model}/wire:${id}`, async () => {
   const { wire, neuronsPerLayer: mlp, connections } = await loadIndex(model);
   const { layer, neuron, pole } = poleOf(mlp, id);
-  return wireOf(await range(`${DATA_BASE}/${model}/neurons/L${pad(layer)}/graph.bin`, (neuron + (pole < 0 ? mlp : 0)) * wire, wire), connections, POLE_RELATIONS);
+  return wireOf(await range(`${dataBase(model)}/neurons/L${pad(layer)}/graph.bin`, (neuron + (pole < 0 ? mlp : 0)) * wire, wire), connections, POLE_RELATIONS);
 });
 export const loadHeadWire = (model: ModelId, id: number) => memo(`${model}/head-wire:${id}`, async () => {
   const { headWire, connections } = await loadIndex(model);
-  return wireOf(await range(`${DATA_BASE}/${model}/heads/graph.bin`, id * headWire, headWire), connections, HEAD_RELATIONS);
+  return wireOf(await range(`${dataBase(model)}/heads/graph.bin`, id * headWire, headWire), connections, HEAD_RELATIONS);
 });
 
 /** One neuron's detail, from where its record says it is. */
@@ -368,7 +370,7 @@ export const loadNeuron = (model: ModelId, layer: number, neuron: number): Promi
   const [wire, vocab] = await Promise.all([loadPoleWire(model, poleId(index.neuronsPerLayer, layer, neuron, 1)), loadVocab(model)]);
   const [pack, offset, length] = wire.detail;
   if (!length) return null;
-  const raw = JSON.parse(await inflated(await range(`${DATA_BASE}/${model}/neurons/L${pad(layer)}/units-${pad(pack)}.bin`, offset, length))) as { n: number; poles: [RawPole, RawPole] };
+  const raw = JSON.parse(await inflated(await range(`${dataBase(model)}/neurons/L${pad(layer)}/units-${pad(pack)}.bin`, offset, length))) as { n: number; poles: [RawPole, RawPole] };
   const { reads = [], orth = [], stream = [] } = index.layerMeta[layer];
   return {
     n: raw.n,
@@ -429,7 +431,7 @@ export function mediaUrl(model: ModelId, modality: Modality, where: [number, num
     mediaUrls.set(key, held);
   } else {
     const [pack, offset, length] = where;
-    const url = `${DATA_BASE}/${model}/media/${modality}/p${pad(pack, 3)}.bin`;
+    const url = `${dataBase(model)}/media/${modality}/p${pad(pack, 3)}.bin`;
     const type = modality === "image" ? "image/webp" : "audio/mpeg";
     const made = (async () => {
       let whole = wholePacks.get(url);
@@ -516,8 +518,10 @@ export const LENSES: Record<ReadColumn, LensInfo> = {
   qk_S_z: { short: "QK·S z", name: "Distinctively attends to", side: "input", describe: "The same, scored against the layer's other heads." },
   qk_S_neg: { short: "QK·S −", name: "Avoids", side: "input", describe: "Key tokens its average query looks away from." },
   qk_S_neg_z: { short: "QK·S − z", name: "Distinctively avoids", side: "input", describe: "The same, scored against the layer's other heads." },
-  qk_self_S: { short: "QK self", name: "Seeks itself", side: "input", describe: "Tokens that, as the query, favour an earlier copy of themselves: what duplicate-token heads do." },
-  qk_self_S_z: { short: "QK self z", name: "Distinctively seeks itself", side: "input", describe: "The same, scored against the layer's other heads." },
+  qk_self_S: { short: "QK self·S", name: "Seeks itself", side: "input", describe: "Tokens that, held at the query, favour an earlier copy of themselves: what duplicate-token heads do." },
+  qk_self_S_z: { short: "QK self·S z", name: "Distinctively seeks itself", side: "input", describe: "The same, scored against the layer's other heads." },
+  qk_self_R: { short: "QK self·R", name: "Seeks what it's about to say", side: "input", describe: "Tokens that, when the query is about to say them, favour an earlier copy of themselves: how a copy suppressor finds what to hold back (an R-lens query against S-lens keys)." },
+  qk_self_R_z: { short: "QK self·R z", name: "Distinctively seeks what it's about to say", side: "input", describe: "The same, scored against the layer's other heads." },
 };
 
 // ---------- heads
@@ -527,10 +531,8 @@ export const ROLE_DUPLICATE = 2;
 export const ROLE_PREVIOUS = 4;
 export const ROLE_SELF = 8;
 export const ROLE_SINK = 16;
-export const ROLE_NEXT = 32;
-export const ROLE_COPY = 64;
-export const ROLE_CARRIES = 128;
-export const ROLE_NAMES = 256;
+export const ROLE_CARRIES = 32;
+export const ROLE_NAMES = 64;
 
 export interface RoleInfo { bit: number; name: string; short: string; describe: string }
 
@@ -540,17 +542,12 @@ export const ROLES: RoleInfo[] = [
   { bit: ROLE_DUPLICATE, name: "Duplicate-token head", short: "Duplicate", describe: "Attends to earlier copies of the current token (score past 0.3). It copies little, likely marking that the token was seen." },
   { bit: ROLE_PREVIOUS, name: "Previous-token head", short: "Previous", describe: "Attends mostly to the token just before (past 0.5)." },
   { bit: ROLE_SELF, name: "Self-attending head", short: "Self", describe: "Attends mostly to its own position (past 0.5)." },
-  { bit: ROLE_NEXT, name: "Next-token writer", short: "Next token", describe: "At its own top firings, the attended token's OV column promotes the token that follows (q < 0.05)." },
-  { bit: ROLE_COPY, name: "Copier", short: "Copies", describe: "At its own top firings, it promotes the token it attends to (q < 0.05)." },
   { bit: ROLE_SINK, name: "Sink head", short: "Sink", describe: "Puts over 90% of its attention on the first position, a resting place: it acts where it leaves the sink." },
   { bit: ROLE_CARRIES, name: "Carries the image", short: "Carries image", describe: "Zeroing it makes the model worse at telling an image's label from another's (z past 3 over 64 images)." },
   { bit: ROLE_NAMES, name: "Names the image", short: "Names image", describe: "Its output, after an image, promotes that image's class over the others (q < 0.05)." },
 ];
 
 export const rolesOf = (bits: number) => ROLES.filter((role) => (bits & role.bit) !== 0);
-/** A role's description for this model: Gemma 4's OV tests are uncorrected p-values (16 heads a layer give a false-discovery test no power). */
-export const describeRole = (role: RoleInfo, model: ModelInfo) =>
-  model.headTest === "p" && (role.bit === ROLE_NEXT || role.bit === ROLE_COPY) ? role.describe.replace("q < 0.05", "p < 0.05, uncorrected") : role.describe;
 export const primaryRole = (bits: number) => ROLES.find((role) => (bits & role.bit) !== 0) ?? null;
 export const PATTERN_NAMES = ["Sink", "Previous", "Self", "Induction", "Duplicate"] as const;
 /** The thresholds the catalog names a pattern at. */

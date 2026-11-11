@@ -34,8 +34,7 @@
   <div class="spec">
     <dl class="marks" style:--tint={depthColor(qwen, OWL.layer)}>
       <div><dt><Meter value={0.8} label="A read's strength" /></dt><dd>how strong a read is, against the rest of its layer</dd></div>
-      <div><dt><span class="q">q 0.005</span></dt><dd>its test: under 0.05, the read predicts where the unit fires</dd></div>
-      <div><dt><span class="q off">q 0.72</span></dt><dd>a failed test: the read goes quiet</dd></div>
+      <div><dt><span class="quiet"><Token token=" owl" /></span></dt><dd>a read its depth doesn't trust: quiet until pointed at</dd></div>
       <div><dt><Token token="owl" flags={1} /></dt><dd>two lists agree on this token</dd></div>
       <div><dt><Token token=" owl" count={2} /></dt><dd>· starts a word; ×2 merges its variants</dd></div>
       <div><dt><Token token=" owl" value={11} /></dt><dd>how hard it makes the unit fire</dd></div>
@@ -50,7 +49,7 @@
       {:else if shown === "head" && head}
         <div class="pg-unit" data-link-scope style:--tint={depthColor(gemma, GROUPS.layer)}>
           <UnitLink model={GROUPS.model} layer={GROUPS.layer} head={GROUPS.h} />
-          <HeadColumns {head} model={gemma} named />
+          <HeadColumns {head} named />
         </div>
       {:else}
         <div>{#if failed}<p class="meta">This specimen didn't load.</p>{:else}<span class="ghost"></span>{/if}</div>
@@ -68,7 +67,7 @@
   .marks dd { margin: 0; color: var(--ink2); font: var(--type-small); }
   .marks :global(.tok) { background: var(--paper); }
   .marks :global(.tok.agree) { background: color-mix(in oklch, var(--tint) 14%, var(--paper)); }
-  .q { color: var(--ink2); font: var(--type-meta); font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .q.off { color: var(--ink3); }
+  .quiet { display: contents; }
+  .quiet :global(.tok) { opacity: 0.42; }
   .ghost { display: block; height: 320px; border-radius: var(--r-row); background: var(--wash); }
 </style>

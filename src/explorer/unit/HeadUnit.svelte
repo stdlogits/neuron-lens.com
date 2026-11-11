@@ -10,14 +10,13 @@
   import HeadRealText from "./HeadRealText.svelte";
   import RealTextGrid from "./RealTextGrid.svelte";
   import type { HeadDetail } from "../../lib/data";
-  import type { ModelInfo } from "../../lib/models";
   import { WEIGHTS_BASKET, headAgreement } from "./evidence";
 
   // An attention head, in the neuron's shape: one row of labels (what it fires on, what it attends
   // to, what it writes), then its evidence in the same three baskets. Firings: where it fires and what
   // it looks at there, how it handles images and sound, how often and how hard. Weights: what the
   // lenses read of its QK and OV maps. Stream: what its output says where it fires.
-  let { head, model, labelled, groupSize }: { head: HeadDetail; model: ModelInfo; labelled: boolean; groupSize: number } = $props();
+  let { head, labelled, groupSize }: { head: HeadDetail; labelled: boolean; groupSize: number } = $props();
 
   const rows = $derived([{
     sign: "",
@@ -55,11 +54,11 @@
         {#each head.contexts as context, i (i)}<Context {context} {i} />{:else}<p class="meta none">No firings recorded</p>{/each}
       </div>
       <RealTextGrid><HeadRealText {head} /></RealTextGrid>
-      <HeadFigures {head} {model} {groupSize} weights={false} />
+      <HeadFigures {head} {groupSize} weights={false} />
     </Basket>
 
     <Basket id="weights" title="Weights" tip={WEIGHTS_BASKET}>
-      <HeadColumns {head} {model} {groupSize} measured={false} />
+      <HeadColumns {head} {groupSize} measured={false} />
     </Basket>
 
     {#if written.length}

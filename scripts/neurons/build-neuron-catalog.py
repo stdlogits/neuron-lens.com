@@ -3,13 +3,13 @@
 From the repository root:
 
     uv run --no-project --with pyarrow --with numpy --with tokenizers python -I \
-        scripts/neurons/build-neuron-catalog.py <catalog dir> <tokenizer.json> public/data [translations.jsonl,...]
+        scripts/neurons/build-neuron-catalog.py <catalog dir> <tokenizer.json> catalog [translations.jsonl,...]
 
 The catalog dir is neuron-lens's ``data/catalog/<model>`` (``~/Work/neuron-lens/data/catalog/<model>``),
-whose name picks the model's profile below; the files go to ``<out dir>/<model>/``, which the site
-serves as ``/data/<model>/``. It holds ``neurons/<table>/L<layer>.parquet`` (a row per pole,
+whose name picks the model's profile below; the files go to ``<out dir>/<model>/``, which the dev
+server serves as ``/data/<model>/`` and ``scripts/catalog/upload.sh`` puts on R2 for the site. It holds ``neurons/<table>/L<layer>.parquet`` (a row per pole,
 the + poles first) and ``heads/<table>.parquet`` (a row per head) for its tables, ``acts``,
-``drivers``, ``reads``, ``legible``, ``labels``, ``sources`` and, for neurons, ``firings`` and ``edges``; Gemma 4 adds
+``drivers``, ``reads``, ``labels``, ``sources`` and, for neurons, ``firings`` and ``edges``; Gemma 4 adds
 ``neurons/{image,audio}/``, ``neurons/{image,audio}_optimised.parquet``, ``heads/{image,audio}.parquet`` and ``media/*_docs.parquet``.
 Every neuron and head is written, with everything the page would otherwise compute baked in: decoded
 tokens, the hub filter, merged variants, strength percentiles, which reads to trust at each depth
@@ -61,19 +61,21 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 # Per model: its geometry; its depth bands (last layer, key), from scripts/neurons/bands.py; the reads
 # the findings say fail on it at every depth; the layer from which a write's shape is read (§5); and
-# which head-test column to use. With 16 heads a layer no Gemma 4 head passes a false-discovery test
-# (findings §13), so its heads use the uncorrected p. Gemma 4's `read_R` is the rows times the input
-# norm's weight, which fails there (findings §13).
+# which lens a head's QK diagonal reads its query through (last layer, lens): the S-lens, a position
+# holding a token seeking an earlier copy (duplicate-token heads), then the R-lens, a position about
+# to say a token seeking an earlier copy (copy suppression's lookup; neuron-lens findings §11, §13:
+# Qwen3-8B's is mixed at L21-L27 and clear from L28, Gemma 4's weaker, from L24). Gemma 4's `read_R`
+# is the rows times the input norm's weight, which fails there (findings §13).
 PROFILES = {
     "qwen3-8b": {
         "name": "Qwen3-8B", "layers": 36, "mlp": 12288, "heads": 32,
         "bands": [(3, "early"), (8, "middle"), (35, "late")], "broken": [],
-        "late": 21, "head_test": "q", "global": [], "media": [], "pinned": [(8, 344)],
+        "late": 21, "self": [(20, "S"), (35, "R")], "global": [], "media": [], "pinned": [(8, 344)],
     },
     "gemma-4-12b": {
         "name": "Gemma 4 12B", "layers": 48, "mlp": 15360, "heads": 16,
         "bands": [(10, "early"), (13, "middle"), (47, "late")], "broken": ["read_R"],
-        "late": 33, "head_test": "p", "global": list(range(5, 48, 6)), "media": ["image", "audio"], "pinned": [(33, 12225), (14, 8313), (37, 7165)],
+        "late": 33, "self": [(23, "S"), (47, "R")], "global": list(range(5, 48, 6)), "media": ["image", "audio"], "pinned": [(33, 12225), (14, 8313), (37, 7165)],
     },
 }
 # Which lens each band reads a neuron through: (what drives it, what it writes). A head's OV map is its write.
@@ -82,23 +84,22 @@ BAND_LENSES = {"early": ("S", "S"), "middle": ("S", "R"), "late": ("R", "R")}
 KEEP_PER_LAYER = 40
 DOC_BLOCK = 2048
 K = 16  # connections a unit keeps per relation (the catalog keeps 64, findings §17)
-PACK = 20 * 2**20  # a units pack's size at most: Pages caps a file at 25 MiB
+PACK = 20 * 2**20  # a units pack's size at most: the edge fetches a pack whole for its first range, then cuts from its copy
 HUB = 0.03  # a raw read's token in this share of the layer's top 64s is a hub (neuron-lens §6)
-Q = 0.05  # a read's test passes at this q-value
+Q = 0.05  # a media test passes at this q-value
+SILENT = 0.05  # a pole whose typical peak is under this is silent
 CROSS = 0.95  # a cross-modal rank past this passes (findings §15)
 NEURON_READS = ["read_S", "read_S_z", "read_R", "read_R_z", "write_S", "write_S_z", "write_R", "write_R_z"]
 HEAD_READS = ["ov_R", "ov_R_z", "ov_R_neg", "ov_R_neg_z", "ov_S", "ov_S_z", "ov_S_neg", "ov_S_neg_z",
-              "qk_S", "qk_S_z", "qk_S_neg", "qk_S_neg_z", "qk_self_S", "qk_self_S_z"]
-NEURON_SIDES = ("read_S", "read_R", "write_S", "write_R")
+              "qk_S", "qk_S_z", "qk_S_neg", "qk_S_neg_z", "qk_self_S", "qk_self_S_z", "qk_self_R", "qk_self_R_z"]
 ORTH_READS = ["write_orth_R", "write_orth_R_z", "write_orth_S", "write_orth_S_z"]
 # What the stream holds at a pole's firings (the `firings` table).
 STREAM_READS = ["before_R_z", "before_R", "before_S_z", "before_S", "mlp_R_z", "mlp_R", "mlp_S_z", "mlp_S", "pred_z", "pred"]
 WEIGHT_READ_OF = {"before_R": "read_R", "before_S": "read_S", "mlp_R": "write_R", "mlp_S": "write_S",
                   "write_orth_R": "write_R", "write_orth_S": "write_S"}
-# Head roles, at the catalog's own thresholds (09_legible.py's pattern, checks/head_lens_sides.py), and
-# Gemma 4's in images (checks/head_media.py, findings §16).
-(ROLE_INDUCTION, ROLE_DUPLICATE, ROLE_PREVIOUS, ROLE_SELF, ROLE_SINK, ROLE_NEXT, ROLE_COPY,
- ROLE_CARRIES, ROLE_NAMES) = (1 << k for k in range(9))
+# Head roles, at the thresholds of neuron-lens's attention patterns (findings §11), and Gemma 4's in
+# images (checks/head_media.py, findings §16).
+(ROLE_INDUCTION, ROLE_DUPLICATE, ROLE_PREVIOUS, ROLE_SELF, ROLE_SINK, ROLE_CARRIES, ROLE_NAMES) = (1 << k for k in range(7))
 # Neuron flags.
 (FLAG_DETECTOR, FLAG_PREDICTS, FLAG_SUPPRESSES, FLAG_PLUS_WRITES, FLAG_MINUS_WRITES,
  FLAG_IMAGE, FLAG_AUDIO, FLAG_CROSSMODAL) = (1 << k for k in range(8))
@@ -202,12 +203,15 @@ def neuron_lit(L):
 
 
 def head_header(L):
-    """A head file's reads: its OV map through its band's write lens, then QK (always read through the
-    S-lens), then the OV map through the other lens."""
+    """A head file's reads: its OV map through its band's write lens, then QK: what it attends to (through
+    the S-lens) and its diagonal with the query through the lens its depth reads it with (``self``), then
+    the OV map through the other lens and the other diagonal. ``qk_self_R`` starts at L1, reading L − 1's output."""
     ov = f"ov_{BAND_LENSES[band(L)][1]}"
     other = "ov_R" if ov == "ov_S" else "ov_S"
-    fams = [ov, f"{ov}_neg", "qk_S", "qk_S_neg", "qk_self_S", other, f"{other}_neg"]
-    trusted = {ov, f"{ov}_neg", "qk_S", "qk_S_neg", "qk_self_S"}
+    seek = f"qk_self_{by_depth(P['self'], L)}"
+    unseek = [c for c in ("qk_self_S", "qk_self_R") if c != seek and (L > 0 or c != "qk_self_R")]
+    fams = [ov, f"{ov}_neg", "qk_S", "qk_S_neg", seek, other, f"{other}_neg", *unseek]
+    trusted = {ov, f"{ov}_neg", "qk_S", "qk_S_neg", seek}
     return read_header([c for f in fams for c in (f, f"{f}_z") if c in HEAD_READS], {ov, "qk_S"}, trusted, by_family=True)
 
 
@@ -462,16 +466,16 @@ def neuron_layer(L):
         cols += [f"{c}_ids", f"{c}_val"]
     reads = pq.read_table(path("reads"), columns=["neuron", "pole", "vocab_skew", "vocab_kurt", "cos_write_gate", "cos_write_up", *cols])
     acts = pq.read_table(path("acts"), columns=["neuron", "pole", "act_top", "act_max", "rate", "rate_dclm", "rate_zh",
-                                                 "rate_code", "rate_chat", "pos_share", "peak_tokens", "next_tokens", "contexts"])
+                                                 "rate_code", "rate_chat", "pos_share", "peak_tokens", "next_tokens", "contexts",
+                                                 "cur_mode", "next_mode"])
     firings = table_or_none(path("firings"))
     edges = table_or_none(path("edges"))
     sources = table_or_none(path("sources"))
     drivers = pq.read_table(path("drivers"), columns=["neuron", "pole", "drivers_ids", "drivers_val"])
-    legible = pq.read_table(path("legible"))
     labels = table_or_none(path("labels"))
     n = reads.num_rows
     neuron, pole = col(reads, "neuron").astype(int), col(reads, "pole").astype(int)
-    for t in (acts, drivers, legible, labels, firings, edges, sources):  # the tables mirror one another, row for row
+    for t in (acts, drivers, labels, firings, edges, sources):  # the tables mirror one another, row for row
         assert t is None or ((col(t, "neuron") == neuron).all() and (col(t, "pole") == pole).all()), f"L{L}: tables out of order"
     media = {m: media_layer(L, m, OPTIMISED[m]) for m in P["media"]}
 
@@ -488,10 +492,9 @@ def neuron_layer(L):
     kurt_pct = np.searchsorted(np.sort(kurt), kurt) * 100 // n
     skew = col(reads, "vocab_skew")
 
-    silent = col(legible, "silent").astype(bool)
-    cur_mode = np.nan_to_num(col(legible, "cur_mode").astype(float))
-    next_mode = np.nan_to_num(col(legible, "next_mode").astype(float))
-    q = {s: np.nan_to_num(col(legible, f"{s}_q").astype(float), nan=1.0) for s in NEURON_SIDES}
+    silent = ~(np.nan_to_num(col(acts, "act_top").astype(float)) >= SILENT)
+    cur_mode = np.nan_to_num(col(acts, "cur_mode").astype(float))
+    next_mode = np.nan_to_num(col(acts, "next_mode").astype(float))
     detector = (cur_mode >= 1 / 3) | (next_mode >= 1 / 3)
     if labels is not None:
         fires, writes, note = (labels.column(c).to_pylist() for c in ("fires", "writes", "note"))
@@ -501,7 +504,6 @@ def neuron_layer(L):
         fires, writes, note = [""] * n, [""] * n, [""] * n
         fc, wc = np.zeros(n), np.zeros(n)
     # Easiest to read: how sure the labeller was, of the pole's title label first, then of its other label.
-    # Nothing here comes from the read tests: a miss doesn't make a read wrong.
     pole_score = np.where(silent, -1.0, np.maximum(fc, wc) + np.minimum(fc, wc) / 3)
     plus, minus = pole_score[:MLP], pole_score[MLP:]
     neuron_score = np.maximum(plus, minus) + 0.25 * np.minimum(plus, minus)
@@ -554,7 +556,6 @@ def neuron_layer(L):
              "orth": lists_of(orth_header, i, every, meas), "cos": [num(cos_gate[i]), num(cos_up[i])],
              "peaks": peaks, "next": parse_counts(a["next_tokens"], 6), "contexts": contexts_of(a["contexts"]),
              "drivers": drivers_of(drv_ids[i], drv_val[i]),
-             "legible": {s: round(float(q[s][i]), 3) for s in NEURON_SIDES},
              "silent": bool(silent[i]),
              "detector": "token" if cur_mode[i] >= 1 / 3 else "next" if next_mode[i] >= 1 / 3 else None,
              "score": round(float(max(pole_score[i], 0)), 3)}
@@ -659,7 +660,7 @@ def neuron_layer(L):
 # ---------- heads
 
 def heads():
-    names = ["acts", "drivers", "reads", "legible"] + (["labels"] if LABELLED else [])
+    names = ["acts", "drivers", "reads"] + (["labels"] if LABELLED else [])
     t = {name: pq.read_table(f"{catalog}/heads/{name}.parquet") for name in names}
     media_t = {m: x for m in P["media"] if (x := table_or_none(f"{catalog}/heads/{m}.parquet")) is not None}
     sources = table_or_none(f"{catalog}/heads/sources.parquet")
@@ -671,16 +672,12 @@ def heads():
     vals = {c: mat(t["reads"], f"{c}_val") for c in HEAD_READS}
     pct = {c: np.searchsorted(np.sort(vals[c][:, :8].mean(1)), vals[c][:, :8].mean(1)) * 100 // n for c in HEAD_READS}
     hubs = {c: (np.zeros(VOCAB, bool) if c.endswith("_z") else hubs_of(ids[c])) for c in HEAD_READS}
-    a, d, r, g = (t[k].to_pylist() for k in ("acts", "drivers", "reads", "legible"))
+    a, r = (t[k].to_pylist() for k in ("acts", "reads"))
     lab = t["labels"].to_pylist() if LABELLED else [None] * n
     med = {m: x.to_pylist() for m, x in media_t.items()}
     out_rz = mat(t["acts"], "out_R_z_ids", np.int32)
     drv = {k: (mat(t["drivers"], f"{k}_ids", np.int32), mat(t["drivers"], f"{k}_val")) for k in ("drivers", "keys")}
-    test = P["head_test"]
-
-    def q(row, k):
-        v = row[k]
-        return 1.0 if v is None or v != v else float(v)
+    r3 = lambda v: None if v is None or v != v else round(float(v), 3)
 
     def head_media(i):
         """In image and audio contexts (checks/head_media.py): reading the media against an even spread,
@@ -692,7 +689,7 @@ def heads():
     rows, details, search = [], collections.defaultdict(list), []
     for i in range(n):
         L, h = int(layer[i]), int(head[i])
-        A, G, R, B = a[i], g[i], r[i], lab[i]
+        A, R, B = a[i], r[i], lab[i]
         header = head_header(L)
         rd = []
         for hd in header:
@@ -703,13 +700,12 @@ def heads():
         img = (hm or {}).get("image") or {}
         roles = ((ROLE_INDUCTION if A["induction"] > 0.3 else 0) | (ROLE_DUPLICATE if A["duplicate"] > 0.3 else 0)
                  | (ROLE_PREVIOUS if A["prev"] > 0.5 else 0) | (ROLE_SELF if A["self"] > 0.5 else 0)
-                 | (ROLE_SINK if A["sink"] > 0.9 else 0) | (ROLE_NEXT if q(G, f"ov_R_{test}") <= Q else 0)
-                 | (ROLE_COPY if q(G, f"ov_copy_{test}") <= Q else 0)
+                 | (ROLE_SINK if A["sink"] > 0.9 else 0)
                  | (ROLE_CARRIES if (img.get("content") or 0) > 3 else 0)
                  | (ROLE_NAMES if img.get("writeQ") is not None and img["writeQ"] <= Q else 0))
         B = B or {"fires": "", "fires_conf": 0, "attends": "", "attends_conf": 0, "writes": "", "writes_conf": 0, "note": ""}
         conf = [float(B["fires_conf"] or 0), float(B["attends_conf"] or 0), float(B["writes_conf"] or 0)]
-        modes = [float(G["cur_mode"] or 0), float(G["src_mode"] or 0)]
+        modes = [float(A["cur_mode"] or 0), float(A["src_mode"] or 0)]
         score = max(conf) + sum(conf) / 9  # how sure the labeller was: its surest label, then all three
         pattern = [round(A[k], 3) for k in ("sink", "prev", "self", "induction", "duplicate")]
         peaks = parse_counts(A["peak_tokens"], 6)
@@ -720,14 +716,13 @@ def heads():
             "pattern": pattern, "roles": roles,
             "act": {"top": round(A["out_top"], 2), "max": round(A["out_max"], 2), "rate": float(f"{A['rate']:.3g}"),
                     "slices": [float(f"{A[k]:.3g}") for k in ("rate_dclm", "rate_zh", "rate_code", "rate_chat")]},
-            "copy": {"ovR": round(R["ov_R_copy"], 3), "ovS": round(R["ov_S_copy"], 3), "self": round(R["qk_self"], 3),
-                     "qkOv": round(R["qk_ov_rho"], 3), "qkCtx": round(R["qk_ctx_rho"], 3)},
+            "copy": {"ovR": r3(R["ov_R_copy"]), "ovS": r3(R["ov_S_copy"]), "selfS": r3(R["qk_self_S"]), "selfR": r3(R["qk_self_R"]),
+                     "qkOv": r3(R["qk_ov_rho"]), "qkCtx": r3(R["qk_ctx_rho"])},
             "reads": rd,
             "outRz": encoded(merged([int(x) for x in out_rz[i]], limit=16)),
             "drivers": drivers_of(drv["drivers"][0][i], drv["drivers"][1][i]),
             "keys": drivers_of(drv["keys"][0][i], drv["keys"][1][i]),
             "peaks": peaks, "sources": parse_counts(A["src_tokens"], 6), "contexts": contexts_of(A["contexts"]),
-            "legible": {k: round(q(G, f"{k}_{test}"), 3) for k in ("ov_R", "ov_copy", "ov_S", "qk_S")},
             "modes": [round(m, 3) for m in modes], "score": round(score, 3)}
         if hm:
             detail["media"] = hm

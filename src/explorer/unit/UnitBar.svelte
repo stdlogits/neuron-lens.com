@@ -2,7 +2,7 @@
   import { onDestroy } from "svelte";
   import { IconButton, MorphText, Switch, fadeIn } from "@stdlogits/ledger";
   import { useLens } from "../lens.svelte";
-  import { describeRole, formatCount, rolesOf } from "../../lib/data";
+  import { formatCount, rolesOf } from "../../lib/data";
   import { reading, setDistinctive } from "../../lib/reading.svelte";
   import { setTranslate, translation } from "../../lib/translate.svelte";
   import { bandRange } from "../../lib/models";
@@ -17,7 +17,7 @@
   const tags = $derived.by(() => {
     if (lens.unit === "heads") {
       const row = lens.selectedHeadRow;
-      const roles = row ? rolesOf(row[9]).map((role) => ({ label: role.short, tip: describeRole(role, lens.model) })) : [];
+      const roles = row ? rolesOf(row[9]).map((role) => ({ label: role.short, tip: role.describe })) : [];
       return lens.globalLayer ? [{ label: "Global attention", tip: "Attends over the whole text; the other layers look only at the last 1,024 tokens" }, ...roles] : roles;
     }
     return lens.selectedNeuronRow ? neuronTags(lens.selectedNeuronRow[5]) : [];

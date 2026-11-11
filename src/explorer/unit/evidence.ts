@@ -1,15 +1,13 @@
 // What a unit's view shows, chosen from its detail: the reads on each side of it, the tokens its
-// lists agree on, its tests and figures, and their wording. The About page draws the same.
+// lists agree on, its figures, and their wording. The About page draws the same.
 import { formatValue, stem } from "@stdlogits/ledger";
 import {
   FLAG_AUDIO, FLAG_DETECTOR, FLAG_IMAGE, FLAG_PREDICTS, FLAG_SUPPRESSES, LENSES, percent,
-  type HeadDetail, type LensRead, type NeuronSide, type Pole, type ReadColumn,
+  type HeadDetail, type LensRead, type Pole, type ReadColumn,
 } from "../../lib/data";
 
-/** A figure: its name over its value. Off figures (a test that fails) draw in the softest ink. */
-export interface Fact { k: string; v: string; tip?: string; off?: boolean; lang?: string }
-/** A family's test: its value as shown ("q 0.005"), whether it fails, and what it tests. */
-export interface Test { v: string; off: boolean; tip: string }
+/** A figure: its name over its value. */
+export interface Fact { k: string; v: string; tip?: string; lang?: string }
 
 /** A side's reads (input under Fires on or Attends to, output under Writes), in the order its depth trusts them. */
 export const sideReads = (reads: LensRead[], side: "input" | "output") => reads.filter((read) => LENSES[read.col].side === side);
@@ -22,7 +20,7 @@ export const WEIGHTS_BASKET = "What the lenses read from its weights alone, with
 
 /** The tips on a head's "How it attends" and "Copying". */
 export const ATTENDING = "How its weights choose where to look, and how well that matches what it does";
-export const COPYING = "How much it copies, read from its weights and tested at its top firings";
+export const COPYING = "How much it copies, read from its weights";
 
 /** The tip on "Beyond what it reads". */
 export const ORTH = "What its write says with everything it reads taken out: what it adds of its own";
@@ -45,7 +43,7 @@ export const streamFacts = (pole: Pole): Fact[] => {
   ];
 };
 
-/** A read's family: the read and its distinctive (z) version share one, and one test. */
+/** A read's family: the read and its distinctive (z) version share one. */
 export const family = (col: ReadColumn) => col.replace(/_z$/, "");
 
 /** Stems named by two or more lists: those tokens get flag 1 (two reads agree). */
@@ -79,13 +77,10 @@ export function neuronTags(flags: number): { label: string; tip: string }[] {
   return tags;
 }
 
-/** A q- or p-value, short. */
-export const stat = (value: number) => (value < 0.001 ? "< 0.001" : value.toFixed(3));
-
 /** A signed score, two decimals. */
 export const signed = (value: number) => `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(2)}`;
 
-// ---------- figures and tests
+// ---------- figures
 
 const SLICES = ["Web", "Chinese", "Code", "Chat"];
 /** How often it fires, overall and in each slice of the text; `share` says what is counted ("it fires on"). */
@@ -100,50 +95,26 @@ export const neuronStrength = (pole: Pole): Fact[] => [
   { k: "Past the first token", v: percent(pole.act.pos), tip: "Share of its top firings after the first position, where many units fire regardless" },
 ];
 
-const MISS = "A narrow target: a miss doesn't make the read wrong.";
-
-/** What each side of a neuron's weights, read through each lens, is tested on (findings §7). */
-const TARGETS: Record<NeuronSide, string> = {
-  read_S: "names the tokens its top firings land on",
-  read_R: "names its exact drivers",
-  write_S: "names the tokens its top firings land on",
-  write_R: "promotes the tokens after its top firings",
-};
-export const neuronTests = (pole: Pole): Record<string, Test> => (pole.silent ? {} : Object.fromEntries((Object.keys(TARGETS) as NeuronSide[]).map((side) => {
-  const q = pole.legible[side];
-  return [side, { v: `q ${stat(q)}`, off: !(q <= 0.05), tip: `Whether ${LENSES[side].short} ${TARGETS[side]}. It does under 0.05. ${MISS}` }];
-})));
-
 export const headStrength = (head: HeadDetail): Fact[] => [
   { k: "Typical output", v: formatValue(head.act.top), tip: "The typical size of its output at its top firings" },
   { k: "Top", v: formatValue(head.act.max), tip: "The largest output seen" },
 ];
 
+/** A score as a figure, or nothing where the catalog has none (QK self·R before L1). */
+const score = (k: string, value: number | null, tip: string): Fact[] => (value === null ? [] : [{ k, v: signed(value), tip }]);
+
 export const headAttending = (head: HeadDetail, groupSize: number): Fact[] => [
-  { k: "Seeks its own token", v: signed(head.copy.self), tip: "QK self: how much a token, as the query, favours an earlier copy of itself" },
-  { k: "Looks where its weights say", v: signed(head.copy.qkCtx), tip: "How well its attention read (QK·S) ranks tokens by the attention they get in real text" },
-  { k: "Attends to what it copies", v: signed(head.copy.qkOv), tip: "How well its attention read (QK·S) ranks tokens as its copy read (OV·R) does" },
+  ...score("Seeks its own token", head.copy.selfS, "QK self·S: how much a token held at the query favours an earlier copy of itself, the median over tokens"),
+  ...score("Seeks what it's about to say", head.copy.selfR, "QK self·R: how much a query about to say a token favours an earlier copy of it, the median over tokens"),
+  ...score("Looks where its weights say", head.copy.qkCtx, "How well its attention read (QK·S) ranks tokens by the attention they get in real text"),
+  ...score("Attends to what it copies", head.copy.qkOv, "How well its attention read (QK·S) ranks tokens as its copy read (OV·R) does"),
   { k: "Key-value head", v: String(head.kv), tip: groupSize > 1 ? `Shared with ${groupSize - 1} other query ${groupSize - 1 === 1 ? "head" : "heads"} of this layer` : "Its own" },
   ...(groupSize > 1 ? [{ k: "Shared by", v: `${groupSize} heads`, tip: "Query heads that read the same keys and values" }] : []),
 ];
 
-/** A head's test at its own top firings. Gemma 4's are uncorrected p-values (`test` "p"): with 16 heads a layer, no false-discovery test has the power. */
-const headTest = (value: number, what: string, test: "q" | "p"): Test => ({
-  v: `${test} ${stat(value)}`,
-  off: !(value <= 0.05),
-  tip: `${what}. It does under 0.05${test === "p" ? ", uncorrected: with 16 heads a layer, no false-discovery test has the power" : ""}. ${MISS}`,
-});
-
-export const headTests = (head: HeadDetail, test: "q" | "p"): Record<string, Test> => ({
-  ov_R: headTest(head.legible.ov_R, "Whether OV·R predicts the token after the one it attends to", test),
-  ov_S: headTest(head.legible.ov_S, "Whether OV·S predicts its top firings", test),
-  qk_S: headTest(head.legible.qk_S, "Whether QK·S predicts the tokens it attends to", test),
-});
-
-export const headCopying = (head: HeadDetail, test: "q" | "p"): Fact[] => [
-  { k: "Copies what it reads", v: signed(head.copy.ovR), tip: "OV·R: how high each token ranks in its own column of the OV map" },
-  { k: "Copies its footprint", v: signed(head.copy.ovS), tip: "OV·S: the same, read through the input embedding" },
-  { k: "Copies what it attends to", ...headTest(head.legible.ov_copy, "Whether, at its top firings, it promotes the token it attends to", test) },
+export const headCopying = (head: HeadDetail): Fact[] => [
+  ...score("Copies what it reads", head.copy.ovR, "OV·R's copying score, from −1 (it suppresses what it reads) to +1 (it copies it): the sum of its map's eigenvalues over the sum of their sizes"),
+  ...score("Copies its footprint", head.copy.ovS, "The same for OV·S, read through the input embedding"),
 ];
 
 /** A read's name in a tip: its lens's short name and meaning. */

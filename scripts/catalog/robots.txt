@@ -1,0 +1,4 @@
+# data.neuron-lens.com holds only the explorer's working copy of the catalog (JSON and binary packs).
+# The catalog itself is https://huggingface.co/datasets/stdlogits/neuron-lens; the site is https://neuron-lens.com.
+User-agent: *
+Disallow: /

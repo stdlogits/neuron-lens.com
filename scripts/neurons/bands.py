@@ -12,7 +12,7 @@ edges set the bands, each measured on every layer by neuron-lens (findings §3, 
   sampled poles, and stays there (``causal_lens_<model>.json``, steering at 1×);
 - the S-lens stops working for reads after the last layer where its read of a pole's input names the
   token under its top firings for at least ``READ_S`` of the poles that fire, net of chance
-  (``legible_<model>.json``), taken as a running median over three layers so one layer alone doesn't
+  (``reads_at_firings_<model>.json``), taken as a running median over three layers so one layer alone doesn't
   make a regime (Gemma 4's L33 reaches 16% between 9% and 7%).
 
 It prints the bands for the builder's profile (``build-neuron-catalog.py``), with the numbers each
@@ -27,13 +27,13 @@ READ_S = 0.15
 
 
 def bands(summary: Path, model: str):
-    legible = json.loads((summary / f"legible_{model}.json").read_text())["neurons"]["layers"]
+    at_firings = json.loads((summary / f"reads_at_firings_{model}.json").read_text())["neurons"]["layers"]
     causal = json.loads((summary / f"causal_lens_{model}.json").read_text())["targets"]["steer 1x"]
     lens = next(k for k in causal if k not in ("logit", "J"))  # the R-lens, whatever the run named it
     steer = causal[lens]["r_med"]
     last = len(steer) - 1
     write = next(L for L in range(last + 1) if all(r >= WRITE_R for r in steer[L:]))
-    read_s = [row["read_S_net"] / max(1e-9, 1 - row["silent"]) for row in sorted(legible, key=lambda row: row["layer"])]
+    read_s = [row["read_S_net"] / max(1e-9, 1 - row["silent"]) for row in sorted(at_firings, key=lambda row: row["layer"])]
     smooth = [sorted(read_s[max(0, L - 1):L + 2])[len(read_s[max(0, L - 1):L + 2]) // 2] for L in range(len(read_s))]
     read = max(L for L, share in enumerate(smooth) if share >= READ_S) + 1
     if write > read:

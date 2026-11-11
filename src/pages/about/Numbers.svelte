@@ -3,7 +3,7 @@
   import UnitLink from "./UnitLink.svelte";
   import { Swap } from "@stdlogits/ledger";
   import HeadFigures from "../../explorer/unit/HeadFigures.svelte";
-  import { ROLES, describeRole, loadHeadLayer, type HeadDetail } from "../../lib/data";
+  import { ROLES, loadHeadLayer, type HeadDetail } from "../../lib/data";
   import { MODELS, depthColor } from "../../lib/models";
   import { INDUCTION } from "./specimens";
 
@@ -29,13 +29,13 @@
     <Swap key={head !== null}>
       {#if head}
         <div class="body">
-          <div class="pg-unit"><HeadFigures {head} {model} {groupSize} /></div>
+          <div class="pg-unit"><HeadFigures {head} {groupSize} /></div>
           <div class="roles">
             <h3 class="head">Roles</h3>
             <ul>
               {#each ROLES as role (role.bit)}
                 {@const own = (head.roles & role.bit) !== 0}
-                <li><button type="button" class="role" class:own data-tip-title={role.name} data-tip={describeRole(role, model)}>{role.short}{#if own}<span class="sr-only"> (this head)</span>{/if}</button></li>
+                <li><button type="button" class="role" class:own data-tip-title={role.name} data-tip={role.describe}>{role.short}{#if own}<span class="sr-only"> (this head)</span>{/if}</button></li>
               {/each}
             </ul>
           </div>

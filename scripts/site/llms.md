@@ -62,7 +62,7 @@ The explorer draws each view in the browser, and this site serves no unit's data
 - [neuron-lens README](https://raw.githubusercontent.com/stdlogits/neuron-lens/main/README.md): the lenses, the catalog and the findings
 - [Findings](https://raw.githubusercontent.com/stdlogits/neuron-lens/main/docs/findings.md): every result with its setup, controls and limits
 - [Methods](https://raw.githubusercontent.com/stdlogits/neuron-lens/main/docs/design.md): how the lenses, reads, tests and labels are made
-- [The catalog](https://huggingface.co/datasets/stdlogits/neuron-lens): Parquet tables for every pole and head (reads, acts, drivers, legible, labels; image, audio and media for Gemma 4 12B), CC BY 4.0; its dataset card documents every column
+- [The catalog](https://huggingface.co/datasets/stdlogits/neuron-lens): Parquet tables for every pole and head (reads, acts, drivers, labels, sources; firings and edges for neurons; image, audio and media for Gemma 4 12B), CC BY 4.0; its dataset card documents every column
 - [The lenses](https://huggingface.co/stdlogits/rs-lenses): the R-lens and S-lens for both models, CC BY 4.0
 - [Neural Networks Are Already Clean](https://already-clean.goodfire.com/): Cammarata (Goodfire, 2026), the case for studying a model's own neurons
 

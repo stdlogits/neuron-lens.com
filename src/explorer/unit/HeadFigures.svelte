@@ -3,13 +3,12 @@
   import Group from "./Group.svelte";
   import Pattern from "./Pattern.svelte";
   import type { HeadDetail } from "../../lib/data";
-  import type { ModelInfo } from "../../lib/models";
   import { ATTENDING, COPYING, headAttending, headCopying, headStrength, oftenFacts } from "./evidence";
 
   // A head's figures in one row: how often and how hard it fires, where it looks, how it attends and
   // how much it copies. The About page draws them all; a head's Firings basket stops at where it
   // looks (`weights` false), and its Weights basket has the other two under their columns.
-  let { head, model, groupSize, weights = true }: { head: HeadDetail; model: ModelInfo; groupSize: number; weights?: boolean } = $props();
+  let { head, groupSize, weights = true }: { head: HeadDetail; groupSize: number; weights?: boolean } = $props();
 </script>
 
 <div class="figures">
@@ -18,7 +17,7 @@
   <div class="pattern"><Group title="Pattern" tip="How closely its attention follows each known pattern"><Pattern pattern={head.pattern} /></Group></div>
   {#if weights}
     <Group title="How it attends" tip={ATTENDING}><Facts facts={headAttending(head, groupSize)} /></Group>
-    <Group title="Copying" tip={COPYING}><Facts facts={headCopying(head, model.headTest)} /></Group>
+    <Group title="Copying" tip={COPYING}><Facts facts={headCopying(head)} /></Group>
   {/if}
 </div>
 
