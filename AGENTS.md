@@ -110,7 +110,7 @@ the manifest's icons. Rerun it when the mark, the card or Qwen3-8B's catalog cha
 The explorer reads static JSON (and Gemma 4's media packs) from `public/data/<model>/`, served at
 `/data/<model>/`. It is built from the private neuron-lens catalogs
 (`~/Work/neuron-lens/data/catalog/<model>`, laid out as the Hub release `stdlogits/neuron-lens`) and is
-gitignored like them (~6 GB, ~4,850 files). Stages, from the repository root (each script's docstring
+gitignored like them (~6 GB, ~600 files). Stages, from the repository root (each script's docstring
 has the full invocation):
 
 1. `scripts/neurons/translate.py` machine-translates non-English tokens, label terms, example contexts
