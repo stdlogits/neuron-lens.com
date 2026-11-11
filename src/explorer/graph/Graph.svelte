@@ -3,7 +3,7 @@
   import { fadeIn, fadeOut } from "@stdlogits/ledger";
   import { bandOf, depthColor, type ModelInfo } from "../../lib/models";
   import { headId, neuronId, percent } from "../../lib/data";
-  import { layout, rows, type Layout, type Setting } from "./layout";
+  import { layout, rows, type Layout, type Open } from "./layout";
   import { Stage, type Seated, type Shown } from "./stage";
   import { headInput, type Graph, type GraphEdge, type Mode } from "./trace";
 
@@ -12,7 +12,7 @@
   // colour of its layer and as large as the flow through it; a link is as heavy as its flow, grey and
   // dashed where it pushes against. Pointing at a unit lights what connects it to the centre. The
   // stage (stage.ts) owns where everything is and how it moves; this owns what each thing looks like.
-  let { graph, model, mode, href, hovered, point, height = 780, setting, labels = false, labelScale = 1, axis = true, onlaid }: {
+  let { graph, model, mode, href, hovered, point, height = 780, open, labels = false, labelScale = 1, axis = true, onlaid }: {
     graph: Graph;
     model: ModelInfo;
     mode: Mode;
@@ -21,8 +21,8 @@
     /** The pointer has come to this unit, or left (null). */
     point: (key: string | null) => void;
     height?: number;
-    /** How the layout sets it out: the navigator's leaves it at its own size, with room for each label. */
-    setting?: Setting;
+    /** The navigator's spacing: at its own size, with room under each mark for its title. */
+    open?: Open;
     /** Each unit's title beside it, or only these units'. */
     labels?: boolean | Set<string>;
     /** How much larger than the marks the titles are drawn: zoomed out, the few left keep a size that reads. */
@@ -45,8 +45,8 @@
     const across = width;
     if (across <= 0) return;
     untrack(() => {
-      const placed = layout(next, across, HEIGHT, model.layers, next.settled ? undefined : stage.targets(), setting);
-      const snap = laidOut > 0 && across !== laidOut && setting?.fit !== false;
+      const placed = layout(next, across, HEIGHT, model.layers, next.settled ? undefined : stage.targets(), open);
+      const snap = laidOut > 0 && across !== laidOut && !open;
       laidOut = across;
       shown = stage.update(next, placed, snap);
       onlaid?.(placed);
@@ -180,20 +180,21 @@
   .focus { z-index: 1; }
   .focus i { outline-color: var(--ink); }
   .dim i { opacity: 0.25; }
-  /* A title beside its mark, as wide as the layout left room for (LABEL in Navigator.svelte). */
+  /* A title under its mark, as wide as the layout left room for (LABEL in Navigator.svelte). */
   .label {
     position: absolute;
-    top: 50%;
-    left: calc(100% + 6px);
-    max-width: 220px;
+    top: calc(100% + 3px);
+    left: 50%;
+    max-width: 200px;
     overflow: hidden;
     color: var(--ink2);
     font: var(--type-meta);
+    text-align: center;
     white-space: nowrap;
     text-overflow: ellipsis;
-    translate: 0 -50%;
+    translate: -50% 0;
     scale: var(--label-scale, 1);
-    transform-origin: left center;
+    transform-origin: top center;
     pointer-events: none;
     transition: opacity var(--in) var(--ease), color var(--fast) var(--ease);
   }

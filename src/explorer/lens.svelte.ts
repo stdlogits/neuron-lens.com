@@ -256,10 +256,10 @@ export class Lens {
     if (unit === this.unit) return;
     go(this.hrefFor({ unit, index: null, all: false }));
   };
-  /** Open the unit's connections full screen, or close them back to its page (which takes the place of the full-screen entry). */
+  /** Open the shown unit's connections full screen (naming it in the address, as a layer's page doesn't), or close them back to its page, which takes the place of the full-screen entry. */
   setGraph = (open: boolean) => {
-    if (open === this.graphOpen) return;
-    go(this.hrefFor({ graph: open }), { replace: !open });
+    if (open === this.graphOpen || this.selected === null) return;
+    go(this.hrefFor({ index: this.selected, graph: open }), { replace: !open });
   };
   setAll = (all: boolean) => {
     if (all === this.all) return;

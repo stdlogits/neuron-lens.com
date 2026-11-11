@@ -2,13 +2,13 @@
   import { onMount } from "svelte";
   import { IconButton, LabelText, Segmented, Tabs } from "@stdlogits/ledger";
   import Graph from "./Graph.svelte";
-  import { rows, type Layout, type Setting } from "./layout";
+  import { rows, type Layout, type Open } from "./layout";
   import type { Graph as GraphData, GraphNode, Mode, Reach } from "./trace";
   import { bandOf, type ModelInfo } from "../../lib/models";
   import { headId, neuronId } from "../../lib/data";
 
   // The unit's connections, full screen: the same graph and motion as the rail's, laid out at its own
-  // size with room beside every mark for its title, and moved like a map. Drag (or scroll) to move,
+  // size with room under every mark for its title, and moved like a map. Drag (or scroll) to move,
   // pinch (or ⌘/ctrl and scroll, or + and −) to zoom; a unit's mark opens it here, re-centring the graph
   // on it. Its address is the unit's with ?graph, so Back and links work, and Escape closes it.
   let { graph, model, mode, modes, onmode, reach, reaches, onreach, hovered, point, href, name, title, close }: {
@@ -28,10 +28,10 @@
     close: () => void;
   } = $props();
 
-  /** Room between rows at full size: a line of label and a little air. */
-  const PITCH = 26;
+  /** Room between rows at full size: a mark, the line of title under it, and a little air. */
+  const PITCH = 40;
   /** The widest a title runs before it is cut short (Graph.svelte's .label). */
-  const LABEL = 220;
+  const LABEL = 200;
   const height = $derived(2 * model.layers * PITCH + 18);
   const depth = $derived(rows(graph, height, model.layers));
 
@@ -50,7 +50,7 @@
     return Math.min(LABEL, width);
   }
   const nameOf = (n: GraphNode) => (n.kind === "head" ? headId(n.layer, n.index) : `${neuronId(n.layer, n.index)} ${n.pole > 0 ? "+" : "−"}`);
-  const setting: Setting = { fit: false, gap: 16, reach: (n) => [0, 6 + measure(n.wire?.title || nameOf(n)) + 2] };
+  const open: Open = { gap: 18, reach: (n) => (measure(n.wire?.title || nameOf(n)) + 2) / 2 };
 
   // The view: the graph's x and y at full size map to x · k + tx, y · k + ty on screen.
   let view = $state<HTMLDivElement>();
@@ -186,7 +186,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="view" bind:this={view} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onclickcapture={click}>
     <div class="canvas" class:gliding style:transform={`translate(${tx}px, ${ty}px) scale(${k})`}>
-      <Graph {graph} {model} {mode} {href} {hovered} {point} {height} {setting} labels={titled} labelScale={k < FAR ? 1 / k : 1} axis={false} onlaid={laid} />
+      <Graph {graph} {model} {mode} {href} {hovered} {point} {height} {open} labels={titled} labelScale={k < FAR ? 1 / k : 1} axis={false} onlaid={laid} />
     </div>
     <div class="axis" aria-hidden="true">
       {#each model.bands as band (band.key)}

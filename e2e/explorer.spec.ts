@@ -64,6 +64,12 @@ test("a unit's connections open full screen at ?graph and close back to its page
   await page.goto("/qwen3-8b/L8/n344?graph");
   await expect(navigator).toBeVisible();
   await expect(page.locator("link[rel=canonical]")).toHaveAttribute("href", /\/qwen3-8b\/L8\/n344$/);
+
+  // A layer's page shows a unit its address doesn't name: full screen names it.
+  await page.goto("/qwen3-8b/L8");
+  await page.getByRole("button", { name: "Full screen, with every title" }).click();
+  await expect(page).toHaveURL(/\/qwen3-8b\/L8\/n\d+\?graph$/);
+  await expect(page.getByRole("dialog", { name: /^Connections of L8·n/ })).toBeVisible();
 });
 
 test("a deep link loads that head", async ({ page }) => {
