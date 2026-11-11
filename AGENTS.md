@@ -169,9 +169,13 @@ with the deploy that names it. `scripts/catalog/upload.sh` sends a build (8 file
 from its log in `catalog/.uploads/` if interrupted, `index.json` last), checks it answers, and names it;
 `deploy.sh` refuses to deploy a `catalog.json` whose builds aren't up. Older builds stay in the bucket
 until deleted, at R2's storage price (10 GB free, then $0.015/GB-month; reads past 10 million a month
-$0.36 a million; no egress fees). The bucket's CORS rules (`scripts/catalog/cors.json`) let
-neuron-lens.com and its `pages.dev` previews read it, with ranges, and its robots.txt keeps crawlers
-out. Cloudflare's edge caches the `.bin` files (ranges cut from its copy); JSON goes to R2 each time
+$0.36 a million; no egress fees). The catalog is public, so any page may read it: the bucket's CORS
+rules (`scripts/catalog/cors.json`) allow any origin, with ranges. They must stay `*`. The edge caches a
+file with the headers of the answer that filled it, and only with `*` does R2 put
+`Access-Control-Allow-Origin` on every answer (with a list of origins it echoes the asker's, or sends
+none to a request without an Origin, which then poisons the cached copy). A Transform Rule can't set
+that header. After any change to the CORS rules, purge the hostname's cache. Its robots.txt keeps
+crawlers out. Cloudflare's edge caches the `.bin` files (ranges cut from its copy); JSON goes to R2 each time
 unless a cache rule for the hostname says otherwise. There must be no top-level `404.html`: Pages
 serves `index.html` for every path without a file only while there isn't one.
 

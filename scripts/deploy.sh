@@ -51,6 +51,8 @@ while read -r model build; do
   [[ -n "$build" ]] || { echo "deploy: src/lib/catalog.json names no build for $model; upload one (scripts/catalog/upload.sh $model)" >&2; exit 1; }
   code=$(curl -s -o /dev/null -w '%{http_code}' "$data/$model/$build/index.json")
   [[ "$code" == 200 ]] || { echo "deploy: $data/$model/$build/index.json answers $code; upload it (scripts/catalog/upload.sh $model)" >&2; exit 1; }
+  cors=$(curl -s -o /dev/null -D - "$data/$model/$build/index.json" | tr -d '\r' | awk -F': ' 'tolower($1) == "access-control-allow-origin" { print $2 }')
+  [[ "$cors" == "*" ]] || { echo "deploy: $data answers without Access-Control-Allow-Origin: *, so cached files would be refused; the bucket's CORS must allow any origin (scripts/catalog/cors.json; AGENTS.md, On R2)" >&2; exit 1; }
 done < <(node -e 'for (const [model, build] of Object.entries(require("./src/lib/catalog.json").builds)) console.log(model, build)')
 
 npm ci

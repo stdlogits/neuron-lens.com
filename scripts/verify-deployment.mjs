@@ -203,14 +203,14 @@ const dataPath = (model, file) => `/${model}/${catalog.builds[model]}/${file}`;
 /** A catalog file as the site fetches it: across origins, from the page at `site`. */
 const getData = (site, path, headers = {}) => get(catalog.origin, path, { Origin: site, ...headers });
 
-/** A build's file answers the site's origin (CORS) and is cached for good, since a build never changes. */
+/** A build's file is open to any page (CORS: the catalog is public) and cached for good, since a build never changes. */
 function assertDataHeaders(response, site, path) {
-  assert.equal(response.headers.get("access-control-allow-origin"), site, `${catalog.origin}${path}: Access-Control-Allow-Origin ${response.headers.get("access-control-allow-origin")}, expected ${site}`);
+  assert.equal(response.headers.get("access-control-allow-origin"), "*", `${catalog.origin}${path}: Access-Control-Allow-Origin ${response.headers.get("access-control-allow-origin")}, expected *`);
   assert.equal(response.headers.get("cache-control"), IMMUTABLE, `${catalog.origin}${path}: Cache-Control ${response.headers.get("cache-control")}`);
 }
 
 export async function checkData(site, rules) {
-  const csp = headersFor(rules, "/").find(([name]) => name.toLowerCase() === "content-security-policy")?.[1] ?? "";
+  const csp = [...headersFor(rules, "/")].find(([name]) => name.toLowerCase() === "content-security-policy")?.[1] ?? "";
   const connect = (csp.match(/connect-src ([^;]*)/)?.[1] ?? "").split(/\s+/);
   assert.ok(connect.includes(catalog.origin), `public/_headers: connect-src doesn't allow the catalog's origin ${catalog.origin}`);
   for (const model of Object.keys(catalog.builds)) {
@@ -224,6 +224,16 @@ export async function checkData(site, rules) {
     assert.equal(index.id, model, `${path} names model ${index.id}`);
     assert.ok(Array.isArray(index.neurons) && index.neurons.length > 0, `${path} lists no neurons`);
   }
+  // The edge keeps a file with the headers of the answer that filled its cache, so CORS must be on
+  // every answer, asked with an Origin or not: R2 does that when the bucket's CORS allows any origin.
+  // Twice with no Origin, the second from the edge's cache, each must carry it.
+  const cached = dataPath("qwen3-8b", "heads/graph.bin");
+  for (let i = 0; i < 2; i += 1) {
+    const response = await get(catalog.origin, cached, { Range: "bytes=0-15" });
+    await response.body?.cancel();
+    assert.equal(response.headers.get("access-control-allow-origin"), "*",
+      `${cached} (${response.headers.get("cf-cache-status")}, asked with no Origin): no Access-Control-Allow-Origin: *; the bucket's CORS must allow any origin (scripts/catalog/cors.json), and the hostname's cache be purged after a change`);
+  }
   const missing = dataPath("qwen3-8b", `neurons/L08/missing-${crypto.randomUUID().slice(0, 8)}.json`);
   const gone = await getData(site, missing);
   await gone.body?.cancel();
@@ -234,7 +244,7 @@ export async function checkData(site, rules) {
   });
   await preflight.body?.cancel();
   assert.ok(preflight.ok, `a preflight for a range: HTTP ${preflight.status}`);
-  assert.equal(preflight.headers.get("access-control-allow-origin"), site, "a preflight for a range: Access-Control-Allow-Origin");
+  assert.ok(["*", site].includes(preflight.headers.get("access-control-allow-origin") ?? ""), "a preflight for a range: Access-Control-Allow-Origin");
   assert.match(preflight.headers.get("access-control-allow-headers") ?? "", /\brange\b/i, "a preflight for a range: Range isn't allowed");
   const robots = await get(catalog.origin, "/robots.txt");
   assert.equal(robots.status, 200, `${catalog.origin}/robots.txt: HTTP ${robots.status}`);

@@ -14,8 +14,9 @@
 #
 # The bucket, neuron-lens-data in a9's account, is served at https://data.neuron-lens.com (a custom domain
 # on the zone), with the CORS rules in scripts/catalog/cors.json (`wrangler r2 bucket cors set
-# neuron-lens-data --file scripts/catalog/cors.json`) and scripts/catalog/robots.txt, which every run
-# puts back. Wrangler signs in as scripts/wrangler.sh says; UPLOAD_JOBS sets how many files go at once (8).
+# neuron-lens-data --file scripts/catalog/cors.json`; any origin, so that every answer, and so every
+# copy the edge caches, carries Access-Control-Allow-Origin) and scripts/catalog/robots.txt, which
+# every run puts back. Wrangler signs in as scripts/wrangler.sh says; UPLOAD_JOBS sets how many files go at once (8).
 
 set -euo pipefail
 cd "$(dirname "$0")/../.."
