@@ -62,10 +62,11 @@ rather than tell (no explanatory paragraphs or provenance in the explorer; tips 
 hold the words). The only credit in the explorer is "Labels by Claude Haiku 5.5"; above it sits the
 labeller's note on the chosen labels, which is evidence for them, not an explanation of the site. A
 unit's view shows all of its evidence on one page, with nothing behind a "more" button, sorted into
-baskets under a bar that stays in reach: Firings (its images and sounds, its firings, what it does in real text, what the model says next there,
-how often and how hard), Weights (every read the labeller saw, and what it adds
-beyond what it reads) and Stream (what the residual holds where it fires, which never reached the labeller).
-A head has the same three: Firings also holds what it attends to and its attention pattern, Weights its QK and OV reads with how it attends and copies, and Stream what its own output says where it fires.
+baskets under a bar that stays in reach, in this order: Weights (every read the labeller saw, and what it adds
+beyond what it reads), Stream (what the residual holds where it fires, which never reached the labeller) and
+Firings (its images and sounds, its firings, what it does in real text, what the model says next there,
+how often and how hard).
+A head has the same three: Weights holds its QK and OV reads with how it attends and copies, Stream what its own output says where it fires, and Firings also what it attends to and its attention pattern.
 A head's QK diagonal, a token at the query seeking an earlier copy of itself, is read twice: with the query through the S-lens
 (the token it holds: duplicate-token heads) and through the R-lens (the token it is about to say: copy suppression's lookup).
 Each model trusts the first up to a layer and the second from the next (`self` in the builder's profile, from neuron-lens findings §11 and §13).
@@ -77,7 +78,8 @@ and its write through the R-lens, late layers both through the R-lens. A read th
 pointed at, and comes last; so is a read the findings say fails on that model. The catalog keeps no per-unit test of a read
 (neuron-lens: a read that misses a unit's firings isn't wrong for it), so the site shows none and nothing lifts a read out of quiet.
 Left is always what comes in and right what goes out. Beside them the rail holds its connections: a
-directed graph at true depth, and its strongest links in words. Wired to, driven by and fires with are
+directed graph at true depth, and its strongest links in words. The graph opens at Near (only the units most
+of its flow passes through); Far and All follow it further. Wired to, driven by and fires with are
 three relations and stay three views (findings §17). A head has no wired to, because two heads meet through a matrix and not a dot product;
 what drives it is split over its three inputs, so its views are Value, Query, Key and Fires with. A link's sign has no colour of its own, since the one
 hue is depth: a link that pushes against is grey and dashed. Full screen, the graph moves like a map and keeps

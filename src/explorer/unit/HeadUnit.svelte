@@ -13,9 +13,9 @@
   import { WEIGHTS_BASKET, headAgreement } from "./evidence";
 
   // An attention head, in the neuron's shape: one row of labels (what it fires on, what it attends
-  // to, what it writes), then its evidence in the same three baskets. Firings: where it fires and what
-  // it looks at there, how it handles images and sound, how often and how hard. Weights: what the
-  // lenses read of its QK and OV maps. Stream: what its output says where it fires.
+  // to, what it writes), then its evidence in the same three baskets. Weights: what the lenses read
+  // of its QK and OV maps. Stream: what its output says where it fires. Firings: where it fires and
+  // what it looks at there, how it handles images and sound, how often and how hard.
   let { head, labelled, groupSize }: { head: HeadDetail; labelled: boolean; groupSize: number } = $props();
 
   const rows = $derived([{
@@ -33,9 +33,9 @@
   const FIRINGS = "What it does in real text: where it fires, what it looks at there, and how often and how hard";
   const STREAM = "What its own output holds where it fires. None of this reached the labeller.";
   const baskets = $derived([
-    { value: "firings", label: "Firings", hint: FIRINGS },
     { value: "weights", label: "Weights", hint: WEIGHTS_BASKET },
     ...(written.length ? [{ value: "stream", label: "Stream", hint: STREAM }] : []),
+    { value: "firings", label: "Firings", hint: FIRINGS },
   ]);
 </script>
 
@@ -44,6 +44,16 @@
   <BasketBar {baskets} />
 
   <div class="stack">
+    <Basket id="weights" title="Weights" tip={WEIGHTS_BASKET}>
+      <HeadColumns {head} {groupSize} measured={false} />
+    </Basket>
+
+    {#if written.length}
+      <Basket id="stream" title="Stream" tip={STREAM}>
+        <Group title="Pushes the model to say" tip="What its output at its top firings pushes the model to say, against the layer's other heads (R-lens, z)" items={written} />
+      </Basket>
+    {/if}
+
     <Basket id="firings" title="Firings" tip={FIRINGS}>
       <HeadMedia {head} />
       <div class="fires">
@@ -56,16 +66,6 @@
       <RealTextGrid><HeadRealText {head} /></RealTextGrid>
       <HeadFigures {head} {groupSize} weights={false} />
     </Basket>
-
-    <Basket id="weights" title="Weights" tip={WEIGHTS_BASKET}>
-      <HeadColumns {head} {groupSize} measured={false} />
-    </Basket>
-
-    {#if written.length}
-      <Basket id="stream" title="Stream" tip={STREAM}>
-        <Group title="Pushes the model to say" tip="What its output at its top firings pushes the model to say, against the layer's other heads (R-lens, z)" items={written} />
-      </Basket>
-    {/if}
   </div>
 </div>
 

@@ -14,7 +14,7 @@
   const lens = useLens();
 
   let mode = $state<Mode>("context");
-  let reach = $state<Reach>("far");
+  let reach = $state<Reach>("near");
   let hovered = $state<string | null>(null);
   // A unit lights what connects it once the pointer rests on it, so a pointer passing over the graph or
   // the list leaves the light as it was rather than flashing the whole graph. Moving from one unit to

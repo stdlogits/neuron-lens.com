@@ -15,8 +15,8 @@
   import { WEIGHTS_BASKET, neuronStrength, oftenFacts } from "./evidence";
 
   // A neuron: its two sides as the rows of the faces table, then the chosen side's evidence in three
-  // baskets. Firings: where and how it fires. Weights: what the lenses read of its wiring. Stream:
-  // what the residual holds where it fires. The side is the lens's, so the graph beside it follows;
+  // baskets. Weights: what the lenses read of its wiring. Stream: what the residual holds where it
+  // fires. Firings: where and how it fires. The side is the lens's, so the graph beside it follows;
   // while the next unit loads and this one is still on screen, it keeps the side it has.
   let { detail, layer, labelled }: { detail: NeuronDetail; layer: number; labelled: boolean } = $props();
   const lens = useLens();
@@ -40,9 +40,9 @@
   const FIRINGS = "What it does in real text: where this side fires, what the model says next there, and how often and how hard";
   const STREAM = "What the residual stream holds where this side fires, before and after its layer. None of this reached the labeller.";
   const baskets = $derived([
-    { value: "firings", label: "Firings", hint: FIRINGS },
     { value: "weights", label: "Weights", hint: WEIGHTS_BASKET },
     ...(pole.stream ? [{ value: "stream", label: "Stream", hint: STREAM }] : []),
+    { value: "firings", label: "Firings", hint: FIRINGS },
   ]);
 </script>
 
@@ -53,6 +53,16 @@
   <div class="side" id={panel} role="tabpanel" aria-label={rows[side].name}>
     <Swap key={side}>
       <div class="stack">
+        <Basket id="weights" title="Weights" tip={WEIGHTS_BASKET}>
+          <NeuronColumns {pole} measured={false} />
+        </Basket>
+
+        {#if pole.stream}
+          <Basket id="stream" title="Stream" tip={STREAM}>
+            <Stream {pole} reads={pole.stream} />
+          </Basket>
+        {/if}
+
         <Basket id="firings" title="Firings" tip={FIRINGS}>
           <NeuronMedia {pole} {layer} neuron={detail.n} />
           <div class="fires">
@@ -64,16 +74,6 @@
             <Group title="How hard" tip="How large its activation gets"><Facts facts={neuronStrength(pole)} /></Group>
           </div>
         </Basket>
-
-        <Basket id="weights" title="Weights" tip={WEIGHTS_BASKET}>
-          <NeuronColumns {pole} measured={false} />
-        </Basket>
-
-        {#if pole.stream}
-          <Basket id="stream" title="Stream" tip={STREAM}>
-            <Stream {pole} reads={pole.stream} />
-          </Basket>
-        {/if}
       </div>
     </Swap>
   </div>
