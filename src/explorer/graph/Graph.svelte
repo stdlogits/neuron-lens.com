@@ -3,7 +3,7 @@
   import { fadeIn, fadeOut } from "@stdlogits/ledger";
   import { bandOf, depthColor, type ModelInfo } from "../../lib/models";
   import { headId, neuronId, percent } from "../../lib/data";
-  import { layout, rows, type Layout, type Open } from "./layout";
+  import { layout, rows, type Layout, type Open, type Spot } from "./layout";
   import { Stage, type Seated, type Shown } from "./stage";
   import { headInput, type Graph, type GraphEdge, type Mode } from "./trace";
 
@@ -12,7 +12,7 @@
   // colour of its layer and as large as the flow through it; a link is as heavy as its flow, grey and
   // dashed where it pushes against. Pointing at a unit lights what connects it to the centre. The
   // stage (stage.ts) owns where everything is and how it moves; this owns what each thing looks like.
-  let { graph, model, mode, href, hovered, point, height = 780, open, labels = false, labelScale = 1, axis = true, onlaid }: {
+  let { graph, model, mode, href, hovered, point, height = 780, open, labels = null, labelScale = 1, axis = true, onlaid }: {
     graph: Graph;
     model: ModelInfo;
     mode: Mode;
@@ -23,9 +23,9 @@
     height?: number;
     /** The navigator's spacing: at its own size, with room under each mark for its title. */
     open?: Open;
-    /** Each unit's title beside it, or only these units'. */
-    labels?: boolean | Set<string>;
-    /** How much larger than the marks the titles are drawn: zoomed out, the few left keep a size that reads. */
+    /** The units whose titles are shown, and on which side of the mark. */
+    labels?: Map<string, Spot> | null;
+    /** How much the titles are scaled against the marks: the navigator keeps them one size on screen at any zoom. */
     labelScale?: number;
     /** The layer numbers down the left. */
     axis?: boolean;
@@ -140,7 +140,7 @@
         onpointerleave={() => point(null)}
         onfocus={() => point(node.key)}
         onblur={() => point(null)}
-      ><i style:background={depthColor(model, node.layer)}></i>{#if labels === true || (labels instanceof Set && labels.has(node.key))}<span class="label" in:fadeIn out:fadeOut>{node.wire?.title || nameOf(node)}</span>{/if}</a>
+      ><i style:background={depthColor(model, node.layer)}></i>{#if labels?.has(node.key)}<span class="label {labels.get(node.key)}" in:fadeIn out:fadeOut>{node.wire?.title || nameOf(node)}</span>{/if}</a>
     {/each}
   {/if}
 </div>
@@ -181,12 +181,11 @@
   .focus { z-index: 1; }
   .focus i { outline-color: var(--ink); }
   .dim i { opacity: 0.25; }
-  /* A title under its mark, wrapped at the width the layout left it (LABEL in Navigator.svelte), on a
-     backing of the page's own paper so the links behind it don't cross its words. */
+  /* A title by its mark, where the navigator found room for it, one size on screen at any zoom: wrapped
+     at LABEL (Navigator.svelte) on a backing of the page's own paper, so links behind it don't cross its words. */
   .label {
+    --s: var(--label-scale, 1);
     position: absolute;
-    top: calc(100% + 3px);
-    left: 50%;
     width: max-content;
     max-width: 160px;
     padding: 1px 5px;
@@ -196,12 +195,14 @@
     font: var(--type-meta);
     text-align: center;
     overflow-wrap: anywhere;
-    translate: -50% 0;
-    scale: var(--label-scale, 1);
-    transform-origin: top center;
+    scale: var(--s);
     pointer-events: none;
     transition: opacity var(--in) var(--ease), color var(--fast) var(--ease);
   }
+  .label.below { top: 100%; left: 50%; transform-origin: top center; translate: -50% calc(3px * var(--s)); }
+  .label.above { bottom: 100%; left: 50%; transform-origin: bottom center; translate: -50% calc(-3px * var(--s)); }
+  .label.right { top: 50%; left: 100%; transform-origin: left center; translate: calc(3px * var(--s)) -50%; text-align: start; }
+  .label.left { top: 50%; right: 100%; transform-origin: right center; translate: calc(-3px * var(--s)) -50%; text-align: end; }
   .focus .label { color: var(--ink); font-weight: 600; }
   .hot .label { color: var(--ink); }
   .dim .label { opacity: 0.25; }

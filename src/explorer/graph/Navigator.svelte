@@ -2,13 +2,15 @@
   import { onMount } from "svelte";
   import { IconButton, LabelText, Segmented, Tabs } from "@stdlogits/ledger";
   import Graph from "./Graph.svelte";
-  import { rows, type Layout, type Open } from "./layout";
+  import { rows, type Layout, type Open, type Placed, type Spot } from "./layout";
   import type { Graph as GraphData, GraphNode, Mode, Reach } from "./trace";
   import { bandOf, type ModelInfo } from "../../lib/models";
   import { headId, neuronId } from "../../lib/data";
 
-  // The unit's connections, full screen: the same graph and motion as the rail's, laid out at its own
-  // size with room under every mark for its title, and moved like a map. Drag (or scroll) to move,
+  // The unit's connections, full screen: the same graph and motion as the rail's, opening at HOME times
+  // its size, moved like a map. Titles stay one size on screen at any zoom, each where it touches no mark
+  // and no other title: the unit's first, then the strongest, under its mark if it can, else over it or
+  // beside it. Rows are spaced so most fit at HOME; zooming in makes room for the rest. Drag (or scroll) to move,
   // pinch (or ⌘/ctrl and scroll, or + and −) to zoom; a unit's mark opens it here, re-centring the graph
   // on it. Its address is the unit's with ?graph, so Back and links work, and Escape closes it.
   let { graph, model, mode, modes, onmode, reach, reaches, onreach, hovered, point, href, name, title, close }: {
@@ -61,16 +63,61 @@
   }
   const nameOf = (n: GraphNode) => (n.kind === "head" ? headId(n.layer, n.index) : `${neuronId(n.layer, n.index)} ${n.pole > 0 ? "+" : "−"}`);
   const titleOf = (n: GraphNode) => n.wire?.title || nameOf(n);
-  /** Half a title's width on its backing (Graph.svelte's .label padding), for the layout to leave room across. */
-  const open: Open = { gap: 12, reach: (n) => setting(titleOf(n)).width / 2 + 5 };
-  /** Rows stand as far apart as the graph's tallest title needs: the mark above it, the title, air, and the next row's mark. */
-  const pitch = $derived(26 + LINE * Math.max(1, ...graph.nodes.map((n) => setting(titleOf(n)).lines)));
+  /** The zoom it opens at: the marks larger than in the rail, the titles at their own size. */
+  const HOME = 1.5;
+  /** A title's box on screen, padding and backing included (Graph.svelte's .label): as wide as its text on one line, the whole LABEL once it wraps. */
+  const box = (n: GraphNode) => { const { width, lines } = setting(titleOf(n)); return { w: (lines > 1 ? LABEL : width) + 10, h: lines * LINE + 2 }; };
+  /** Room across for each title at HOME; rows far enough apart for a two-line title under each mark at HOME. */
+  const open: Open = { gap: 8 / HOME, reach: (n) => box(n).w / 2 / HOME };
+  const pitch = 13 + (3 + 2 * LINE + 2 + 6) / HOME;
   const height = $derived(2 * model.layers * pitch + 18);
   const depth = $derived(rows(graph, height, model.layers));
 
+  // Where each title goes at this zoom: the unit's first, then by flow, the first side of its mark where it
+  // overlaps no other mark and no title already placed. Without room it waits to be zoomed into, and its tip still names it.
+  let placed = $state.raw<Placed[]>([]);
+  type Box = [number, number, number, number];
+  const meets = (a: Box, b: Box) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  const spots = $derived.by(() => {
+    const s = 1 / k;
+    // Boxes in a grid of cells about a title's height on screen, so each test meets only its neighbours.
+    const cell = 48 * s;
+    const grid = new Map<number, [Box, number][]>();
+    const cells = (b: Box) => {
+      const out: number[] = [];
+      for (let x = Math.floor(b[0] / cell); x <= Math.floor(b[2] / cell); x += 1) for (let y = Math.floor(b[1] / cell); y <= Math.floor(b[3] / cell); y += 1) out.push(x * 65536 + y);
+      return out;
+    };
+    const add = (b: Box, owner: number) => {
+      for (const key of cells(b)) { const there = grid.get(key); if (there) there.push([b, owner]); else grid.set(key, [[b, owner]]); }
+    };
+    const free = (b: Box, owner: number) => cells(b).every((key) => (grid.get(key) ?? []).every(([other, who]) => who === owner || !meets(other, b)));
+    placed.forEach((n, i) => add([n.x - n.w / 2 - 1, n.y - n.h / 2 - 1, n.x + n.w / 2 + 1, n.y + n.h / 2 + 1], i));
+    const out = new Map<string, Spot>();
+    const order = placed.map((n, i) => i).sort((a, b) => (placed[a].side === "focus" ? -1 : placed[b].side === "focus" ? 1 : placed[b].flow - placed[a].flow));
+    for (const i of order) {
+      const n = placed[i];
+      const size = box(n);
+      const w = size.w * s;
+      const h = size.h * s;
+      const g = 3 * s;
+      const sides: [Spot, Box][] = [
+        ["below", [n.x - w / 2, n.y + n.h / 2 + g, n.x + w / 2, n.y + n.h / 2 + g + h]],
+        ["above", [n.x - w / 2, n.y - n.h / 2 - g - h, n.x + w / 2, n.y - n.h / 2 - g]],
+        ["right", [n.x + n.w / 2 + g, n.y - h / 2, n.x + n.w / 2 + g + w, n.y + h / 2]],
+        ["left", [n.x - n.w / 2 - g - w, n.y - h / 2, n.x - n.w / 2 - g, n.y + h / 2]],
+      ];
+      const found = sides.find(([, at]) => free(at, i));
+      if (!found) continue;
+      out.set(n.key, found[0]);
+      add(found[1], -1);
+    }
+    return out;
+  });
+
   // The view: the graph's x and y at full size map to x · k + tx, y · k + ty on screen.
   let view = $state<HTMLDivElement>();
-  let k = $state(1);
+  let k = $state(HOME);
   let tx = $state(0);
   let ty = $state(0);
   /** A re-centring glides; a drag or a zoom follows the hand. */
@@ -94,8 +141,9 @@
     ty = box.height * 0.45 - centredAt * k;
   }
   // A new unit at the centre: glide to it (the first, jump). Rows that open up as titles arrive keep it there, unless the view was moved.
-  function laid(placed: Layout) {
-    const focus = placed.nodes.find((n) => n.side === "focus");
+  function laid(layout: Layout) {
+    placed = layout.nodes;
+    const focus = layout.nodes.find((n) => n.side === "focus");
     if (!view || !focus) return;
     if (focus.key !== centred) { centre(centred !== null); centred = focus.key; }
     else if (!moved && focus.y !== centredAt) centre();
@@ -171,7 +219,7 @@
     if (event.key === "Escape") { event.preventDefault(); close(); }
     else if (event.key === "+" || event.key === "=") zoom(k * 1.25, undefined, undefined, true);
     else if (event.key === "-" || event.key === "_") zoom(k / 1.25, undefined, undefined, true);
-    else if (event.key === "0") { k = 1; centre(); }
+    else if (event.key === "0") { k = HOME; centre(); }
   }
 
   let dialog = $state<HTMLElement>();
@@ -190,15 +238,6 @@
     };
   });
 
-  // Zoomed out past FAR, only the strongest few keep their titles, at a size that still reads; the rest return as it zooms in.
-  const FAR = 0.55;
-  const FEW = 12;
-  const titled = $derived.by(() => {
-    if (k >= FAR) return true;
-    const strongest = graph.nodes.filter((n) => n.side !== "focus").sort((a, b) => b.flow - a.flow).slice(0, FEW);
-    return new Set([...strongest.map((n) => n.key), ...graph.nodes.filter((n) => n.side === "focus").map((n) => n.key)]);
-  });
-
   // Layer numbers down the left, every layer once there's room for each, and each band's name where it starts.
   const every = $derived(2 * pitch * k >= 18 ? 1 : 2 * pitch * k >= 7 ? 5 : 10);
   const ticks = $derived(Array.from({ length: model.layers }, (_, layer) => layer).filter((layer) => layer % every === 0));
@@ -210,7 +249,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="view" bind:this={view} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onclickcapture={click}>
     <div class="canvas" class:gliding style:transform={`translate(${tx}px, ${ty}px) scale(${k})`}>
-      <Graph {graph} {model} {mode} {href} {hovered} {point} {height} {open} labels={titled} labelScale={k < FAR ? 1 / k : 1} axis={false} onlaid={laid} />
+      <Graph {graph} {model} {mode} {href} {hovered} {point} {height} {open} labels={spots} labelScale={1 / k} axis={false} onlaid={laid} />
     </div>
     <div class="axis" aria-hidden="true">
       {#each model.bands as band (band.key)}
@@ -230,7 +269,7 @@
       <div class="reach" class:off={mode === "with"} inert={mode === "with"}><Tabs options={reaches} value={reach} onchange={(value: string) => onreach(value as Reach)} label="How far" /></div>
       <div class="zoom">
         <IconButton icon="minus" label="Zoom out" onclick={() => zoom(k / 1.25, undefined, undefined, true)} />
-        <IconButton icon="focus" label={`Back to ${name}`} onclick={() => { k = 1; centre(); }} />
+        <IconButton icon="focus" label={`Back to ${name}`} onclick={() => { k = HOME; centre(); }} />
         <IconButton icon="plus" label="Zoom in" onclick={() => zoom(k * 1.25, undefined, undefined, true)} />
       </div>
       <IconButton icon="close" label="Close" onclick={close} />
@@ -279,6 +318,6 @@
   .zoom { display: flex; gap: var(--s1); }
   .reach { transition: opacity var(--fast) var(--ease); }
   .reach.off { opacity: 0; }
-  .credit { position: absolute; right: var(--s4); bottom: var(--s3); font-weight: 400; pointer-events: none; }
+  .credit { position: absolute; right: var(--s4); bottom: var(--s3); padding: 1px 5px; border-radius: var(--r-chip); background: color-mix(in oklch, var(--paper) 84%, transparent); font-weight: 400; pointer-events: none; }
   @media (max-width: 600px) { .zoom { display: none; } .bar { padding: var(--s2) var(--s3); } }
 </style>

@@ -13,6 +13,8 @@ export interface Layout {
   /** How far the marks and their titles reach, left and right. */
   bounds: [number, number];
 }
+/** Where a title sits beside its mark. */
+export type Spot = "below" | "above" | "right" | "left";
 /** The navigator's spacing: how far across from its centre a node needs, its mark or its title, whichever is wider; and the room between two. */
 export interface Open { reach: (node: GraphNode, w: number) => number; gap: number }
 

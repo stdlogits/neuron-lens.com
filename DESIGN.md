@@ -23,11 +23,12 @@ What the site draws for itself, in Ledger:
   (Value, Query or Key). A path through any other head goes by its value, and a path into a head's query or key stops there,
   because what those set is where the head looks.
 - The full-screen graph (`src/explorer/graph/Navigator.svelte`, at a unit's address with `?graph`): the same marks, links
-  and motion at their own size, with each unit's whole title wrapped under its mark on a backing of the page's paper, the
-  rows as far apart as the tallest title needs, moved like a map (drag or
-  scroll, pinch or ⌘/ctrl-scroll or the zoom buttons). Zoomed far out, only the strongest dozen keep their titles, drawn
-  at a size that still reads. The bar over it holds the unit, the views and the reach; the depth axis down the left names
-  the bands; the credit sits at the foot, so a screenshot carries it.
+  and motion, opening at 1.5 times the rail's size and moved like a map (drag or scroll, pinch or ⌘/ctrl-scroll or the zoom
+  buttons). Titles stay one size on screen at any zoom, wrapped on a backing of the page's paper, and each sits where it
+  touches no mark and no other title: the unit's first, then by flow, under its mark if it can, else over it or beside it.
+  A title with no room waits for a closer zoom, and its tip still names it. Rows are spaced for a two-line title under
+  each mark at the opening zoom. The bar over it holds the unit, the views and the reach; the depth axis down the left
+  names the bands; the credit sits at the foot, so a screenshot carries it.
 - The graph's motion (`src/explorer/graph/stage.ts`), on Ledger's curve and durations, all on one clock so a link
   never parts from its nodes. Arriving: the unit swells in; its neighbours bud from it ring by ring (at most
   340 ms in all, strongest first, each link growing with its node); the links that make it a graph draw in behind them; the

@@ -73,8 +73,8 @@ Left is always what comes in and right what goes out. Beside them the rail holds
 directed graph at true depth, and its strongest links in words. Wired to, driven by and fires with are
 three relations and stay three views (findings §17). A head has no wired to, because two heads meet through a matrix and not a dot product;
 what drives it is split over its three inputs, so its views are Value, Query, Key and Fires with. A link's sign has no colour of its own, since the one
-hue is depth: a link that pushes against is grey and dashed. Full screen, the graph keeps its marks' size, wraps
-each whole title under its mark, spaces its rows to fit the tallest and moves like a map; zoomed far out, only the strongest few keep their titles.
+hue is depth: a link that pushes against is grey and dashed. Full screen, the graph moves like a map and keeps
+its titles one size on screen, each placed where it covers no mark and no other title; one without room waits for a closer zoom.
 Phone widths down to 320 px must not scroll sideways.
 
 `main.ts` loads `@stdlogits/ledger/ledger.css`, then `site.css`, and installs `translator` with
