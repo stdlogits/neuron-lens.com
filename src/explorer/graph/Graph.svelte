@@ -138,13 +138,12 @@
       const share = percent(Math.min(1, n.flow), n.flow < 0.1 ? 1 : 0);
       if (n.side === "up") {
         const head = graph.nodes.some((other) => other.side === "focus" && other.kind === "head");
-        return `${share} of ${head ? headInput("it", mode === "query" ? 1 : mode === "key" ? 2 : 0) : "its activation"} traces back here`;
+        return `${share} of ${head ? headInput("it", mode === "query" ? 1 : mode === "key" ? 2 : 0) : "its activation"}`;
       }
       const what = n.kind === "neuron" ? "this neuron's activation" : n.onward > 0 ? "what this head writes" : "where this head looks";
-      return `${share} of ${what} traces back to it`;
+      return `${share} of ${what}`;
     }
-    const way = n.hop === 1 ? "Directly" : `${n.hop} links`;
-    return `${way} ${n.side === "up" ? "upstream" : "downstream"} in the weights`;
+    return `${n.hop === 1 ? "1 link" : `${n.hop} links`} ${n.side === "up" ? "up" : "down"}, by weight`;
   }
   // A tap shows the unit's card rather than its tip, which Ledger shows on a touch's pointerover (on the page's
   // root, which a delegated handler would reach too late) and its pointerdown (on the document).
@@ -188,7 +187,6 @@
       .filter((tick) => edges.every((edge) => Math.abs(edge.y - tick.y) >= 16));
     return [...edges, ...numbers].sort((a, b) => a.y - b.y);
   });
-  const layersText = (from: number, to: number) => (from === to ? `Layer ${from}` : `Layers ${from}–${to}`);
 
   // The links: as heavy as their flow, in the depth colour of their upstream end, grey and dashed where they
   // push against; with a unit lit, what connects it stands out and the rest all but goes.
@@ -256,7 +254,7 @@
   {#if width > 0}
     {#each ticks as tick, i (tick.key)}
       {#if tick.edge}
-        <span class="tick edge" style:--i={i} style:top={`${tick.y}px`} data-tip-title={`${tick.count} ${tick.count === 1 ? "layer" : "layers"} ${tick.edge === "up" ? "above" : "below"}`} data-tip={`${layersText(tick.from!, tick.to!)}, with nothing on this graph`} aria-label={`${tick.count} more ${tick.count === 1 ? "layer" : "layers"} ${tick.edge === "up" ? "above" : "below"}`}><Icon name={tick.edge} size={14} /></span>
+        <span class="tick edge" style:--i={i} style:top={`${tick.y}px`} data-tip={`${tick.count} more ${tick.count === 1 ? "layer" : "layers"} ${tick.edge === "up" ? "above" : "below"}`} aria-label={`${tick.count} more ${tick.count === 1 ? "layer" : "layers"} ${tick.edge === "up" ? "above" : "below"}`}><Icon name={tick.edge} size={14} /></span>
       {:else}
         <span class="tick" style:--i={i} style:top={`${tick.y}px`} data-tip-title={`Layer ${tick.layer}`} data-tip={bandOf(model, tick.layer!).name}>{tick.layer}</span>
       {/if}

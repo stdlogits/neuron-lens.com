@@ -63,23 +63,23 @@
     query.addEventListener("change", look);
     return () => query.removeEventListener("change", look);
   });
-  const FIRES_WITH = { value: "with" as const, label: "Fires with", hint: "The earlier neurons active at its top firings, most out of proportion to how often they fire at all" };
+  const FIRES_WITH = { value: "with" as const, label: "Fires with", hint: "Earlier neurons active when it fires" };
   const modes = $derived<{ value: Mode; label: string; hint: string }[]>(isHead ? [
-    { value: "context", label: "Value", hint: "What it copies. Measured at its top firings: which earlier units what it writes comes from, and which later units it helps fire" },
-    { value: "query", label: "Query", hint: "Why it looks where it looks, from the token it reads for. Which earlier units set its query, and which later units it helps fire" },
-    { value: "key", label: "Key", hint: "Why it looks where it looks, from the tokens it can look at. Which earlier units set their keys, and which later units it helps fire" },
+    { value: "context", label: "Value", hint: "Where what it copies comes from, and goes" },
+    { value: "query", label: "Query", hint: "What sets where it looks, from its query" },
+    { value: "key", label: "Key", hint: "What sets where it looks, from its keys" },
     FIRES_WITH,
   ] : [
-    { value: "context", label: tight ? "Context" : "In context", hint: "Measured at its top firings: which earlier units its activation comes from, and which later units it helps fire" },
-    { value: "weights", label: tight ? "Weights" : "In the weights", hint: "Read from the weights alone, with no text: how far one firing moves each later neuron, directly" },
+    { value: "context", label: tight ? "Context" : "In context", hint: "What feeds it and what it feeds, in real text" },
+    { value: "weights", label: tight ? "Weights" : "In the weights", hint: "Direct links, from the weights alone" },
     FIRES_WITH,
   ]);
   // A view one kind of unit doesn't have stays chosen for when the page is on the other kind again.
   const shownMode = $derived<Mode>(modes.some((option) => option.value === mode) ? mode : "context");
   const reaches: { value: Reach; label: string; hint: string }[] = [
-    { value: "near", label: "Near", hint: "Only the units most of its flow passes through" },
-    { value: "far", label: "Far", hint: "Followed until the flow falls to a third of a percent" },
-    { value: "all", label: "All", hint: "Followed as far as the links stay strong enough to draw" },
+    { value: "near", label: "Near", hint: "Only its strongest links" },
+    { value: "far", label: "Far", hint: "Followed until the flow is faint" },
+    { value: "all", label: "All", hint: "Every link strong enough to draw" },
   ];
 
   // Wait for a neuron's detail so its clearer side is known; heads have one side.
@@ -157,7 +157,7 @@
 
   /** The input of a head this view is about: its value, unless it is on the query or the key. */
   const input = $derived<Through>(shownMode === "query" ? 1 : shownMode === "key" ? 2 : 0);
-  const DRIVEN_TIPS = ["The earlier neurons and heads that make up the most of what it writes at its top firings", "The earlier neurons and heads, at the token it reads for, that do the most to set where it looks", "The earlier neurons and heads, at the tokens it can look at, that do the most to set where it looks"];
+  const DRIVEN_TIPS = ["Earlier units that make up most of what it writes", "Earlier units that set where it looks, at its query", "Earlier units that set where it looks, at its keys"];
   const THROUGH = ["value", "query", "key"];
 
   const SHOWN = 8;
@@ -165,15 +165,15 @@
     if (!focusWire) return [];
     const { links } = focusWire;
     const byStrength = (rows: Row[]) => rows.sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, SHOWN);
-    const drives = { title: "Drives", tip: "The later neurons and heads that count it among their largest sources at their top firings", rows: byStrength([...links.drives.map((link) => row("neuron", link)), ...headTargets(links.drivesHeads)]) };
-    if (shownMode === "with") return [{ title: "Fires with", tip: "Earlier neurons active at its top firings, ranked by how far that beats their usual rate", rows: links.with.slice(0, SHOWN).map((link) => row("neuron", link)) }];
+    const drives = { title: "Drives", tip: "Later units it drives most", rows: byStrength([...links.drives.map((link) => row("neuron", link)), ...headTargets(links.drivesHeads)]) };
+    if (shownMode === "with") return [{ title: "Fires with", tip: "Earlier neurons active when it fires, beyond their usual rate", rows: links.with.slice(0, SHOWN).map((link) => row("neuron", link)) }];
     if (shownMode === "weights") return [
-      { title: "Wired from", tip: "The earlier neurons whose writes move it most, read from the weights", rows: byStrength(collapsed(links.in)) },
-      { title: "Wired to", tip: "The later neurons its write moves most, read from the weights", rows: byStrength(collapsed(links.out)) },
+      { title: "Wired from", tip: "Earlier neurons that move it most, by weight", rows: byStrength(collapsed(links.in)) },
+      { title: "Wired to", tip: "Later neurons it moves most, by weight", rows: byStrength(collapsed(links.out)) },
     ];
     const from = shownMode === "query" || shownMode === "key" ? focusWire[shownMode]! : links;
     return [
-      { title: "Driven by", tip: isHead ? DRIVEN_TIPS[input] : "The earlier neurons and heads that make up the most of its activation at its top firings", rows: byStrength([...from.driven.map((link) => row("neuron", link)), ...from.heads.map((link) => row("head", link))]) },
+      { title: "Driven by", tip: isHead ? DRIVEN_TIPS[input] : "Earlier units that make up most of its activation", rows: byStrength([...from.driven.map((link) => row("neuron", link)), ...from.heads.map((link) => row("head", link))]) },
       drives,
     ];
   });
@@ -193,18 +193,18 @@
   /** What a row's number is. */
   function valueTip(title: string, { value, kind, through }: Row): string {
     if (title === "Fires with") return `Active at ${Math.round(value * 5)} of its first 5 top firings`;
-    if (title === "Wired from") return "How far one of that neuron's top firings moves this one's normalised input";
-    if (title === "Wired to") return "How far one of this neuron's top firings moves that one's normalised input";
+    if (title === "Wired from") return "How far its firing moves this neuron";
+    if (title === "Wired to") return "How far this neuron's firing moves it";
     const what = title === "Driven by"
       ? (isHead ? headInput("it", input) : "its activation")
       : (kind === "head" ? headInput("that head", through[0] ?? 0) : "that neuron's activation");
-    return `${value >= 0 ? "Makes up" : "Takes"} ${percent(Math.abs(value))} ${value >= 0 ? "of" : "off"} ${what} at its top firings`;
+    return `${value >= 0 ? "" : "−"}${percent(Math.abs(value))} of ${what}`;
   }
   // A share can run past the whole, with another taking it back.
   const signedPercent = (value: number) => `${value < -0.005 ? "−" : ""}${percent(Math.abs(value) < 0.005 ? 0 : Math.abs(value))}`;
   const top = (rows: Row[]) => Math.max(1e-9, ...rows.map((r) => Math.abs(r.value)));
   const mix = $derived(!focusWire || shownMode === "weights" || shownMode === "with" ? null : shownMode === "context" ? focusWire.mix : focusWire[shownMode]!.mix);
-  const mixTip = $derived(`How much of ${isHead ? headInput("it", input) : "its activation"} at its top firings comes from earlier neurons, from attention heads and from the token's embedding`);
+  const mixTip = $derived(`Where ${isHead ? headInput("it", input) : "its activation"} comes from`);
   const showsHeads = $derived(graph?.nodes.some((node) => node.kind === "head") ?? false);
   const showsAgainst = $derived(graph?.edges.some((edge) => edge.value < 0) ?? false);
 </script>
@@ -232,11 +232,11 @@
       <Graph {graph} model={lens.model} mode={shownMode} href={hrefFor} hovered={lit} {point} onpick={pick} />
       {#if picked}<Card {picked} close={() => (picked = null)} fixed />{/if}
       <ul class="key meta" aria-label="Key">
-        <li data-tip="One side of a neuron. The larger it is, the more of the flow runs through it"><i class="dot"></i>Neuron</li>
-        {#if showsHeads}<li data-tip="An attention head. It sits just above its layer's neurons, because it writes into their stream"><i class="bar"></i>Head</li>{/if}
+        <li data-tip="A neuron side; larger carries more"><i class="dot"></i>Neuron</li>
+        {#if showsHeads}<li data-tip="An attention head, above its layer's neurons"><i class="bar"></i>Head</li>{/if}
         {#if shownMode !== "with"}
-          <li data-tip="A link that raises what it leads to. The heavier it is, the more of the flow it carries"><i class="line"></i>Pushes for</li>
-          {#if showsAgainst}<li data-tip="A link that lowers what it leads to"><i class="line against"></i>Pushes against</li>{/if}
+          <li data-tip="Raises what it leads to; heavier carries more"><i class="line"></i>Pushes for</li>
+          {#if showsAgainst}<li data-tip="Lowers what it leads to"><i class="line against"></i>Pushes against</li>{/if}
         {/if}
       </ul>
     {:else}<div class="waiting" aria-hidden="true"></div>{/if}

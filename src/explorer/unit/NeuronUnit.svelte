@@ -30,15 +30,15 @@
   const rows = $derived(detail.poles.map((p) => ({
     sign: p.pole > 0 ? "+" : "−",
     name: p.pole > 0 ? "Positive side" : "Negative side",
-    tip: `Where its activation is ${p.pole > 0 ? "positive" : "negative"}, and what it writes then. Its two sides are read apart.`,
+    tip: `Where its activation is ${p.pole > 0 ? "positive" : "negative"}`,
     cells: [
       { label: p.label.fires, confidence: p.label.fc },
       { label: p.label.writes, confidence: p.label.wc },
     ],
   })));
   const panel = $props.id();
-  const FIRINGS = "What it does in real text: where this side fires, what the model says next there, and how often and how hard";
-  const STREAM = "What the residual stream holds where this side fires, before and after its layer. None of this reached the labeller.";
+  const FIRINGS = "What it does in real text";
+  const STREAM = "The stream where it fires, before and after its layer";
   const baskets = $derived([
     { value: "weights", label: "Weights", hint: WEIGHTS_BASKET },
     ...(pole.stream ? [{ value: "stream", label: "Stream", hint: STREAM }] : []),
@@ -70,7 +70,7 @@
           </div>
           <RealTextGrid><RealText {pole} /></RealTextGrid>
           <div class="figures">
-            <Group title="How often" tip="Share of tokens it fires on, in all text and in each kind"><Facts facts={oftenFacts(pole.act, "it fires on")} /></Group>
+            <Group title="How often" tip="Share of tokens it fires on"><Facts facts={oftenFacts(pole.act, "it fires on")} /></Group>
             <Group title="How hard" tip="How large its activation gets"><Facts facts={neuronStrength(pole)} /></Group>
           </div>
         </Basket>

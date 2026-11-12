@@ -14,9 +14,8 @@
   const signed = (v: number) => `${v >= 0 ? "+" : "−"}${formatValue(Math.abs(v))}`;
   const verdict = $derived(holds ? `${signed(opt.gain!)} on held-out ${names.plural}` : `Fails on held-out ${names.plural}`);
   const tip = $derived([
-    modality === "image" ? "A patch optimised to drive this side, put in every slot of an image." : "A 40 ms sound optimised to drive this side, repeated for 2.56 s.",
-    holds ? `On ${names.plural} it wasn't optimised on, it raises the side by ${formatValue(opt.gain!)}.` : `On ${names.plural} it wasn't optimised on, it doesn't raise the side.`,
-    opt.lens !== null ? `The read it started from gives ${signed(opt.lens)}.` : "",
+    modality === "image" ? "A patch made to drive this side." : "A sound made to drive this side.",
+    holds ? `Raises it ${signed(opt.gain!)} on new ${names.plural}.` : `Doesn't raise it on new ${names.plural}.`,
   ].filter(Boolean).join(" "));
 
   // ---------- the frame

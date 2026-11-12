@@ -95,7 +95,7 @@
               {#if tokens}
                 <div class="toks cell"><span class="lens">{c === 0 ? "S-lens" : "R-lens"}</span>{#each tokens as [token, count, flags], i (i)}<Token {token} {count} {flags} {i} />{/each}</div>
               {:else}
-                <p class="cell none" data-tip="Where a head looks turns on which input tokens are there, so only the backward lens reads it"><span class="lens">R-lens</span>–</p>
+                <p class="cell none" data-tip="Only the backward lens reads where a head looks"><span class="lens">R-lens</span>–</p>
               {/if}
             {/each}
           {/each}

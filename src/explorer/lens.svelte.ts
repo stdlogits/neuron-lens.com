@@ -17,14 +17,14 @@ export interface Filter { value: string; label: string; neurons?: number; heads?
 
 const NEURON_FILTERS: Filter[] = [
   { value: "all", label: "All", hint: "Every neuron, whatever it does" },
-  { value: "predicts", label: "Predictors", neurons: FLAG_PREDICTS, hint: "Fires just before a word it then pushes the model to say" },
-  { value: "suppresses", label: "Suppressors", neurons: FLAG_SUPPRESSES, hint: "Holds back the word the model is about to say" },
-  { value: "detector", label: "One token", neurons: FLAG_DETECTOR, hint: "Most of its top firings land on one token" },
+  { value: "predicts", label: "Predictors", neurons: FLAG_PREDICTS, hint: "Fires just before a word it pushes" },
+  { value: "suppresses", label: "Suppressors", neurons: FLAG_SUPPRESSES, hint: "Holds back the word about to come" },
+  { value: "detector", label: "One token", neurons: FLAG_DETECTOR, hint: "Most top firings land on one token" },
 ];
 const MEDIA_FILTERS: Filter[] = [
-  { value: "image", label: "Images", neurons: FLAG_IMAGE, hint: "A side fires reliably on one kind of image" },
-  { value: "audio", label: "Sound", neurons: FLAG_AUDIO, hint: "A side fires reliably on one kind of sound" },
-  { value: "crossmodal", label: "Text and media", neurons: FLAG_CROSSMODAL, hint: "Its image or sound label holds in text too: the words fire it, and both lenses read them" },
+  { value: "image", label: "Images", neurons: FLAG_IMAGE, hint: "Fires reliably on one kind of image" },
+  { value: "audio", label: "Sound", neurons: FLAG_AUDIO, hint: "Fires reliably on one kind of sound" },
+  { value: "crossmodal", label: "Text and media", neurons: FLAG_CROSSMODAL, hint: "Its image or sound label holds in text too" },
 ];
 const HEAD_ROLES = [ROLE_INDUCTION, ROLE_DUPLICATE, ROLE_PREVIOUS, ROLE_SINK, ROLE_CARRIES, ROLE_NAMES];
 
@@ -291,7 +291,7 @@ export class Lens {
   readonly figures = $derived([
     { value: formatCount(this.totals.neurons), label: "neurons", tip: `${formatCount(this.model.mlp)} to a layer` },
     { value: formatCount(this.totals.heads), label: "heads", tip: `${this.model.heads} to a layer` },
-    { value: String(this.model.layers), label: "layers", tip: "Each is an attention step and then an MLP" },
+    { value: String(this.model.layers), label: "layers", tip: "Each: attention, then an MLP" },
   ]);
 }
 

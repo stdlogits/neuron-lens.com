@@ -18,7 +18,7 @@
     if (lens.unit === "heads") {
       const row = lens.selectedHeadRow;
       const roles = row ? rolesOf(row[9]).map((role) => ({ label: role.short, tip: role.describe })) : [];
-      return lens.globalLayer ? [{ label: "Global attention", tip: "Attends over the whole text; the other layers look only at the last 1,024 tokens" }, ...roles] : roles;
+      return lens.globalLayer ? [{ label: "Global attention", tip: "Sees the whole text; other layers see the last 1,024 tokens" }, ...roles] : roles;
     }
     return lens.selectedNeuronRow ? neuronTags(lens.selectedNeuronRow[5]) : [];
   });
@@ -51,7 +51,7 @@
     <Switch checked={reading.distinctive} onchange={setDistinctive} label="Distinctive" hint="Score each read against the layer's other units, so what they all share drops out" />
     <Switch checked={translation.on} onchange={setTranslate} label="English" hint="Show text in other languages in English" />
     <span class="gap" aria-hidden="true"></span>
-    {#if where}<span class="meta where" data-tip={`Its place in this list, which j and k step through`}><span aria-hidden="true"><MorphText text={where} /></span><span class="sr-only">{lens.position + 1} of {lens.order.length}</span></span>{/if}
+    {#if where}<span class="meta where" data-tip="Its place in this list (j, k to step)"><span aria-hidden="true"><MorphText text={where} /></span><span class="sr-only">{lens.position + 1} of {lens.order.length}</span></span>{/if}
     <IconButton icon="up" label={`Previous ${noun}`} href={prev === null ? undefined : lens.unitHref(lens.unit, lens.layer, prev)} replace disabled={prev === null} />
     <IconButton icon="down" label={`Next ${noun}`} href={next === null ? undefined : lens.unitHref(lens.unit, lens.layer, next)} replace disabled={next === null} />
     <IconButton icon={copied ? "check" : "link"} label={copied ? "Link copied" : "Copy link"} onclick={copy} />

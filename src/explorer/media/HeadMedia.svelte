@@ -10,7 +10,7 @@
 
   const ROWS: { modality: Modality; name: string; tip?: string }[] = [
     { modality: "image", name: "Images" },
-    { modality: "audio", name: "Sound", tip: "The model tells sounds apart far less well than images, so these scores say little." },
+    { modality: "audio", name: "Sound", tip: "The model barely tells sounds apart, so these say little." },
   ];
   const rows = $derived(ROWS.filter((row) => head.media?.[row.modality]));
 
@@ -30,9 +30,9 @@
   }
 
   const COLUMNS = [
-    { name: "Reads it", tip: "Attention from the text after it to its slots, as a multiple of an even spread over everything before. Past 1×, it looks at the image or sound more than at the rest." },
-    { name: "Carries it", tip: "Zeroing the head, how much worse the model tells the right label from another's, as a z over 64 examples. Past 3 is notable." },
-    { name: "Names it", tip: "At the word after it, the right label's mean percentile among all labels in what the head writes (0.5 is chance), with its q over all heads. Notable at q ≤ 0.05." },
+    { name: "Reads it", tip: "How much it looks at it, against an even spread. Past 1× is more." },
+    { name: "Carries it", tip: "How much zeroing it hurts telling labels apart. Past 3 is notable." },
+    { name: "Names it", tip: "How well its write names the right label. 0.5 is chance." },
   ];
 </script>
 

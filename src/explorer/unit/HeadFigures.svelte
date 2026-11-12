@@ -12,9 +12,9 @@
 </script>
 
 <div class="figures">
-  <Group title="How often" tip="Share of tokens where it is active, in all text and in each kind"><Facts facts={oftenFacts(head.act, "where it is active")} /></Group>
+  <Group title="How often" tip="Share of tokens where it's active"><Facts facts={oftenFacts(head.act, "where it is active")} /></Group>
   <Group title="How hard" tip="How large its output gets"><Facts facts={headStrength(head)} /></Group>
-  <div class="pattern"><Group title="Pattern" tip="How closely its attention follows each known pattern"><Pattern pattern={head.pattern} /></Group></div>
+  <div class="pattern"><Group title="Pattern" tip="How closely it follows each known pattern"><Pattern pattern={head.pattern} /></Group></div>
   {#if weights}
     <Group title="How it attends" tip={ATTENDING}><Facts facts={headAttending(head, groupSize)} /></Group>
     <Group title="Copying" tip={COPYING}><Facts facts={headCopying(head)} /></Group>

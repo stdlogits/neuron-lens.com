@@ -48,10 +48,8 @@
 
   const auroc = $derived(media.auroc === null ? null : media.auroc.toFixed(2));
   const aurocTip = $derived(
-    `How cleanly its firing picks out ${media.label} ${names.plural} from the rest, on ${names.plural} held out from choosing the label: 1 is perfect, 0.5 chance. `
-    + (media.reliable
-      ? `It holds against shuffled labels and on both halves of the ${names.plural}.`
-      : `It doesn't hold against shuffled labels or across both halves of the ${names.plural}: a weak lead.`),
+    `How well it picks out ${media.label} ${names.plural}: 1 is perfect, 0.5 chance.`
+    + (media.reliable ? "" : " It fails the checks: a weak lead."),
   );
   const writes = $derived(media.write.slice(0, 10));
   const joined = (count: number, i: number) => (i === 0 ? "" : i === count - 1 ? " and " : ", ");
@@ -59,7 +57,7 @@
 
 <section class="modality" aria-label={names.title}>
   <div class="lead">
-    <h3 class="head" data-tip={`What the ${names.plural} it fires on most have in common`}>{names.title}</h3>
+    <h3 class="head" data-tip={`What its top ${names.plural} share`}>{names.title}</h3>
     <span class="label" class:weak={!media.reliable}>{media.label}</span>
     {#if auroc !== null}<span class="meta" data-tip={aurocTip} data-tip-title={media.reliable ? undefined : "Not reliable"}>AUROC {auroc}</span>{/if}
   </div>
@@ -83,7 +81,7 @@
 
   {#if list && writes.length}
     <div class="group">
-      <h3 class="head" data-tip={`What its push makes the model say after ${modality === "image" ? "an image" : "a sound"} (the R-lens fitted on ${names.plural}, read on its write).`}>After {modality === "image" ? "an image" : "a sound"}, it writes</h3>
+      <h3 class="head" data-tip={`What it makes the model say after ${modality === "image" ? "an image" : "a sound"}`}>After {modality === "image" ? "an image" : "a sound"}, it writes</h3>
       <div class="toks">{#each writes as [token, count, flags], i (`${token}:${i}`)}<Token {token} {count} {flags} {i} />{/each}</div>
     </div>
   {/if}

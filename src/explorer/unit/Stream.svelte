@@ -22,12 +22,12 @@
   <span aria-hidden="true"></span>
   <div class="col">
     <h4 class="col-head head">What reaches it</h4>
-    <Group title="Where it fires" tip={`The residual entering its MLP, averaged over ${firings} top firings`}><Reads reads={inputs} skipEmpty /></Group>
-    {#if facts.length}<Group title="Against what it reads" tip="At its firings: how much of what it reads it scales, and how much it adds off it"><Facts {facts} /></Group>{/if}
+    <Group title="Where it fires" tip={`The stream entering its MLP, over ${firings} top firings`}><Reads reads={inputs} skipEmpty /></Group>
+    {#if facts.length}<Group title="Against what it reads" tip="How much it scales its read, and adds off it"><Facts {facts} /></Group>{/if}
   </div>
   <div class="col">
     <h4 class="col-head head">What leaves it</h4>
-    <Group title="Where it fires" tip={`Its layer's output and what follows it, averaged over ${firings} top firings`}><Reads reads={outputs} skipEmpty /></Group>
+    <Group title="Where it fires" tip={`Its layer's output, over ${firings} top firings`}><Reads reads={outputs} skipEmpty /></Group>
   </div>
 </div>
 

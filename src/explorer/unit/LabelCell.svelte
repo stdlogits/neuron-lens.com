@@ -11,7 +11,7 @@
 <span class="lab" class:low={confidence < 0.25}>
   <span class="col head">{column}<span class="sr-only">: </span></span>
   <span class="t"><LabelText text={label} {interactive} /></span>
-  <span class="c meta" data-tip="How sure the labeller was of this label">{pct}%<span class="sr-only"> confident</span></span>
+  <span class="c meta" data-tip="The labeller's confidence">{pct}%<span class="sr-only"> confident</span></span>
 </span>
 
 <style>

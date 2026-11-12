@@ -6,11 +6,11 @@
   let { pattern }: { pattern: HeadDetail["pattern"] } = $props();
 
   const TIPS = [
-    "Attention to the first position, a resting place",
-    "Attention to the token just before",
-    "Attention to its own position",
-    "On repeated text, attention to the token after the earlier copy",
-    "On repeated text, attention to the earlier copy of the current token",
+    "Looks at the first token",
+    "Looks at the token just before",
+    "Looks at its own position",
+    "On repeats, looks just past the earlier copy",
+    "On repeats, looks at the earlier copy",
   ];
   const rows = $derived(PATTERN_NAMES.map((name, i) => ({ name, value: pattern[i], on: pattern[i] > PATTERN_THRESHOLDS[i], tip: `${TIPS[i]}. Named past ${PATTERN_THRESHOLDS[i]}.` })));
 </script>

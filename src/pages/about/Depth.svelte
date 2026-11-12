@@ -57,7 +57,7 @@
                 style:--d="{meta.layer * 16}ms"
                 aria-label="Layer {meta.layer}: the labeller {percent(conf)} sure on average"
                 data-tip-title="Layer {meta.layer}"
-                data-tip="How sure the labeller was of its neurons' labels, on average: {percent(conf)}"
+                data-tip="Mean label confidence: {percent(conf)}"
                 onpointerenter={() => choose(bandOf(model, meta.layer).key)}
               ><i></i></a>
             {/each}

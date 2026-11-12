@@ -516,7 +516,7 @@
         {/each}
       </p>
     {/if}
-    <button type="button" class="random" data-tip="A neuron or a head at random (r)" disabled={!lens.index && !lens.heads} onclick={random}>Random</button>
+    <button type="button" class="random" data-tip="A random neuron or head (r)" disabled={!lens.index && !lens.heads} onclick={random}>Random</button>
   </div>
   <p class="sr-only" aria-live="polite">{status}</p>
 </div>

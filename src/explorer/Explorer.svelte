@@ -16,16 +16,16 @@
 
   const models = MODEL_ORDER.map((id) => {
     const { name, layers, mlp, heads, media } = MODELS[id];
-    return { value: id, label: name, hint: `${layers} layers, each ${formatCount(mlp)} neurons and ${heads} attention heads.${media.length ? " It also takes in images and sound." : " It reads text."}` };
+    return { value: id, label: name, hint: `${layers} layers of ${formatCount(mlp)} neurons and ${heads} heads. ${media.length ? "Also images and sound." : "Text only."}` };
   });
   const units: { value: Unit; label: string; hint: string }[] = [
-    { value: "neurons", label: "Neurons", hint: "Single units of each layer's MLP, each with a positive and a negative side" },
-    { value: "heads", label: "Heads", hint: "Attention heads: what each looks back at, and what it carries forward from there" },
+    { value: "neurons", label: "Neurons", hint: "MLP units, each with two sides" },
+    { value: "heads", label: "Heads", hint: "What each looks back at, and carries forward" },
   ];
   const scopes = $derived(lens.unit === "heads"
     ? [{ value: "all", label: "All", count: formatCount(lens.totals.heads), hint: "Every attention head of the model" }]
     : [
-      { value: "easiest", label: "Easiest", count: lens.totals.easiest === null ? "" : formatCount(lens.totals.easiest), hint: "The neurons easiest to read, 40 a layer" },
+      { value: "easiest", label: "Easiest", count: lens.totals.easiest === null ? "" : formatCount(lens.totals.easiest), hint: "The 40 easiest to read in each layer" },
       { value: "all", label: "All", count: formatCount(lens.totals.neurons), hint: "Every neuron of the model" },
     ]);
 

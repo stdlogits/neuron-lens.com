@@ -19,9 +19,9 @@
   const says = $derived(next ? oneOfEach((pole.stream ?? []).filter((read) => family(read.col) === "pred"), reading.distinctive)[0] : undefined);
 </script>
 
-<Group title="In real text" tip="Tokens that most make it fire, measured in real documents" items={drivers} />
-{#if peaks.length}<Group title="Peaks on" tip="The tokens its top firings land on, and how many of them" items={peaks} />{/if}
-{#if next && after.length}<Group title="Comes next" tip="The tokens right after its top firings, and how many of them" items={after} />{/if}
+<Group title="In real text" tip="Tokens that make it fire most" items={drivers} />
+{#if peaks.length}<Group title="Peaks on" tip="Where its top firings land" items={peaks} />{/if}
+{#if next && after.length}<Group title="Comes next" tip="What comes right after its top firings" items={after} />{/if}
 {#if says?.tokens.length}
   <Group title={LENSES[says.col].name} morph tip={readTip(says)} share={{ value: says.pct / 100, label: `${nth(says.pct)} percentile of the layer` }}>
     <div use:fit>

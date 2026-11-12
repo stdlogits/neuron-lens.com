@@ -30,8 +30,8 @@
   const agree = $derived(headAgreement(head));
   const written = $derived(head.outRz.map(([token, count]) => ({ token, count, flags: agree.has(stem(token)) ? 1 : 0 })));
 
-  const FIRINGS = "What it does in real text: where it fires, what it looks at there, and how often and how hard";
-  const STREAM = "What its own output holds where it fires. None of this reached the labeller.";
+  const FIRINGS = "What it does in real text";
+  const STREAM = "What its output holds where it fires";
   const baskets = $derived([
     { value: "weights", label: "Weights", hint: WEIGHTS_BASKET },
     ...(written.length ? [{ value: "stream", label: "Stream", hint: STREAM }] : []),
@@ -50,7 +50,7 @@
 
     {#if written.length}
       <Basket id="stream" title="Stream" tip={STREAM}>
-        <Group title="Pushes the model to say" tip="What its output at its top firings pushes the model to say, against the layer's other heads (R-lens, z)" items={written} />
+        <Group title="Pushes the model to say" tip="What its output pushes the model to say" items={written} />
       </Basket>
     {/if}
 
@@ -58,8 +58,8 @@
       <HeadMedia {head} />
       <div class="fires">
         <div class="keys">
-          <span class="meta key hit" data-tip="The token where its output was largest">fired here</span>
-          <span class="meta key src" data-tip="The token it attended to most from there">looked at</span>
+          <span class="meta key hit" data-tip="Where its output peaked">fired here</span>
+          <span class="meta key src" data-tip="What it looked at most from there">looked at</span>
         </div>
         {#each head.contexts as context, i (i)}<Context {context} {i} />{:else}<p class="meta none">No firings recorded</p>{/each}
       </div>

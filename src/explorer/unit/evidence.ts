@@ -13,24 +13,24 @@ export interface Fact { k: string; v: string; tip?: string; lang?: string }
 export const sideReads = (reads: LensRead[], side: "input" | "output") => reads.filter((read) => LENSES[read.col].side === side);
 
 /** The tip on every "From its weights". */
-export const WEIGHTS = "What each lens reads from its weights, in the order this depth trusts them";
+export const WEIGHTS = "Read from its weights, most trusted first";
 
 /** The tip on a unit's Weights basket. */
-export const WEIGHTS_BASKET = "What the lenses read from its weights alone, with no text run through the model";
+export const WEIGHTS_BASKET = "Read from its weights alone, with no text run";
 
 /** The tips on a head's "How it attends" and "Copying". */
-export const ATTENDING = "How its weights choose where to look, and how well that matches what it does";
-export const COPYING = "How much it copies, read from its weights";
+export const ATTENDING = "How its weights pick where to look";
+export const COPYING = "How much it copies, from its weights";
 
 /** The tip on "Beyond what it reads". */
-export const ORTH = "What its write says with everything it reads taken out: what it adds of its own";
+export const ORTH = "What it writes beyond what it reads";
 
 /** Its write against what it reads, from its weights. */
 export const weightFacts = (pole: Pole): Fact[] => {
   const [gate, up] = pole.cos;
   return [
-    ...(gate === null ? [] : [{ k: "Toward its gate", v: signed(gate), tip: "The cosine of its write with the gate side of what it reads" }]),
-    ...(up === null ? [] : [{ k: "Toward its up side", v: signed(up), tip: "The cosine of its write with the up side of what it reads" }]),
+    ...(gate === null ? [] : [{ k: "Toward its gate", v: signed(gate), tip: "Cosine of its write with its gate read" }]),
+    ...(up === null ? [] : [{ k: "Toward its up side", v: signed(up), tip: "Cosine of its write with its up read" }]),
   ];
 };
 
@@ -38,8 +38,8 @@ export const weightFacts = (pole: Pole): Fact[] => {
 export const streamFacts = (pole: Pole): Fact[] => {
   const [parallel, orthogonal] = pole.flow ?? [null, null];
   return [
-    ...(parallel === null ? [] : [{ k: parallel >= 0 ? "Amplifies what it reads" : "Suppresses what it reads", v: `×${Math.abs(parallel).toFixed(2)}`, tip: "Its write along what it reads, as a multiple of that part of the stream, mean over its firings" }]),
-    ...(orthogonal === null ? [] : [{ k: "Adds off it", v: `×${orthogonal.toFixed(2)}`, tip: "How much it writes off that direction, on the same scale" }]),
+    ...(parallel === null ? [] : [{ k: parallel >= 0 ? "Amplifies what it reads" : "Suppresses what it reads", v: `×${Math.abs(parallel).toFixed(2)}`, tip: "How much it scales what it reads" }]),
+    ...(orthogonal === null ? [] : [{ k: "Adds off it", v: `×${orthogonal.toFixed(2)}`, tip: "How much it writes off that direction" }]),
   ];
 };
 
@@ -69,11 +69,11 @@ export const nth = (n: number) => `${n}${SUFFIX[ordinal.select(n)] ?? "th"}`;
 /** The tags beside a neuron's band, from its index flags (known before its detail loads). */
 export function neuronTags(flags: number): { label: string; tip: string }[] {
   const tags: { label: string; tip: string }[] = [];
-  if (flags & FLAG_IMAGE) tags.push({ label: "Images", tip: "A side fires reliably on one kind of image" });
-  if (flags & FLAG_AUDIO) tags.push({ label: "Sound", tip: "A side fires reliably on one kind of sound" });
-  if (flags & FLAG_PREDICTS) tags.push({ label: "Predicts", tip: "Fires just before a word it then pushes the model to say" });
-  if (flags & FLAG_SUPPRESSES) tags.push({ label: "Suppresses", tip: "Holds back the word the model is about to say" });
-  if (flags & FLAG_DETECTOR) tags.push({ label: "Fires on one token", tip: "Most of its top firings land on one token" });
+  if (flags & FLAG_IMAGE) tags.push({ label: "Images", tip: "Fires reliably on one kind of image" });
+  if (flags & FLAG_AUDIO) tags.push({ label: "Sound", tip: "Fires reliably on one kind of sound" });
+  if (flags & FLAG_PREDICTS) tags.push({ label: "Predicts", tip: "Fires just before a word it pushes" });
+  if (flags & FLAG_SUPPRESSES) tags.push({ label: "Suppresses", tip: "Holds back the word about to come" });
+  if (flags & FLAG_DETECTOR) tags.push({ label: "Fires on one token", tip: "Most top firings land on one token" });
   return tags;
 }
 
@@ -90,13 +90,13 @@ export const oftenFacts = (act: { rate: number; slices: number[] }, share: strin
 ];
 
 export const neuronStrength = (pole: Pole): Fact[] => [
-  { k: "Typical peak", v: formatValue(pole.act.top), tip: "Its typical value at its top firings" },
+  { k: "Typical peak", v: formatValue(pole.act.top), tip: "Typical value at its top firings" },
   { k: "Top", v: formatValue(pole.act.max), tip: "The largest value seen" },
-  { k: "Past the first token", v: percent(pole.act.pos), tip: "Share of its top firings after the first position, where many units fire regardless" },
+  { k: "Past the first token", v: percent(pole.act.pos), tip: "Top firings not on the first token" },
 ];
 
 export const headStrength = (head: HeadDetail): Fact[] => [
-  { k: "Typical output", v: formatValue(head.act.top), tip: "The typical size of its output at its top firings" },
+  { k: "Typical output", v: formatValue(head.act.top), tip: "Typical output size at its top firings" },
   { k: "Top", v: formatValue(head.act.max), tip: "The largest output seen" },
 ];
 
@@ -108,8 +108,8 @@ export const headAttending = (head: HeadDetail, groupSize: number): Fact[] => [
   ...score("Seeks what it's about to say", head.copy.selfR, "QK self·R: how much a query about to say a token favours an earlier copy of it, the median over tokens"),
   ...score("Looks where its weights say", head.copy.qkCtx, "How well its attention read (QK·S) ranks tokens by the attention they get in real text"),
   ...score("Attends to what it copies", head.copy.qkOv, "How well its attention read (QK·S) ranks tokens as its copy read (OV·R) does"),
-  { k: "Key-value head", v: String(head.kv), tip: groupSize > 1 ? `Shared with ${groupSize - 1} other query ${groupSize - 1 === 1 ? "head" : "heads"} of this layer` : "Its own" },
-  ...(groupSize > 1 ? [{ k: "Shared by", v: `${groupSize} heads`, tip: "Query heads that read the same keys and values" }] : []),
+  { k: "Key-value head", v: String(head.kv), tip: groupSize > 1 ? `Shared with ${groupSize - 1} other ${groupSize - 1 === 1 ? "head" : "heads"}` : "Its own" },
+  ...(groupSize > 1 ? [{ k: "Shared by", v: `${groupSize} heads`, tip: "Heads reading the same keys and values" }] : []),
 ];
 
 export const headCopying = (head: HeadDetail): Fact[] => [

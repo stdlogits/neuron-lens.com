@@ -108,7 +108,7 @@
 
           {#if image}
             <div class="block">
-              <p class="line"><span class="head">In images</span>{#if image.reliable}<b>{image.label}</b>{#if image.auroc !== null}<span class="meta" data-tip="How well it tells this label's images from the rest, on images held out: 0.5 is chance, 1 perfect">AUROC {image.auroc.toFixed(2)}</span>{/if}{/if}</p>
+              <p class="line"><span class="head">In images</span>{#if image.reliable}<b>{image.label}</b>{#if image.auroc !== null}<span class="meta" data-tip="How well it picks out this label's images: 1 is perfect, 0.5 chance">AUROC {image.auroc.toFixed(2)}</span>{/if}{/if}</p>
               <ul class="tiles">
                 {#each images as item, i (item.doc)}
                   <li class="rise" style:--i={i}>

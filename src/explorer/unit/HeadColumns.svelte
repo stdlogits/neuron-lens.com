@@ -39,7 +39,7 @@
   <div class="col">
     <h3 class="col-head head">Writes</h3>
     {#if measured && head.outRz.length}
-      <Group title="In real text" tip="What its output at its top firings pushes the model to say, against the layer's other heads (R-lens, z)"
+      <Group title="In real text" tip="What its output pushes the model to say"
         items={head.outRz.map(([token, count]) => ({ token, count, flags: lit(token) }))} />
     {/if}
     {#if outputs.length}<Group title="From its weights" tip={WEIGHTS}><Reads reads={outputs} {agree} scope="all heads" /></Group>{/if}
