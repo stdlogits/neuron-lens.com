@@ -74,6 +74,7 @@
   <p class="foot meta">
     <span><kbd>j</kbd> <kbd>k</kbd> step through a layer</span>
     <span><kbd>/</kbd> search</span>
+    <span><kbd>r</kbd> a random unit</span>
     {#if lens.model.media.length}<span>Images and sounds shown under their licences, listed in <a class="prose-link" href="/credits">Credits</a></span>{/if}
   </p>
 </div>

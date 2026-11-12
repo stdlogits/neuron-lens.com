@@ -308,7 +308,8 @@
       const wide = L === lens.layer && slot === selected ? 0.86 : 0.62;
       rect = new DOMRect(box.left + L * column + (column * (1 - wide)) / 2, box.top + PAD + slot! * pitch, column * wide, bar);
     }
-    showTip(rect, content(L, slot ?? -1, unit));
+    // The first waits for the pointer to rest, as every tip does; once one shows, the rest follow the pointer at once.
+    showTip(rect, content(L, slot ?? -1, unit), { wait: true });
   }
   function unpoint() {
     if (!pointed) return;

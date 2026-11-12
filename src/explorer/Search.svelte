@@ -268,6 +268,34 @@
     }
   }
 
+  /** Somewhere new: a unit at random, among the curated neurons and every head alike, never the one open now. */
+  function random() {
+    const index = lens.index?.id === lens.modelId ? lens.index : null;
+    const neurons = index?.neurons ?? [];
+    const heads = lens.heads ?? [];
+    const total = neurons.length + heads.length;
+    if (!total) return;
+    for (let tries = 0; tries < 8; tries += 1) {
+      const at = Math.floor(Math.random() * total);
+      const [unit, layer, index_] = at < neurons.length ? ["neurons", neurons[at][0], neurons[at][1]] as const : ["heads", heads[at - neurons.length][0], heads[at - neurons.length][1]] as const;
+      if (unit === lens.unit && layer === lens.layer && index_ === lens.selected && tries < 7) continue;
+      lens.open(unit, layer, index_);
+      reveal();
+      return;
+    }
+  }
+  // "r" opens one from anywhere, unless typing.
+  $effect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "r" || event.metaKey || event.ctrlKey || event.altKey || lens.graphOpen) return;
+      if ((event.target as HTMLElement | null)?.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])")) return;
+      event.preventDefault();
+      random();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  });
+
   function tryExample(text: string) {
     const ref = parseRef(text, lens.model);
     if (ref) { clearTimeout(timer); query = asked = text; choose({ ...ref, side: ref.unit === "heads" ? 2 : 0, title: "", matched: "", score: 1 }); return; }
@@ -479,14 +507,17 @@
       </div>
     {/if}
   </div>
-  {#if lens.model.examples.length}
-    <p class="try">
-      <span>Try</span>
-      {#each lens.model.examples as example, i (example)}
-        {#if i}<span class="dot" aria-hidden="true">·</span>{/if}<button type="button" class="prose-link" lang={exampleLang(example)} onclick={() => tryExample(example)}>{example}</button>
-      {/each}
-    </p>
-  {/if}
+  <div class="under">
+    {#if lens.model.examples.length}
+      <p class="try">
+        <span>Try</span>
+        {#each lens.model.examples as example, i (example)}
+          {#if i}<span class="dot" aria-hidden="true">·</span>{/if}<button type="button" class="prose-link" lang={exampleLang(example)} onclick={() => tryExample(example)}>{example}</button>
+        {/each}
+      </p>
+    {/if}
+    <button type="button" class="random" data-tip="A neuron or a head at random (r)" disabled={!lens.index && !lens.heads} onclick={random}>Random</button>
+  </div>
   <p class="sr-only" aria-live="polite">{status}</p>
 </div>
 
@@ -590,6 +621,11 @@
   /* The query in the titles: the tint's wash, as a selection is. */
   :global(::highlight(search-terms)) { background-color: color-mix(in oklch, var(--tint) 26%, transparent); color: var(--ink); }
 
+  .under { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s4); }
+  .random { height: 32px; padding: 0 var(--s4); border: 0; border-radius: var(--r-pill); background: var(--wash); color: var(--ink); font: var(--type-control); cursor: pointer; transition: background-color var(--fast) var(--ease), scale var(--fast) var(--ease); }
+  .random:active { scale: 0.97; }
+  .random:disabled { color: var(--ink3); cursor: default; }
+  @media (hover: hover) { .random:hover:not(:disabled) { background: var(--wash2); } }
   .try { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s2); margin: 0; color: var(--ink3); font: var(--type-small); }
   .try span:first-child { margin-inline-end: var(--s1); }
   .try button { padding: 0; border: 0; background: transparent; font: inherit; cursor: pointer; }

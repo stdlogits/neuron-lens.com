@@ -25,6 +25,7 @@ What the site draws for itself, in Ledger:
   a track of where it sits in depth; chips narrow it to neurons or heads, and it shows ten at a time. Every match lights
   on the atlas; the one arrowed to or pointed at is picked out there too. An empty field shows the recent searches (this
   browser only). ⌘/ctrl-click or a middle click opens a result in a new tab; a press outside puts the results away.
+  Random (or r) opens a curated neuron or a head at random.
   As the query changes, results that stay glide to their new places (240 ms), those that go fade (120 ms) and new ones
   rise; the chips' paper slides like a segmented control's, counts morph, and the notes open and close. On the atlas,
   a change of what is lit (a search, a filter) spreads out from the best match's layer, 10 ms a layer, at most 300 ms;
