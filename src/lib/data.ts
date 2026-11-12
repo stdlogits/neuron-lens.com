@@ -590,14 +590,18 @@ export type UnitRef = { unit: "neurons"; layer: number; index: number } | { unit
 
 /** "L8 344", "l8/n344", "8.344", "L8·n344" -> a neuron; "L20h17", "L20 h17", "20.h17" -> a head. */
 export function parseRef(query: string, model: ModelInfo): UnitRef | null {
-  const text = query.trim();
+  let text = query.trim();
+  // A unit's address pasted whole (this site's, or any path ending /L8/n344 or /L8/h3).
+  const path = text.match(/\/L(\d{1,2})\/([nh]\d{1,5})(?:[?#].*)?$/i);
+  if (path) text = `L${path[1]} ${path[2]}`;
   const head = text.match(/^l?\s*(\d{1,2})\s*[\s./·:,_-]?\s*h\s*(\d{1,2})$/i);
   if (head) {
     const layer = Number(head[1]);
     const index = Number(head[2]);
     return layer < model.layers && index < model.heads ? { unit: "heads", layer, index } : null;
   }
-  const neuron = text.match(/^l?\s*(\d{1,2})\s*[\s./·:,_-]\s*n?\s*(\d{1,5})$/i);
+  // "L8 344", "L8·n344", and "L8n344" (with the n, no separator is needed).
+  const neuron = text.match(/^l?\s*(\d{1,2})\s*(?:[\s./·:,_-]\s*n?|n)\s*(\d{1,5})$/i);
   if (!neuron) return null;
   const layer = Number(neuron[1]);
   const index = Number(neuron[2]);

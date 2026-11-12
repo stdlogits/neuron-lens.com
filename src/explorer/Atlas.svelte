@@ -3,7 +3,7 @@
   import Scale from "./atlas/Scale.svelte";
   import { matchKey, useLens } from "./lens.svelte";
   import { ALL_ROWS, SHADES, byteShades, field, shadeScale } from "./atlas/levels";
-  import { IN, ease, fadeOut, glide, hideTip, showTip, type TipContent } from "@stdlogits/ledger";
+  import { GLIDE, IN, ease, fadeOut, glide, hideTip, showTip, type TipContent } from "@stdlogits/ledger";
   import { headId, loadLayerIndex, neuronId, type HeadRow, type IndexRow } from "../lib/data";
   import { depthColor } from "../lib/models";
   import { theme } from "../lib/theme";
@@ -189,6 +189,38 @@
     canvas.getContext("2d")?.putImageData(image, 0, 0);
   });
 
+  // A search or a filter changing what is lit: the change spreads out across the layers from the best match's
+  // layer (or the current one), 10 ms a layer, rather than every bar changing at once. Set before the page is,
+  // so the bars' new strengths and their delays arrive together; a bar pointed at or looked at never waits.
+  const SWEEP_MOST = 300;
+  let sweeping = $state(false);
+  let sweepTimer = 0;
+  $effect.pre(() => {
+    void lens.matches;
+    void lens.activeFilter;
+    untrack(() => {
+      sweeping = true;
+      clearTimeout(sweepTimer);
+      sweepTimer = window.setTimeout(() => (sweeping = false), GLIDE + SWEEP_MOST + 40);
+    });
+  });
+  $effect(() => () => clearTimeout(sweepTimer));
+  const sweepFrom = $derived(lens.matches.from ?? lens.layer);
+  const sweepOf = (L: number) => `${Math.min(SWEEP_MOST, Math.abs(L - sweepFrom) * 10)}ms`;
+
+  // The search result being looked at: its bar lifted and its column washed, or in All mode a dot on its cell.
+  const peeked = $derived.by(() => {
+    const p = lens.peek;
+    if (!p || p.unit !== lens.unit || !ready) return null;
+    if (mode === "all") {
+      if (p.index >= lens.model.mlp || width === 0) return { layer: p.layer, slot: -1, spot: null };
+      const { x, y } = cell(p.layer, p.index);
+      return { layer: p.layer, slot: -1, spot: { x: x + grid.cw / 2, y: y + grid.ch / 2 } };
+    }
+    const slot = (mode === "heads" ? headColumns : neuronColumns)[p.layer]?.findIndex((row) => row[1] === p.index) ?? -1;
+    return { layer: p.layer, slot, spot: null };
+  });
+
   /** All mode: the selected neuron's row, marked by an ink bar as wide as a selected bar. */
   const pin = $derived.by(() => {
     if (mode !== "all" || lens.selected === null || lens.selected >= lens.model.mlp || width === 0) return null;
@@ -365,9 +397,9 @@
   onkeydown={key}
   onfocus={() => (pushed = false)}
 >
-  <div class="plot" bind:this={area} use:glide style:height="{height}px">
+  <div class="plot" class:sweeping bind:this={area} use:glide style:height="{height}px">
     {#each layers as L (L)}
-      <span class="col" class:hot={hover === L} aria-current={L === lens.layer ? "true" : undefined}></span>
+      <span class="col" class:hot={hover === L || peeked?.layer === L} aria-current={L === lens.layer ? "true" : undefined}></span>
     {/each}
     {#key plot.key}
       <div class="bars" class:arrive={plot.arrive} in:plotIn={plot.arrive} out:fadeOut>
@@ -375,9 +407,9 @@
           <canvas class="field" bind:this={canvas} style:width="{width}px" style:height="{height}px" aria-hidden="true"></canvas>
         {:else}
           {#each columns as column, L}
-            <div class="stack" style:--c={depthColor(lens.model, L)} style:--L={L}>
+            <div class="stack" style:--c={depthColor(lens.model, L)} style:--L={L} style:--sweep={sweepOf(L)}>
               {#each column as item, i}
-                <i class:sel={L === lens.layer && i === selected} class:lit={lit?.layer === L && lit.slot === i} style:--o={item.o}></i>
+                <i class:sel={L === lens.layer && i === selected} class:lit={lit?.layer === L && lit.slot === i} class:peek={peeked?.layer === L && peeked.slot === i} style:--o={item.o}></i>
               {/each}
             </div>
           {/each}
@@ -386,6 +418,7 @@
     {/key}
     {#if pin}<span class="pin" style:width="{pin.w}px" style:transform="translate({pin.x}px, {pin.y}px)"></span>{/if}
     {#if spotted && mode === "all"}<span class="spot" style:transform="translate({spotted.x}px, {spotted.y}px)"></span>{/if}
+    {#if peeked?.spot && !spotted}<span class="spot" style:transform="translate({peeked.spot.x}px, {peeked.spot.y}px)"></span>{/if}
     <span class="probe" bind:this={probe} aria-hidden="true"></span>
   </div>
   <Scale model={lens.model} layer={lens.layer} {hover} {width} dots={lens.unit === "heads"} />
@@ -444,7 +477,11 @@
     opacity: var(--o);
     transition: width var(--glide) var(--ease), background-color var(--glide) var(--ease), opacity var(--glide) var(--ease);
   }
+  .sweeping .stack i { transition-delay: 0ms, 0ms, var(--sweep); }
+  .sweeping .stack i:is(.lit, .peek, .sel) { transition-delay: 0ms; }
   .stack i.lit { opacity: 1; transition-duration: var(--fast); }
+  /* A search result looked at: full strength and as wide as a selected bar, in its depth colour. */
+  .stack i.peek { width: 86%; opacity: 1; transition-duration: var(--fast); }
   .stack i.sel { width: 86%; background: var(--ink); opacity: 1; }
   .narrow .plot { --glide-radius: var(--s1); }
   .narrow .col { border-radius: var(--s1); }

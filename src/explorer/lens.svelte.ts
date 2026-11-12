@@ -29,7 +29,7 @@ const MEDIA_FILTERS: Filter[] = [
 const HEAD_ROLES = [ROLE_INDUCTION, ROLE_DUPLICATE, ROLE_PREVIOUS, ROLE_SINK, ROLE_CARRIES, ROLE_NAMES];
 
 /** Search matches, as "layer:index" keys, lit up on the atlas and in the list. */
-export interface Matches { neurons: Set<string>; heads: Set<string> }
+export interface Matches { neurons: Set<string>; heads: Set<string>; /** The best match's layer, where the atlas's light spreads from. */ from?: number }
 export const matchKey = (layer: number, index: number) => `${layer}:${index}`;
 
 export class Lens {
@@ -69,6 +69,8 @@ export class Lens {
 
   filter = $state("all");
   matches = $state<Matches>({ neurons: new Set(), heads: new Set() });
+  /** The search result being looked at (arrowed to or pointed at): the atlas picks out its bar. */
+  peek = $state<{ unit: Unit; layer: number; index: number } | null>(null);
 
   // ---------- the list of the current layer
 

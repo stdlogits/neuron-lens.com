@@ -559,7 +559,7 @@
     untrack(() => { if (picked && !nodes.some((n) => n.key === picked!.key)) picked = null; });
   });
 
-  // Find: a unit by its ID, or the units whose titles or firings hold a word. What it finds stays and rings; the
+  // Find: a unit by its ID, or the units whose labels hold a word. What it finds stays and rings; the
   // rest falls away; the view glides to take in all of it; Enter (or the arrows) steps from one to the next.
   const lens = useLens();
   let searching = $state(false);
@@ -775,7 +775,7 @@
             onkeydown={searchKey}
             onfocus={warm}
             type="search"
-            placeholder="A unit, or a word in its title or firings"
+            placeholder="A unit, or a word in its labels"
             aria-label="Find in the graph"
             autocomplete="off"
             autocapitalize="off"

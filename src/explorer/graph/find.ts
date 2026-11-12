@@ -1,7 +1,7 @@
 // What a search in the full-screen graph finds among the units it shows: a unit by its ID (L8·n344, n344,
 // L8 for a whole layer, h3, L8h3), or by its words: in its title, or among the words the search file holds
-// for it (what the curated neurons' poles and the heads fire on and are labelled with, search/engine.ts),
-// so a word finds a unit whose title says it otherwise. A word in another script also looks for its English.
+// for it (the words of the curated neurons' poles' and the heads' labels, search/engine.ts), so a word finds a
+// unit whose shown title doesn't say it. A word in another script also looks for its English.
 import { FOREIGN, stem } from "@stdlogits/ledger";
 import { findWords } from "../search/engine";
 import { matchKey } from "../lens.svelte";

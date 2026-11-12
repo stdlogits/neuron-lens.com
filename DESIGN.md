@@ -16,6 +16,20 @@ What the site draws for itself, in Ledger:
   Ledger's DESIGN.md.
 - The header's placement of `ThemeButton`, and the no-script summary's rules (`src/styles/site.css`).
 - The translations Ledger draws (`src/lib/translate.svelte.ts`, installed with `setTranslator`).
+- The search (`src/explorer/Search.svelte`, matching in `search/engine.ts`), as wide as the atlas under it. A word finds
+  the curated neurons' poles and the heads whose labels hold it; an ID (or a unit's pasted address) opens its unit, and
+  "L8" or "layer 8" its layer. Each word counts: units matching every word come first, and a title holding the whole
+  phrase rises; a quoted phrase must be in the title. A word with nothing close is matched within a typo or two (≈), and
+  a query that finds nothing offers what it might mean. Each result shows its layer's depth colour, the query marked in
+  its title in the tint's wash (with the browser's highlights, so the title stays a `LabelText`), what it matched, and
+  a track of where it sits in depth; chips narrow it to neurons or heads, and it shows ten at a time. Every match lights
+  on the atlas; the one arrowed to or pointed at is picked out there too. An empty field shows the recent searches (this
+  browser only). ⌘/ctrl-click or a middle click opens a result in a new tab; a press outside puts the results away.
+  As the query changes, results that stay glide to their new places (240 ms), those that go fade (120 ms) and new ones
+  rise; the chips' paper slides like a segmented control's, counts morph, and the notes open and close. On the atlas,
+  a change of what is lit (a search, a filter) spreads out from the best match's layer, 10 ms a layer, at most 300 ms;
+  a bar pointed at or looked at never waits. A result looked at for 180 ms starts loading its unit, so it opens ready.
+  Reduced motion keeps the fades and drops the glides.
 - The connections graph (`src/explorer/graph/`): a band per layer down the page, a dot per neuron side
   and a bar per head, both in the depth colour of their layer. A link is as heavy as its
   flow, in the depth colour of its source, or grey and dashed where it pushes against: the one hue is depth.
@@ -36,7 +50,7 @@ What the site draws for itself, in Ledger:
   are spaced for a two-line title under each mark at the opening zoom. The bar over it holds the unit, the views, the
   reach, Back and Find, with close at the top right; on a phone the views and reach take a row under the unit. Find
   (the search button, "/" or ⌘/ctrl-F) takes a unit's ID (L8·n344, n344, L8, h3) or a word in a unit's title or among
-  what it fires on (the search file): what it finds stays and rings once, the rest falls away, both spreading out from
+  its labels (the search file): what it finds stays and rings once, the rest falls away, both spreading out from
   the middle of the screen, the view glides to take in what was found, and Enter steps from one to the next.
   The depth axis down the left names the bands; the credit sits at the foot, so a screenshot carries it.
 - A tap (touch or pen) on a unit in either graph opens its card (`src/explorer/graph/Card.svelte`), the tip's words on

@@ -276,6 +276,30 @@ test("search finds a word, lights its units, and opens one", async ({ page }) =>
   await expect(atlas(page)).toHaveAttribute("aria-valuenow", "20");
 });
 
+test("search forgives a typo, names a layer, and remembers what was chosen", async ({ page }) => {
+  await page.goto("/qwen3-8b");
+  const search = page.getByRole("combobox", { name: "Search neurons and heads" });
+  const matches = page.getByRole("listbox", { name: "Matches" });
+  await expect(bars(page).first()).toBeAttached();
+
+  // A letter swapped still finds both units "miami" finds, as close matches, and offers the word.
+  await search.fill("maimi");
+  await expect(matches.getByRole("option")).toHaveCount(2);
+  await expect(page.getByText(/Did you mean/)).toBeVisible();
+  await page.getByRole("button", { name: /^miami$/i }).click();
+  await expect(search).toHaveValue(/^miami$/i);
+
+  // "L8" offers its layer, which opens it.
+  await search.fill("L8");
+  await matches.getByRole("option", { name: /^L8 Layer 8/ }).click();
+  await expect(page).toHaveURL(/\/qwen3-8b\/L8$/);
+
+  // What was searched for shows again on an empty field.
+  await search.fill("");
+  await search.focus();
+  await expect(page.getByRole("listbox", { name: "Recent searches" }).getByRole("option", { name: /L8/ })).toBeVisible();
+});
+
 test("the Easiest and All tabs switch the list and the address", async ({ page }) => {
   // Layer 33 of the mock lists one neuron among its easiest and three in all.
   const index = await fixture<CatalogIndex>("gemma-4-12b/index.json");

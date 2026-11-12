@@ -86,7 +86,8 @@
   .figures { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s5); color: var(--ink3); font: var(--type-small); }
   .figure { cursor: help; }
   .figures b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
-  .find { width: min(100%, 640px); }
+  /* As wide as the atlas under it, so its results have room for what each says. */
+  .find { width: 100%; }
   .map { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); min-width: 0; }
   .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s4); min-width: 0; }
   .left { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s5); }
