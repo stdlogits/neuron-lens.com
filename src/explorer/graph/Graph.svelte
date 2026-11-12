@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onDestroy, untrack } from "svelte";
-  import { fadeIn, fadeOut } from "@stdlogits/ledger";
+  import { fadeIn, fadeOut, hideTip } from "@stdlogits/ledger";
   import { bandOf, depthColor, type ModelInfo } from "../../lib/models";
   import { headId, neuronId, percent } from "../../lib/data";
   import { Ink, OVERSCAN, type View } from "./ink";
   import { layout, rows, type Layout, type Open, type Spot } from "./layout";
   import { Stage, type Look, type Seated, type Shown } from "./stage";
   import { headInput, type Graph, type GraphEdge, type Mode } from "./trace";
+  import type { Picked } from "./Card.svelte";
 
   // The unit's directed graph, drawn at true depth: a band per layer down the page, so what feeds it
   // sits above it and what it feeds below. A dot is a neuron's side and a bar a head, in the depth
@@ -14,8 +15,9 @@
   // dashed where it pushes against. Pointing at a unit lights what connects it to the centre. The
   // stage (stage.ts) owns where everything is and how it moves; this owns what each thing looks like.
   // The links are drawn on a canvas (ink.ts): its own, behind the marks, or the navigator's, which sits
-  // outside its zoom and draws them under its view, so they stay sharp at any zoom.
-  let { graph, model, mode, href, hovered, point, height = 780, open, labels = null, labelScale = 1, axis = true, onlaid, surface }: {
+  // outside its zoom and draws them under its view, so they stay sharp at any zoom. A touch, with no
+  // hover to show a unit's tip, opens its card (onpick) where a mouse's click would go straight there.
+  let { graph, model, mode, href, hovered, point, height = 780, open, labels = null, labelScale = 1, axis = true, onlaid, onpick, found = null, wave = null, round = 0, surface }: {
     graph: Graph;
     model: ModelInfo;
     mode: Mode;
@@ -34,6 +36,14 @@
     axis?: boolean;
     /** Where it was laid out. */
     onlaid?: (placed: Layout) => void;
+    /** A unit tapped (by touch or pen): its card, in place of going there. */
+    onpick?: (picked: Picked) => void;
+    /** What a search found (the navigator's): the rest falls away, and links between two found stand out. */
+    found?: Set<string> | null;
+    /** How long each unit waits (ms) before it falls away or rings, so the change spreads out from the middle of the screen. */
+    wave?: Map<string, number> | null;
+    /** Which search this is: each new one rings what it found again. */
+    round?: number;
     /** A canvas of the navigator's own to draw the links on, its size on screen, and its view of the graph. */
     surface?: { canvas: HTMLCanvasElement; width: number; height: number; view: View } | null;
   } = $props();
@@ -116,6 +126,29 @@
     const way = n.hop === 1 ? "Directly" : `${n.hop} links`;
     return `${way} ${n.side === "up" ? "upstream" : "downstream"} in the weights`;
   }
+  // A tap shows the unit's card rather than its tip, which Ledger shows on a touch's pointerover (on the page's
+  // root, which a delegated handler would reach too late) and its pointerdown (on the document).
+  let touched = false;
+  function hush(el: HTMLElement) {
+    const over = (event: PointerEvent) => { if (event.pointerType !== "mouse" && onpick) event.stopPropagation(); };
+    el.addEventListener("pointerover", over);
+    return { destroy: () => el.removeEventListener("pointerover", over) };
+  }
+  function pressed(event: PointerEvent) {
+    touched = event.pointerType !== "mouse";
+    if (touched && onpick) {
+      event.stopPropagation();
+      hideTip();
+    }
+  }
+  function clicked(event: MouseEvent, node: Seated) {
+    const touch = touched;
+    touched = false;
+    if (!touch || !onpick || event.defaultPrevented) return;
+    event.preventDefault();
+    hideTip();
+    onpick({ key: node.key, name: nameOf(node), title: node.wire?.title ?? "", sub: standing(node), href: href(node.kind, node.layer, node.index), color: depthColor(model, node.layer) });
+  }
   const ticks = $derived(axis ? Array.from({ length: model.layers }, (_, layer) => layer).filter((layer) => layer % 5 === 0) : []);
   const depth = $derived(rows(graph, HEIGHT, model.layers));
 
@@ -129,13 +162,18 @@
   function look(edge: GraphEdge): Look {
     const strength = Math.sqrt(Math.min(1, edge.flow / top));
     const against = edge.value < 0;
+    const ends = found ? Number(found.has(edge.from)) + Number(found.has(edge.to)) : 0;
     return {
       color: ink ? ink.color(against ? "var(--ink3)" : depthColor(model, layers.get(edge.from) ?? 0)) : "",
       width: 0.7 + 3.3 * strength,
-      alpha: lit ? (lit.edges.has(edge.key) ? 0.95 : 0.06) : 0.28 + 0.5 * strength,
+      alpha: lit ? (lit.edges.has(edge.key) ? 0.95 : 0.06) : found ? [0.03, 0.12, 0.5 + 0.45 * strength][ends] : 0.28 + 0.5 * strength,
       against,
     };
   }
+  /** Out of what a search found, unless it lies on what the pointed-at unit lights. */
+  const away = (key: string) => !!found && !found.has(key) && !(lit && lit.nodes.has(key));
+  /** Faded while another unit is lit. */
+  const dim = (key: string) => !!lit && !lit.nodes.has(key) && !away(key);
   /** The canvas alone, so the navigator's view moving doesn't make the painter anew. */
   const canvas = $derived(surface?.canvas ?? own);
   $effect(() => {
@@ -143,40 +181,40 @@
     // The navigator's canvas draws past the screen, so a pan mostly moves what is drawn.
     const made = new Ink(canvas, () => stage.restyle(false), untrack(() => (surface ? OVERSCAN : 0)));
     ink = made;
-    untrack(() => stage.draw(made, look, (key) => !!lit && !lit.nodes.has(key), (n) => depthColor(model, n.layer)));
+    untrack(() => stage.draw(made, look, (key) => dim(key) || away(key), (n) => depthColor(model, n.layer)));
     return () => {
       made.destroy();
       if (ink === made) ink = null;
     };
   });
-  // Its size and view; then draw as things stand.
+  // Its size and view, and the titles' scale against the marks (which a zoom changes with the view); then
+  // draw as things stand, once.
   $effect(() => {
     if (!ink) return;
+    const scale = labelScale;
     if (surface) {
       ink.resize(surface.width, surface.height);
       ink.setView(surface.view);
-      untrack(() => stage.redraw());
     } else {
       ink.resize(width, HEIGHT + 2 * MARGIN);
       ink.setView({ k: 1, tx: 0, ty: MARGIN });
-      untrack(() => stage.redraw());
     }
-  });
-  // The titles' scale against the marks, for their glass.
-  $effect(() => {
-    const scale = labelScale;
-    if (ink) untrack(() => stage.scaleTitles(scale));
+    untrack(() => {
+      stage.scaleTitles(scale);
+      stage.redraw();
+    });
   });
   // A unit lit or let go, the strongest link changed, a new model's colours: every link takes its look again.
   $effect(() => {
     void lit;
+    void found;
     void top;
     void model;
     if (ink) untrack(() => stage.restyle());
   });
 </script>
 
-<div class="graph" bind:clientWidth={width} style:height={`${HEIGHT}px`} style:--label-scale={labelScale}>
+<div class="graph" bind:clientWidth={width} style:height={`${HEIGHT}px`}>
   {#if width > 0}
     {#each ticks as layer, i (layer)}<span class="tick" style:--i={i} style:top={`${depth.neurons(layer)}px`} data-tip-title={`Layer ${layer}`} data-tip={bandOf(model, layer).name}>{layer}</span>{/each}
     {#if !surface}<canvas class="links" bind:this={own} style:left="0" style:top={`${-MARGIN}px`} aria-hidden="true"></canvas>{/if}
@@ -185,8 +223,14 @@
         class="node"
         class:focus={node.side === "focus"}
         class:hot={hovered === node.key}
-        class:dim={lit && !lit.nodes.has(node.key)}
+        class:dim={dim(node.key)}
+        class:away={away(node.key)}
+        class:found={found?.has(node.key)}
+        style:--wave={wave ? `${wave.get(node.key) ?? 0}ms` : undefined}
+        style:--ring={round % 2 ? "ring-a" : "ring-b"}
+        style:--c={depthColor(model, node.layer)}
         use:seat={node.key}
+        use:hush
         href={href(node.kind, node.layer, node.index)}
         data-tip={node.wire?.title || nameOf(node)}
         data-tip-title={nameOf(node)}
@@ -196,6 +240,8 @@
         onpointerleave={() => point(null)}
         onfocus={() => point(node.key)}
         onblur={() => point(null)}
+        onpointerdown={pressed}
+        onclick={(event) => clicked(event, node)}
       ><i style:background={depthColor(model, node.layer)}></i>{#if labels?.has(node.key)}<span class="label {labels.get(node.key)}" use:titled={[node.key, labels.get(node.key)!]} in:fadeIn out:fadeOut>{node.wire?.title || nameOf(node)}</span>{/if}</a>
     {/each}
   {/if}
@@ -232,14 +278,35 @@
     outline-offset: 2px;
     transition: opacity var(--in) var(--ease), scale var(--in) var(--ease), background-color var(--glide) var(--ease), outline-color var(--glide) var(--ease);
   }
+  /* A search: what it didn't find falls away and what it found rings once, both spreading out from the middle
+     of the screen (--wave); each new search rings again (--ring alternates between two names for one ring). */
+  .node i { transition-delay: var(--wave, 0ms), 0ms, 0ms, 0ms; }
+  .away i { opacity: 0.12; scale: 0.7; }
+  .away .label { opacity: 0; }
+  .found::before {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: var(--r-pill);
+    box-shadow: 0 0 0 2px var(--c);
+    opacity: 0;
+    pointer-events: none;
+    animation: var(--ring) calc(2 * var(--glide)) var(--ease) var(--wave, 0ms) both;
+  }
+  @keyframes ring-a { from { opacity: 0.9; scale: 0.6; } to { opacity: 0; scale: 2.2; } }
+  @keyframes ring-b { from { opacity: 0.9; scale: 0.6; } to { opacity: 0; scale: 2.2; } }
+  @media (prefers-reduced-motion: reduce) { .found::before { animation: none; } .node i { transition-delay: 0ms; } }
   .focus { z-index: 1; }
   .focus i { outline-color: var(--ink); }
   .dim i { opacity: 0.25; }
   /* A title by its mark, where the navigator found room for it, one size on screen at any zoom, wrapped at
      LABEL (Navigator.svelte). Its frosted glass, the tip's, is painted on the links' canvas behind it (ink.ts),
-     where moving the view costs nothing; a backdrop-filter on each title blurred anew every frame. */
+     where moving the view costs nothing; a backdrop-filter on each title blurred anew every frame. Its scale
+     against the marks, --s, is set on each title (stage.ts) rather than inherited from the graph, so a zoom
+     restyles the titles alone. It covers no mark and no other title, so it is part of its unit's target: a
+     pointer or a tap on it is one on the unit. */
   .label {
-    --s: var(--label-scale, 1);
+    --s: 1;
     position: absolute;
     width: max-content;
     max-width: 160px;
@@ -250,7 +317,6 @@
     text-align: center;
     overflow-wrap: anywhere;
     scale: var(--s);
-    pointer-events: none;
     transition: opacity var(--in) var(--ease), color var(--fast) var(--ease);
   }
   .label.below { top: 100%; left: 50%; transform-origin: top center; translate: -50% calc(3px * var(--s)); }

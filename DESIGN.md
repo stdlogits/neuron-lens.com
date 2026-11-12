@@ -23,12 +23,24 @@ What the site draws for itself, in Ledger:
   (Value, Query or Key). A path through any other head goes by its value, and a path into a head's query or key stops there,
   because what those set is where the head looks.
 - The full-screen graph (`src/explorer/graph/Navigator.svelte`, at a unit's address with `?graph`): the same marks, links
-  and motion, opening at 1.5 times the rail's size and moved like a map (drag or scroll, pinch or ⌘/ctrl-scroll or the zoom
-  buttons). Titles stay one size on screen at any zoom, wrapped on the tip's frosted glass, and each sits where it
+  and motion, opening at 1.5 times the rail's size and moved like a map (drag, scroll or the arrow keys; pinch,
+  ⌘/ctrl-scroll, a double tap or the zoom buttons). A drag let go of while moving coasts. The view is held over the
+  graph, whatever shape it has grown to: some mark always stays near the middle of the screen, and a drag or a scroll
+  past that gives like a rubber band (a scroll only a little, however long a trackpad coasts) and springs back. It never
+  zooms out further than the whole graph. Back to the unit glides there. The page under it never scrolls or zooms,
+  whatever the pointer is over (the bar, a tip), and the view fits what the screen shows (a pinch-zoomed page, a phone's
+  keyboard), so the bar stays whole. Titles stay one size on screen at any zoom, through a pinch too, wrapped on the
+  tip's frosted glass, and each sits where it
   touches no mark and no other title: the unit's first, then by flow, under its mark if it can, else over it or beside it.
-  A title with no room waits for a closer zoom, and its tip still names it. Rows are spaced for a two-line title under
-  each mark at the opening zoom. The bar over it holds the unit, the views and the reach; the depth axis down the left
-  names the bands; the credit sits at the foot, so a screenshot carries it.
+  A title with no room waits for a closer zoom, and its tip still names it; a title is part of its unit's target. Rows
+  are spaced for a two-line title under each mark at the opening zoom. The bar over it holds the unit, the views, the
+  reach, Back and Find, with close at the top right; on a phone the views and reach take a row under the unit. Find
+  (the search button, "/" or ⌘/ctrl-F) takes a unit's ID (L8·n344, n344, L8, h3) or a word in a unit's title or among
+  what it fires on (the search file): what it finds stays and rings once, the rest falls away, both spreading out from
+  the middle of the screen, the view glides to take in what was found, and Enter steps from one to the next.
+  The depth axis down the left names the bands; the credit sits at the foot, so a screenshot carries it.
+- A tap (touch or pen) on a unit in either graph opens its card (`src/explorer/graph/Card.svelte`), the tip's words on
+  the tip's glass low on the screen, with a button that goes there; a mouse's click still goes straight there.
 - The graph's motion (`src/explorer/graph/stage.ts`), on Ledger's curve and durations, all on one clock so a link
   never parts from its nodes. Arriving: the unit swells in; its neighbours bud from it ring by ring (at most
   340 ms in all, strongest first, each link growing with its node); the links that make it a graph draw in behind them; the
@@ -38,7 +50,8 @@ What the site draws for itself, in Ledger:
   the navigator under its view so they stay sharp at any zoom, so a large graph moves as smoothly on a slow machine.
   In the navigator the canvas also paints each title's frosted glass (the titles are text alone), and a pan moves one
   layer holding the marks and the canvas by a translation, so panning paints nothing; marks don't take hover while the
-  view moves, and during a pinch the titles scale with the graph, back to one size on screen once it rests.
+  view moves, and during a pinch each title's own scale (set on it, not inherited, so no mark is restyled) keeps it one
+  size on screen, while where the titles sit is worked out again only once the pinch rests.
   Reduced motion keeps the fades and drops the rest.
 
 The explorer's one credit is "Labels by Claude Haiku 5.5".

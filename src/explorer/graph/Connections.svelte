@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
+  import { onDestroy, onMount, untrack } from "svelte";
   import { IconButton, LabelText, Meter, MorphText, Segmented, Swap, Tabs, expand, fadeIn } from "@stdlogits/ledger";
+  import Card, { type Picked } from "./Card.svelte";
   import Graph from "./Graph.svelte";
   import Navigator from "./Navigator.svelte";
   import { focusOf, headInput, nodeKey, trace, type Graph as GraphData, type Mode, type Reach, type Take } from "./trace";
@@ -26,6 +27,31 @@
   }
   onDestroy(() => clearTimeout(wait));
   let graph = $state.raw<GraphData | null>(null);
+
+  // A unit tapped in the rail's graph: its card over the page, and what connects it lit, until it is put away,
+  // its unit leaves the graph, the graph is of another unit, or the graph is scrolled out of view.
+  let picked = $state.raw<Picked | null>(null);
+  const lit = $derived(picked?.key ?? hovered);
+  let pickedFor = "";
+  $effect(() => {
+    const nodes = graph?.nodes ?? [];
+    const focus = nodes.find((node) => node.side === "focus")?.key ?? "";
+    untrack(() => {
+      if (picked && (focus !== pickedFor || !nodes.some((node) => node.key === picked!.key))) picked = null;
+    });
+  });
+  const pick = (next: Picked) => {
+    picked = next;
+    pickedFor = graph?.nodes.find((node) => node.side === "focus")?.key ?? "";
+  };
+  $effect(() => { if (lens.graphOpen) untrack(() => (picked = null)); });
+  let figure = $state<HTMLElement>();
+  $effect(() => {
+    if (!picked || !figure) return;
+    const seen = new IntersectionObserver(([entry]) => { if (!entry.isIntersecting) picked = null; });
+    seen.observe(figure);
+    return () => seen.disconnect();
+  });
 
   const isHead = $derived(lens.unit === "heads");
   // The three full names don't fit beside a 16 px gutter on the narrowest phones.
@@ -184,7 +210,7 @@
 </script>
 
 <aside class="rail" aria-label="Connections">
-  <div class="figure">
+  <div class="figure" bind:this={figure}>
     <div class="tools">
       {#if modes.length > 1}<Segmented options={modes} value={shownMode} onchange={(value: Mode) => (mode = value)} label="Which connections" />{/if}
       <div class="reach" class:off={shownMode === "with"} inert={shownMode === "with"}><Tabs options={reaches} value={reach} onchange={(value: string) => (reach = value as Reach)} label="How far" /></div>
@@ -203,7 +229,8 @@
         {hovered} {point} href={graphHref} name={focusName} title={focusWire?.title ?? ""} close={() => lens.setGraph(false)} />
     {/if}
     {#if graph && !lens.graphOpen}
-      <Graph {graph} model={lens.model} mode={shownMode} href={hrefFor} {hovered} {point} />
+      <Graph {graph} model={lens.model} mode={shownMode} href={hrefFor} hovered={lit} {point} onpick={pick} />
+      {#if picked}<Card {picked} close={() => (picked = null)} fixed />{/if}
       <ul class="key meta" aria-label="Key">
         <li data-tip="One side of a neuron. The larger it is, the more of the flow runs through it"><i class="dot"></i>Neuron</li>
         {#if showsHeads}<li data-tip="An attention head. It sits just above its layer's neurons, because it writes into their stream"><i class="bar"></i>Head</li>{/if}
@@ -222,7 +249,7 @@
         <Swap key={listKey}>
           <div class="rows">
             {#each side.rows as item, i (item.key)}
-              <a class="row rise" style:--i={i} class:on={hovered === item.key} href={item.href} onpointerenter={() => point(item.key)} onpointerleave={() => point(null)}>
+              <a class="row rise" style:--i={i} class:on={lit === item.key} href={item.href} onpointerenter={() => point(item.key)} onpointerleave={() => point(null)}>
                 <span class="id"><i class="swatch" style:background={depthColor(lens.model, item.layer)}></i>{item.name}{#if item.mirrored}<span class="mirror" data-tip="Its other side pushes the opposite way">±</span>{/if}{#if item.through.length}<span data-tip="The inputs of that head it reaches, strongest first">· {item.through.map((through) => THROUGH[through]).join(", ")}</span>{/if}</span>
                 <span class="value" data-tip={valueTip(side.title, item)}><Meter value={Math.abs(item.value) / top(side.rows)} label={valueTip(side.title, item)} />{shownValue(item.value)}</span>
                 <span class="title" class:low={item.low}>{#key item.title}<span in:fadeIn>{#if item.title}<LabelText text={item.title} />{:else}&nbsp;{/if}</span>{/key}</span>

@@ -15,7 +15,7 @@ files. It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now
   address, loads what that place needs and changes place only by going to another address. The rest
   are its parts: `Atlas` (and `atlas/`), `graph/` (the unit's connections: `trace.ts` walks them,
   `layout.ts` places them, `stage.ts` moves them, `Graph` draws them (its links on a canvas, `ink.ts`), `Connections` is the rail, `Navigator` the same graph full
-  screen), `UnitView` (and `unit/`), `Search`
+  screen with its Find (`find.ts`), `Card` a tapped unit's card), `UnitView` (and `unit/`), `Search`
   (and `search/`), `media/`.
 - `src/pages/`: About, Credits, the missing page.
 - `src/lib/`: `data.ts` (the catalog's types and loaders), `models.ts` (each model's shape, its depth
@@ -82,8 +82,10 @@ directed graph at true depth, and its strongest links in words. The graph opens 
 of its flow passes through); Far and All follow it further. Wired to, driven by and fires with are
 three relations and stay three views (findings §17). A head has no wired to, because two heads meet through a matrix and not a dot product;
 what drives it is split over its three inputs, so its views are Value, Query, Key and Fires with. A link's sign has no colour of its own, since the one
-hue is depth: a link that pushes against is grey and dashed. Full screen, the graph moves like a map and keeps
-its titles one size on screen, each placed where it covers no mark and no other title; one without room waits for a closer zoom.
+hue is depth: a link that pushes against is grey and dashed. Full screen, the graph moves like a map, held over the
+graph whatever its shape, and keeps its titles one size on screen, each placed where it covers no mark and no other
+title; one without room waits for a closer zoom. Its Find (`find.ts`) narrows it to the units an ID or a word finds.
+A touch has no hover, so a tap on a unit in either graph opens its card rather than going there.
 Phone widths down to 320 px must not scroll sideways.
 
 `main.ts` loads `@stdlogits/ledger/ledger.css`, then `site.css`, and installs `translator` with

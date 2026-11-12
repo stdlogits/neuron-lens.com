@@ -72,6 +72,25 @@ test("a unit's connections open full screen at ?graph and close back to its page
   await expect(page.getByRole("dialog", { name: /^Connections of L8·n/ })).toBeVisible();
 });
 
+test("full screen, Find narrows the graph to what an ID names, and Escape clears it before closing", async ({ page }) => {
+  await page.goto("/qwen3-8b/L8/n344?graph");
+  const navigator = page.getByRole("dialog", { name: /^Connections of L8·n344/ });
+  await expect(navigator.locator(".node.focus")).toBeVisible();
+  await page.keyboard.press("/");
+  const field = navigator.getByRole("searchbox", { name: "Find in the graph" });
+  await expect(field).toBeFocused();
+  await field.fill("L8·n344");
+  await expect(navigator.locator(".count")).toHaveText("1 found");
+  await expect(navigator.locator(".node.found")).toHaveCount(1);
+  await field.press("Escape");
+  await expect(field).toHaveValue("");
+  await field.press("Escape");
+  await expect(field).toHaveCount(0);
+  await expect(navigator).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(navigator).toHaveCount(0);
+});
+
 test("a deep link loads that head", async ({ page }) => {
   const layer = page.waitForRequest((request) => request.url().endsWith("/data/qwen3-8b/heads/L20.json"));
   await page.goto("/qwen3-8b/L20/h17");

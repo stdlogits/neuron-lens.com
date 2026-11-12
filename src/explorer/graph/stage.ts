@@ -114,6 +114,7 @@ interface Strand {
 interface Title {
   key: string;
   spot: Spot;
+  el: HTMLElement;
   /** Its box before the zoom's counter-scale, in CSS pixels. */
   w: number; h: number;
   /** Fading in or out, as its transitions do; dimmed with its mark while another unit is lit. */
@@ -192,8 +193,9 @@ export class Stage {
   attachTitle(el: HTMLElement, [key, spot]: [string, Spot]) {
     const now = performance.now();
     const calm = reducedMotion();
+    el.style.setProperty("--s", String(this.titleScale));
     const title: Title = {
-      key, spot, w: el.offsetWidth, h: el.offsetHeight,
+      key, spot, el, w: el.offsetWidth, h: el.offsetHeight,
       shown: new Tween(1), dim: new Tween(this.dimmed(key) ? DIM : 1), leaving: false,
       frost: { x: 0, y: 0, w: 0, h: 0, r: 0, alpha: 0 },
     };
@@ -240,11 +242,13 @@ export class Stage {
     this.run();
   }
 
-  /** The titles' scale against the marks changed: their glass follows. */
+  /** The titles' scale against the marks: set on each title alone (a zoom changes it every frame, and set on
+   * the graph it would restyle every mark too). Its glass follows on the next draw, which the caller makes. */
   scaleTitles(scale: number) {
     if (scale === this.titleScale) return;
     this.titleScale = scale;
-    this.later();
+    const value = String(scale);
+    for (const title of this.titles) title.el.style.setProperty("--s", value);
   }
 
   /** Redraw once, on the next frame, however many titles changed side or size before it. */
