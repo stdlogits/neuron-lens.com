@@ -28,12 +28,25 @@ const ROOM = 9;
 const rowOf = (n: GraphNode) => n.layer * 2 + (n.kind === "head" ? 0 : 1);
 
 /** How far down the page a layer's rows sit: every row the same distance from the next, except that the unit at the centre opens its own by ROOM on each side, so what is next to it stands as clear as any row does. */
-export function rows(graph: Graph, height: number, layers: number) {
+export function rows(graph: Graph, height: number, layers: number, crop?: Crop) {
   const focus = graph.nodes.find((n) => n.side === "focus");
   const opened = focus ? rowOf(focus) : Infinity;
   const pitch = (height - 2 * ROOM) / (2 * layers);
   const down = (row: number) => (row + 0.5) * pitch + (row < opened ? 0 : row === opened ? ROOM : 2 * ROOM);
-  return { neurons: (layer: number) => down(layer * 2 + 1), heads: (layer: number) => down(layer * 2) };
+  // A crop shows only its rows: the first sits `pad` below the top.
+  const shift = crop ? down(crop.first) - crop.pad : 0;
+  return { neurons: (layer: number) => down(layer * 2 + 1) - shift, heads: (layer: number) => down(layer * 2) - shift, row: (row: number) => down(row) - shift };
+}
+
+/** The rows the rail shows: from the graph's first row to its last, `pad` clear above and below. */
+export interface Crop { first: number; last: number; pad: number }
+/** The first and last rows a graph's nodes sit in, or null for none. */
+export function spanOf(graph: Graph): [number, number] | null {
+  if (!graph.nodes.length) return null;
+  let first = Infinity;
+  let last = -Infinity;
+  for (const n of graph.nodes) { first = Math.min(first, rowOf(n)); last = Math.max(last, rowOf(n)); }
+  return [first, last];
 }
 
 /** A node's mark: neurons are dots, because there are so many of them; heads are oblong. The unit itself is the largest of its kind. */
@@ -44,8 +57,8 @@ function mark(n: GraphNode, top: number) {
   return { w, h };
 }
 
-export function layout(graph: Graph, width: number, height: number, layers: number, was?: Map<string, number>, open?: Open): Layout {
-  const depth = rows(graph, height, layers);
+export function layout(graph: Graph, width: number, height: number, layers: number, was?: Map<string, number>, open?: Open, crop?: Crop): Layout {
+  const depth = rows(graph, height, layers, crop);
   const left = GUTTER;
   const span = Math.max(40, width - left - 8);
   const centre = open ? 0 : left + span / 2;

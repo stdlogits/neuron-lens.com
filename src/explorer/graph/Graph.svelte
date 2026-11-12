@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onDestroy, untrack } from "svelte";
-  import { fadeIn, fadeOut, hideTip } from "@stdlogits/ledger";
+  import { Icon, fadeIn, fadeOut, hideTip } from "@stdlogits/ledger";
   import { bandOf, depthColor, type ModelInfo } from "../../lib/models";
   import { headId, neuronId, percent } from "../../lib/data";
   import { Ink, OVERSCAN, type View } from "./ink";
-  import { layout, rows, type Layout, type Open, type Spot } from "./layout";
+  import { layout, rows, spanOf, type Crop, type Layout, type Open, type Spot } from "./layout";
   import { Stage, type Look, type Seated, type Shown } from "./stage";
   import { headInput, type Graph, type GraphEdge, type Mode } from "./trace";
   import type { Picked } from "./Card.svelte";
@@ -50,6 +50,25 @@
 
   let width = $state(0);
   const HEIGHT = $derived(height);
+  // The rail shows only the layers its graph reaches, as far apart as ever, with the same room above the first
+  // row and below the last (a graph of a row or two gets a little more, evenly); the axis marks what it leaves
+  // out with ^ and v. The navigator shows them all, to pan through.
+  const PAD = 28;
+  const SHORTEST = 140;
+  const crop = $derived.by((): Crop | null => {
+    if (open || !axis) return null;
+    const span = spanOf(graph);
+    if (!span) return null;
+    const all = rows(graph, HEIGHT, model.layers);
+    const reach = all.row(span[1]) - all.row(span[0]);
+    return { first: span[0], last: span[1], pad: Math.max(PAD, (SHORTEST - reach) / 2) };
+  });
+  /** The box: the crop's rows and its room, or the whole height. */
+  const BOX = $derived.by(() => {
+    if (!crop) return HEIGHT;
+    const all = rows(graph, HEIGHT, model.layers);
+    return all.row(crop.last) - all.row(crop.first) + 2 * crop.pad;
+  });
   let shown = $state.raw<Shown>({ nodes: [], edges: [] });
   const stage = new Stage(() => (shown = stage.shown()));
   onDestroy(() => stage.destroy());
@@ -62,12 +81,13 @@
   $effect(() => {
     const next = graph;
     const across = width;
+    const cropped = crop;
     void HEIGHT;
     if (across <= 0) return;
     untrack(() => {
       if (layersOf !== model.id) { layers.clear(); layersOf = model.id; }
       for (const n of next.nodes) layers.set(n.key, n.layer);
-      const placed = layout(next, across, HEIGHT, model.layers, next.settled ? undefined : stage.targets(), open);
+      const placed = layout(next, across, HEIGHT, model.layers, next.settled ? undefined : stage.targets(), open, cropped ?? undefined);
       const snap = laidOut > 0 && across !== laidOut && !open;
       laidOut = across;
       shown = stage.update(next, placed, snap);
@@ -149,8 +169,26 @@
     hideTip();
     onpick({ key: node.key, name: nameOf(node), title: node.wire?.title ?? "", sub: standing(node), href: href(node.kind, node.layer, node.index), color: depthColor(model, node.layer) });
   }
-  const ticks = $derived(axis ? Array.from({ length: model.layers }, (_, layer) => layer).filter((layer) => layer % 5 === 0) : []);
-  const depth = $derived(rows(graph, HEIGHT, model.layers));
+  const depth = $derived(rows(graph, HEIGHT, model.layers, crop ?? undefined));
+  /** The layer numbers down the left, every fifth; with the rail cropped, those it shows, and at its top a ^ for
+   * the layers above it leaves out (at its bottom a v for those below), with a number too close to one dropped. */
+  type Tick = { key: string; y: number; layer?: number; edge?: "up" | "down"; count?: number; from?: number; to?: number };
+  const ticks = $derived.by((): Tick[] => {
+    if (!axis) return [];
+    const every = Array.from({ length: model.layers }, (_, layer) => layer).filter((layer) => layer % 5 === 0);
+    if (!crop) return every.map((layer) => ({ key: `${layer}`, y: depth.neurons(layer), layer }));
+    const top = Math.floor(crop.first / 2);
+    const bottom = Math.floor(crop.last / 2);
+    const edges: Tick[] = [];
+    if (top > 0) edges.push({ key: "up", y: depth.row(crop.first), edge: "up", count: top, from: 0, to: top - 1 });
+    if (bottom < model.layers - 1) edges.push({ key: "down", y: depth.row(crop.last), edge: "down", count: model.layers - 1 - bottom, from: bottom + 1, to: model.layers - 1 });
+    const numbers = every
+      .filter((layer) => layer >= top && layer <= bottom)
+      .map((layer): Tick => ({ key: `${layer}`, y: depth.neurons(layer), layer }))
+      .filter((tick) => edges.every((edge) => Math.abs(edge.y - tick.y) >= 16));
+    return [...edges, ...numbers].sort((a, b) => a.y - b.y);
+  });
+  const layersText = (from: number, to: number) => (from === to ? `Layer ${from}` : `Layers ${from}–${to}`);
 
   // The links: as heavy as their flow, in the depth colour of their upstream end, grey and dashed where they
   // push against; with a unit lit, what connects it stands out and the rest all but goes.
@@ -196,7 +234,7 @@
       ink.resize(surface.width, surface.height);
       ink.setView(surface.view);
     } else {
-      ink.resize(width, HEIGHT + 2 * MARGIN);
+      ink.resize(width, BOX + 2 * MARGIN);
       ink.setView({ k: 1, tx: 0, ty: MARGIN });
     }
     untrack(() => {
@@ -214,9 +252,15 @@
   });
 </script>
 
-<div class="graph" bind:clientWidth={width} style:height={`${HEIGHT}px`}>
+<div class="graph" bind:clientWidth={width} style:height={`${BOX}px`}>
   {#if width > 0}
-    {#each ticks as layer, i (layer)}<span class="tick" style:--i={i} style:top={`${depth.neurons(layer)}px`} data-tip-title={`Layer ${layer}`} data-tip={bandOf(model, layer).name}>{layer}</span>{/each}
+    {#each ticks as tick, i (tick.key)}
+      {#if tick.edge}
+        <span class="tick edge" style:--i={i} style:top={`${tick.y}px`} data-tip-title={`${tick.count} ${tick.count === 1 ? "layer" : "layers"} ${tick.edge === "up" ? "above" : "below"}`} data-tip={`${layersText(tick.from!, tick.to!)}, with nothing on this graph`} aria-label={`${tick.count} more ${tick.count === 1 ? "layer" : "layers"} ${tick.edge === "up" ? "above" : "below"}`}><Icon name={tick.edge} size={14} /></span>
+      {:else}
+        <span class="tick" style:--i={i} style:top={`${tick.y}px`} data-tip-title={`Layer ${tick.layer}`} data-tip={bandOf(model, tick.layer!).name}>{tick.layer}</span>
+      {/if}
+    {/each}
     {#if !surface}<canvas class="links" bind:this={own} style:left="0" style:top={`${-MARGIN}px`} aria-hidden="true"></canvas>{/if}
     {#each shown.nodes as node (node.key)}
       <a
@@ -248,7 +292,7 @@
 </div>
 
 <style>
-  .graph { position: relative; min-width: 0; }
+  .graph { position: relative; min-width: 0; transition: height var(--glide) var(--ease); }
   .links { position: absolute; pointer-events: none; }
   .tick {
     position: absolute;
@@ -266,6 +310,7 @@
     animation-delay: calc(var(--i) * 32ms);
   }
   @keyframes appear { from { opacity: 0; } }
+  .tick.edge { display: flex; justify-content: flex-end; color: var(--ink2); }
   /* The stage moves the link and fades it, at the size its mark is going to; the mark inside grows to fill it by a transform. */
   .node { position: absolute; left: 0; top: 0; display: block; }
   .node::after { content: ""; position: absolute; inset: -6px; }
