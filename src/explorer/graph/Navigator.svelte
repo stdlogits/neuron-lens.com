@@ -130,9 +130,9 @@
   // where it is going; `shown` is where it is this frame. A re-centring or a step of the zoom buttons
   // glides there; a drag, a pinch or a scroll follows the hand, and a drag let go of while moving coasts on.
   // It is held over the graph, whatever shape the graph has taken (wide where the unit is, narrow far from it,
-  // and growing as the walk goes on): some mark always stays within ROOM of the middle of what the bar and the
-  // axis leave of the screen. A drag or a scroll past that gives like a rubber band and springs back when let
-  // go; a zoom never goes further out than the whole graph.
+  // and growing as the walk goes on): its edges stay within EDGE of the outermost marks and their titles, down by the
+  // topmost and bottommost, across by the rows on screen (range). A drag or a scroll past that gives like a rubber band and
+  // springs back when let go; a zoom never goes further out than the whole graph.
   let view = $state<HTMLDivElement>();
   let k = HOME;
   let tx = 0;
@@ -204,39 +204,67 @@
     return Math.max(MIN, Math.min(HOME, fit) * 0.8);
   }
   const clampK = (value: number) => Math.min(MAX, Math.max(Math.min(lowest(), MAX), value));
-  /** How far a view is from the graph: from the middle of the screen to the nearest mark, in units of the room
-   * a mark may be from it (ROOM of what the bar and the axis leave, across and down), with which way it lies. */
-  const ROOM = 0.35;
-  function away(to: View): { d: number; dx: number; dy: number } | null {
-    if (!placed.length) return null;
-    const a = area();
-    const rx = Math.max(1, (a.x1 - a.x0) * ROOM);
-    const ry = Math.max(1, (a.y1 - a.y0) * ROOM);
-    let best = Infinity;
-    let bx = 0;
-    let by = 0;
-    for (const n of placed) {
-      const dx = (a.cx - (n.x * to.k + to.tx)) / rx;
-      const dy = (a.cy - (n.y * to.k + to.ty)) / ry;
-      const d = dx * dx + dy * dy;
-      if (d < best) { best = d; bx = dx; by = dy; }
-    }
-    return { d: Math.sqrt(best), dx: bx, dy: by };
+  /** How far past the graph's outermost marks and titles the view may go, on screen. */
+  const EDGE = 24;
+  /** How far a unit reaches from its centre each way at zoom z, with its title where it sits now (under its
+   * mark until placed). Titles keep one size on screen, so their reach in the graph shrinks as it zooms in. */
+  function reachOf(n: Placed, z: number) {
+    const size = box(n);
+    const w = size.w / z;
+    const h = size.h / z;
+    const g = 3 / z;
+    const spot = spots.get(n.key) ?? "below";
+    return {
+      left: spot === "left" ? n.w / 2 + g + w : spot === "right" ? n.w / 2 : Math.max(n.w / 2, w / 2),
+      right: spot === "right" ? n.w / 2 + g + w : spot === "left" ? n.w / 2 : Math.max(n.w / 2, w / 2),
+      up: spot === "above" ? n.h / 2 + g + h : spot === "below" ? n.h / 2 : Math.max(n.h / 2, h / 2),
+      down: spot === "below" ? n.h / 2 + g + h : spot === "above" ? n.h / 2 : Math.max(n.h / 2, h / 2),
+    };
   }
-  /** A view held over the graph: moved straight toward its nearest mark until that mark is in reach. */
-  function bounded(to: View): View {
-    const off = away(to);
-    if (!off || off.d <= 1) return to;
+  const within = (value: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, value));
+  /** Where a view may sit at its zoom, so the screen never shows mostly nothing: down, between the topmost
+   * and bottommost marks and titles; across, between the furthest marks and titles in the rows on screen, which
+   * follows the graph's shape (wide by the unit, narrow far from it); each with EDGE beyond. Along a side where
+   * the graph is smaller than the screen it may move only within the screen. */
+  function range(to: View): { tx0: number; tx1: number; ty0: number; ty1: number } | null {
+    if (!extent || !placed.length) return null;
     const a = area();
-    const f = 1 - 1 / off.d;
-    return { k: to.k, tx: to.tx + off.dx * (a.x1 - a.x0) * ROOM * f, ty: to.ty + off.dy * (a.y1 - a.y0) * ROOM * f };
+    // The offsets that put [lo, hi] (graph units) flush with EDGE inside [s0, s1] on screen, one end or the other.
+    const span = (lo: number, hi: number, s0: number, s1: number) => {
+      const far = s1 - EDGE - hi * to.k;
+      const near = s0 + EDGE - lo * to.k;
+      return [Math.min(far, near), Math.max(far, near)];
+    };
+    const reaches = placed.map((n) => reachOf(n, to.k));
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    placed.forEach((n, i) => { y0 = Math.min(y0, n.y - reaches[i].up); y1 = Math.max(y1, n.y + reaches[i].down); });
+    const [ty0, ty1] = span(y0, y1, a.y0, a.y1);
+    const ty = within(to.ty, ty0, ty1);
+    const top = (a.y0 - ty) / to.k;
+    const bottom = (a.y1 - ty) / to.k;
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    placed.forEach((n, i) => {
+      const r = reaches[i];
+      if (n.y + r.down < top || n.y - r.up > bottom) return;
+      x0 = Math.min(x0, n.x - r.left);
+      x1 = Math.max(x1, n.x + r.right);
+    });
+    if (x0 > x1) { x0 = extent.x0; x1 = extent.x1; }
+    const [tx0, tx1] = span(x0, x1, a.x0, a.x1);
+    return { tx0, tx1, ty0, ty1 };
+  }
+  /** A view held over the graph: moved the least way back within its range. */
+  function bounded(to: View): View {
+    const r = range(to);
+    if (!r) return to;
+    return { k: to.k, tx: within(to.tx, r.tx0, r.tx1), ty: within(to.ty, r.ty0, r.ty1) };
   }
   /** How far past its range a view is, in pixels. */
   function over(to: View) {
-    const off = away(to);
-    if (!off || off.d <= 1) return 0;
-    const a = area();
-    return (off.d - 1) * Math.min(a.x1 - a.x0, a.y1 - a.y0) * ROOM;
+    const held = bounded(to);
+    return Math.hypot(held.tx - to.tx, held.ty - to.ty);
   }
   /** The furthest past the range a drag (or, less, a scroll) can pull the view, giving more stiffly the further it goes. */
   const BAND = 120;
@@ -370,7 +398,8 @@
     const a = area();
     moved = false;
     centredAt = focus.kind === "head" ? depth.heads(focus.layer) : depth.neurons(focus.layer);
-    go({ k: z, tx: a.cx, ty: a.y0 + (a.y1 - a.y0) * 0.45 - centredAt * z }, animate, now);
+    // Held over the graph like any view: a unit at the top or bottom of its graph sits nearer that edge.
+    go(bounded({ k: z, tx: a.cx, ty: a.y0 + (a.y1 - a.y0) * 0.45 - centredAt * z }), animate, now);
   }
   // A new unit at the centre: glide to it (the first, jump). Rows that open up as titles arrive keep it there,
   // unless the view was moved; a graph that has changed shape under a moved view takes it back within it.
@@ -631,16 +660,7 @@
     const span = (z: number) => {
       let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
       for (const n of nodes) {
-        const size = box(n);
-        const w = size.w / z;
-        const h = size.h / z;
-        const g = 3 / z;
-        // Where its title is now, or under it.
-        const spot = spots.get(n.key) ?? "below";
-        const left = spot === "left" ? n.w / 2 + g + w : spot === "right" ? n.w / 2 : Math.max(n.w / 2, w / 2);
-        const right = spot === "right" ? n.w / 2 + g + w : spot === "left" ? n.w / 2 : Math.max(n.w / 2, w / 2);
-        const up = spot === "above" ? n.h / 2 + g + h : spot === "below" ? n.h / 2 : Math.max(n.h / 2, h / 2);
-        const down = spot === "below" ? n.h / 2 + g + h : spot === "above" ? n.h / 2 : Math.max(n.h / 2, h / 2);
+        const { left, right, up, down } = reachOf(n, z);
         x0 = Math.min(x0, n.x - left); x1 = Math.max(x1, n.x + right);
         y0 = Math.min(y0, n.y - up); y1 = Math.max(y1, n.y + down);
       }

@@ -40,8 +40,9 @@ What the site draws for itself, in Ledger:
 - The full-screen graph (`src/explorer/graph/Navigator.svelte`, at a unit's address with `?graph`): the same marks, links
   and motion, opening at 1.5 times the rail's size and moved like a map (drag, scroll or the arrow keys; pinch,
   ⌘/ctrl-scroll, a double tap or the zoom buttons). A drag let go of while moving coasts. The view is held over the
-  graph, whatever shape it has grown to: some mark always stays near the middle of the screen, and a drag or a scroll
-  past that gives like a rubber band (a scroll only a little, however long a trackpad coasts) and springs back. It never
+  graph, whatever shape it has grown to: its edges stop just past the outermost marks and their titles (down, the
+  topmost and bottommost; across, the widest in the rows on screen), so the screen never shows mostly nothing; a unit
+  at the top or bottom of its graph is centred no further than that allows. A drag or a scroll past that gives like a rubber band (a scroll only a little, however long a trackpad coasts) and springs back. It never
   zooms out further than the whole graph. Back to the unit glides there. The page under it never scrolls or zooms,
   whatever the pointer is over (the bar, a tip), and the view fits what the screen shows (a pinch-zoomed page, a phone's
   keyboard), so the bar stays whole. Titles stay one size on screen at any zoom, through a pinch too, wrapped on the
