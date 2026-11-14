@@ -64,8 +64,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 # which lens a head's QK diagonal reads its query through (last layer, lens): the S-lens, a position
 # holding a token seeking an earlier copy (duplicate-token heads), then the R-lens, a position about
 # to say a token seeking an earlier copy (copy suppression's lookup; neuron-lens findings §11, §13:
-# Qwen3-8B's is mixed at L21-L27 and clear from L28, Gemma 4's weaker, from L24). Gemma 4's `read_R`
-# is the rows times the input norm's weight, which fails there (findings §13).
+# Qwen3-8B's is mixed at L21-L27 and clear from L28, Gemma 4's from L24).
 PROFILES = {
     "qwen3-8b": {
         "name": "Qwen3-8B", "layers": 36, "mlp": 12288, "heads": 32,
@@ -74,7 +73,7 @@ PROFILES = {
     },
     "gemma-4-12b": {
         "name": "Gemma 4 12B", "layers": 48, "mlp": 15360, "heads": 16,
-        "bands": [(10, "early"), (13, "middle"), (47, "late")], "broken": ["read_R"],
+        "bands": [(10, "early"), (13, "middle"), (47, "late")], "broken": [],
         "late": 33, "self": [(23, "S"), (47, "R")], "global": list(range(5, 48, 6)), "media": ["image", "audio"], "pinned": [(33, 12225), (14, 8313), (37, 7165)],
     },
 }
