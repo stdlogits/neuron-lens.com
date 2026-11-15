@@ -861,7 +861,7 @@ def main():
     top = max(float(res["scores"].max()) for res in layers.values() if res)
     for L in range(LAYERS):
         res = layers.get(L)
-        values = np.zeros(MLP, np.uint8) if not res else np.clip(np.round(255 * (np.maximum(res["scores"], 0) / top) ** 0.8), 0, 255).astype(np.uint8)
+        values = np.zeros(MLP, np.uint8) if not res or top <= 0 else np.clip(np.round(255 * (np.maximum(res["scores"], 0) / top) ** 0.8), 0, 255).astype(np.uint8)
         scores.append(base64.b64encode(values.tobytes()).decode())
     json.dump({"layers": scores}, open(f"{out}/scores.json", "w"), separators=(",", ":"))
 
