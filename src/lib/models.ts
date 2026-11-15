@@ -1,4 +1,5 @@
-// The models the explorer covers: their shape, and their depth bands. Every model has the same three,
+// The models the explorer covers: their shape, and their depth bands. Every model has the same three (the
+// smaller Qwen3 models no early one: their writes read through the R-lens from L0),
 // set by which lens works on each side of its neurons (scripts/neurons/bands.py, from the neuron-lens
 // findings §3, §7 and §13): early layers read through the S-lens on both sides, middle layers still
 // read what drives a neuron through the S-lens but its write through the R-lens, and late layers read

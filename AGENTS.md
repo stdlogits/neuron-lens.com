@@ -74,7 +74,7 @@ A head's QK diagonal, a token at the query seeking an earlier copy of itself, is
 Each model trusts the first up to a layer and the second from the next (`self` in the builder's profile, from neuron-lens findings §11 and §13).
 Each read shows its normal list, or with the Distinctive switch beside English its layer-contrastive (z) list; a
 normal list left with nothing once hub tokens are gone shows its distinctive list instead (most of Stream's early reads).
-Every model has the same three depth bands, set by which lens works on each side of a neuron (`scripts/neurons/bands.py`):
+Every model has the same three depth bands, in order, set by which lens works on each side of a neuron (`scripts/neurons/bands.py`), except that the smaller Qwen3 models read their writes through the R-lens from L0 and so have no early band:
 early layers read what drives it and what it writes through the S-lens, middle layers what drives it through the S-lens
 and its write through the R-lens, late layers both through the R-lens. A read through the other lens is quiet until
 pointed at, and comes last; so is a read the findings say fails on that model. The catalog keeps no per-unit test of a read

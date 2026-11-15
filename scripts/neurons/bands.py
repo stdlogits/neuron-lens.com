@@ -11,10 +11,15 @@ edges set the bands, each measured on every layer by neuron-lens (findings §3, 
 - the R-lens starts working for writes at the first layer from which its read of a neuron's write
   predicts what steering the neuron does, at a median Pearson r of at least ``WRITE_R`` over the
   sampled poles, and stays there (``causal_lens_<model>.json``, steering at 1×);
-- the S-lens stops working for reads after the last layer where its read of a pole's input names the
-  token under its top firings for at least ``READ_S`` of the poles that fire, net of chance
-  (``reads_at_firings_<model>.json``), taken as a running median over three layers so one layer alone doesn't
-  make a regime (Gemma 4's L33 reaches 16% between 9% and 7%).
+- the input side turns to the R-lens once, at the first layer where its read of a pole's input names the
+  token under its top firings for at least as many of the poles that fire as the S-lens's does, net of chance
+  (``reads_at_firings_<model>.json``), and does so on at least half of the layers from there to the last; each
+  share a running median over three layers, so one layer alone doesn't make a regime. The bands stay in order
+  (a9's call, 2026-11-15): Qwen3-0.6B-Base's S-lens reads its last six layers better again (0.21-0.26 against
+  0.14-0.19), and its input side still reads through the R-lens there. This gives Qwen3-8B's L9 and Gemma 4's L13,
+  where the rule before it (the last layer where the S-lens names the token for 15% of firing poles) gave L9 and
+  L14: Gemma 4's profile below has L14 until its catalog is next built. The smaller Qwen3 models never fall below
+  15%, since both lenses read their inputs at every depth.
 
 It prints the bands for the builder's profile (``build-neuron-catalog.py``), with the numbers each
 edge rests on, for ``src/lib/models.ts``'s words. With ``--ladder``, it writes the model's whole
@@ -29,7 +34,6 @@ import sys
 from pathlib import Path
 
 WRITE_R = 0.35
-READ_S = 0.15
 LATE_8B, SELF_8B, LAYERS_8B = 21, 20, 36
 
 
@@ -42,12 +46,14 @@ def bands(summary: Path, model: str):
     write = next(L for L in range(last + 1) if all(r >= WRITE_R for r in steer[L:]))
     rows = sorted(at_firings, key=lambda row: row["layer"])
     share = lambda key: [row[key] / max(1e-9, 1 - row["silent"]) for row in rows]  # of the poles that fire
-    read_s = share("read_S_net")
-    smooth = [sorted(read_s[max(0, L - 1):L + 2])[len(read_s[max(0, L - 1):L + 2]) // 2] for L in range(len(read_s))]
-    read = max(L for L, s in enumerate(smooth) if s >= READ_S) + 1
+    read_s, read_r = share("read_S_net"), share("read_R_net")
+    med3 = lambda x: [sorted(x[max(0, L - 1):L + 2])[len(x[max(0, L - 1):L + 2]) // 2] for L in range(len(x))]
+    s, r = med3(read_s), med3(read_r)
+    wins = [r[L] >= s[L] for L in range(last + 1)]
+    read = next((L for L in range(last + 1) if wins[L] and 2 * sum(wins[L:]) >= last + 1 - L), last + 1)
     if write > read:
         sys.exit(f"{model}: writes turn to the R-lens (L{write}) after reads do (L{read}): no middle band by this rule")
-    numbers = {"write_r": steer, "read_s": read_s, "read_r": share("read_R_net"), "write_s": share("write_S_net")}
+    numbers = {"write_r": steer, "read_s": read_s, "read_r": read_r, "write_s": share("write_S_net")}
     return {"early": (0, write - 1), "middle": (write, read - 1), "late": (read, last)}, numbers
 
 
@@ -66,7 +72,7 @@ def ladder(summary: Path, model: str, found, numbers) -> dict:
         "layers": layers, "mlp": facts["neurons"], "heads": facts["heads"],
         "bands": [{"key": key, "first": first, "last": last,
                    **{k: span(v, first, last, 2) for k, v in numbers.items()}}
-                  for key, (first, last) in found.items()],
+                  for key, (first, last) in found.items() if last >= first],  # a small model's writes read through the R-lens from L0
         "late": round(LATE_8B / LAYERS_8B * layers), "self": round(SELF_8B / (LAYERS_8B - 1) * (layers - 1)),
     }
 
@@ -85,6 +91,8 @@ def main():
     print(f'"bands": [{", ".join(f"({last}, {key!r})" for key, (_, last) in found.items())}],'.replace("'", '"'))
     for key, (first, last) in found.items():
         layers = range(first, last + 1)
+        if not layers:
+            continue
         print(f"  {key:6s} L{first}-{last}: write r {min(numbers['write_r'][L] for L in layers):.2f}-{max(numbers['write_r'][L] for L in layers):.2f}, "
               f"in·S names the firing token for {min(numbers['read_s'][L] for L in layers):.0%}-{max(numbers['read_s'][L] for L in layers):.0%} of firing poles")
 
