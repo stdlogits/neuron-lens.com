@@ -186,7 +186,7 @@ export class Lens {
     // A neuron in the address that isn't among the layer's easiest opens in All mode.
     $effect(() => {
       const { route, index } = this;
-      if (route.unit !== "neurons" || route.index === null || route.all || route.layer === null || index?.id !== route.model) return;
+      if (route.unit !== "neurons" || route.index === null || route.all || !this.model.labelled || route.layer === null || index?.id !== route.model) return;
       if (!index.neurons.some((row) => row[0] === route.layer && row[1] === route.index)) untrack(() => go({ ...route, all: true }, { replace: true }));
     });
     $effect(() => { document.title = this.title; });
@@ -247,7 +247,10 @@ export class Lens {
 
   /** The address of a place in this model (or another). */
   /** Anywhere but the full-screen graph, unless it is asked for. */
-  hrefFor = (place: Partial<Omit<ExploreRoute, "page">>) => href({ ...this.route, layer: this.layer, graph: false, ...place, page: "explore" });
+  hrefFor = (place: Partial<Omit<ExploreRoute, "page">>) => {
+    const route: ExploreRoute = { ...this.route, layer: this.layer, graph: false, ...place, page: "explore" };
+    return href(MODELS[route.model].labelled ? route : { ...route, all: false }); // an unlabelled model lists every neuron anyway
+  };
   unitHref = (unit: Unit, layer: number, index: number | null) => this.hrefFor({ unit, layer, index, all: unit === "neurons" && this.all });
 
   setModel = (model: ModelId) => {

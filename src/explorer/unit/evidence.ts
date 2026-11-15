@@ -64,6 +64,12 @@ export function headAgreement(head: HeadDetail): Set<string> {
 /** "94th" */
 const ordinal = new Intl.PluralRules("en", { type: "ordinal" });
 const SUFFIX: Record<string, string> = { one: "st", two: "nd", few: "rd", other: "th" };
+/** An unlabelled model's face cell: a measured or read token list's first few, in place of a label. */
+export const tokenCell = (tokens: string[]) => ({ label: tokens.slice(0, 4).map((token) => token.trim() || "⎵").join(" · ") || "—" });
+/** The primary read among a unit's reads whose column starts so (a pole's write, a head's OV map). */
+export const primaryTokens = (reads: LensRead[], prefix: string) =>
+  (reads.find((read) => read.col.startsWith(prefix) && read.trust === "primary") ?? reads.find((read) => read.col.startsWith(prefix)))?.tokens.map(([token]) => token) ?? [];
+
 export const nth = (n: number) => `${n}${SUFFIX[ordinal.select(n)] ?? "th"}`;
 
 /** The tags beside a neuron's band, from its index flags (known before its detail loads). */

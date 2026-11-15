@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  export interface FaceRow { sign: string; name: string; cells: { label: string; confidence: number }[]; tip?: string }
+  export interface FaceRow { sign: string; name: string; cells: { label: string; confidence?: number }[]; tip?: string }
 
   const COLUMN_TIPS: Record<string, string> = {
     "Fires on": "What makes it fire",

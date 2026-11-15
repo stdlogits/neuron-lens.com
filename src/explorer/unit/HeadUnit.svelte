@@ -10,7 +10,7 @@
   import HeadRealText from "./HeadRealText.svelte";
   import RealTextGrid from "./RealTextGrid.svelte";
   import type { HeadDetail } from "../../lib/data";
-  import { WEIGHTS_BASKET, headAgreement } from "./evidence";
+  import { WEIGHTS_BASKET, headAgreement, primaryTokens, tokenCell } from "./evidence";
 
   // An attention head, in the neuron's shape: one row of labels (what it fires on, what it attends
   // to, what it writes), then its evidence in the same three baskets. Weights: what the lenses read
@@ -21,11 +21,10 @@
   const rows = $derived([{
     sign: "",
     name: "Labels",
-    cells: [
-      { label: head.label.fires, confidence: head.label.fc },
-      { label: head.label.attends, confidence: head.label.ac },
-      { label: head.label.writes, confidence: head.label.wc },
-    ],
+    // Unlabelled, its peak query tokens, the keys it attends to most and its OV map's primary read stand in.
+    cells: labelled
+      ? [{ label: head.label.fires, confidence: head.label.fc }, { label: head.label.attends, confidence: head.label.ac }, { label: head.label.writes, confidence: head.label.wc }]
+      : [tokenCell(head.peaks.map(([token]) => token)), tokenCell(head.keys.map(([token]) => token)), tokenCell(primaryTokens(head.reads, "ov_"))],
   }]);
   const agree = $derived(headAgreement(head));
   const written = $derived(head.outRz.map(([token, count]) => ({ token, count, flags: agree.has(stem(token)) ? 1 : 0 })));

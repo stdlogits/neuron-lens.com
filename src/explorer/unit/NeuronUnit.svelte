@@ -12,7 +12,7 @@
   import Stream from "./Stream.svelte";
   import { useLens } from "../lens.svelte";
   import type { NeuronDetail } from "../../lib/data";
-  import { WEIGHTS_BASKET, neuronStrength, oftenFacts } from "./evidence";
+  import { WEIGHTS_BASKET, neuronStrength, oftenFacts, primaryTokens, tokenCell } from "./evidence";
 
   // A neuron: its two sides as the rows of the faces table, then the chosen side's evidence in three
   // baskets. Weights: what the lenses read of its wiring. Stream: what the residual holds where it
@@ -31,10 +31,10 @@
     sign: p.pole > 0 ? "+" : "−",
     name: p.pole > 0 ? "Positive side" : "Negative side",
     tip: `Where its activation is ${p.pole > 0 ? "positive" : "negative"}`,
-    cells: [
-      { label: p.label.fires, confidence: p.label.fc },
-      { label: p.label.writes, confidence: p.label.wc },
-    ],
+    // Unlabelled, its peak tokens and its write's primary read stand in.
+    cells: labelled
+      ? [{ label: p.label.fires, confidence: p.label.fc }, { label: p.label.writes, confidence: p.label.wc }]
+      : [tokenCell(p.peaks.map(([token]) => token)), tokenCell(primaryTokens(p.reads, "write_"))],
   })));
   const panel = $props.id();
   const FIRINGS = "What it does in real text";
