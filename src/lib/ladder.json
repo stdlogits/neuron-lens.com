@@ -188,6 +188,83 @@
   "late": 21,
   "self": 20
  },
+ "qwen3-14b": {
+  "name": "Qwen3-14B",
+  "hub": "Qwen/Qwen3-14B",
+  "family": "Qwen3",
+  "size": "14B",
+  "base": false,
+  "layers": 40,
+  "mlp": 17408,
+  "heads": 40,
+  "bands": [
+   {
+    "key": "early",
+    "first": 0,
+    "last": 6,
+    "write_r": [
+     0.03,
+     0.37
+    ],
+    "read_s": [
+     0.23,
+     0.71
+    ],
+    "read_r": [
+     0.03,
+     0.11
+    ],
+    "write_s": [
+     0.1,
+     0.31
+    ]
+   },
+   {
+    "key": "middle",
+    "first": 7,
+    "last": 9,
+    "write_r": [
+     0.4,
+     0.52
+    ],
+    "read_s": [
+     0.26,
+     0.27
+    ],
+    "read_r": [
+     0.12,
+     0.22
+    ],
+    "write_s": [
+     0.06,
+     0.15
+    ]
+   },
+   {
+    "key": "late",
+    "first": 10,
+    "last": 39,
+    "write_r": [
+     0.52,
+     1.0
+    ],
+    "read_s": [
+     0.01,
+     0.12
+    ],
+    "read_r": [
+     0.09,
+     0.37
+    ],
+    "write_s": [
+     0.0,
+     0.06
+    ]
+   }
+  ],
+  "late": 23,
+  "self": 22
+ },
  "qwen3-0.6b-base": {
   "name": "Qwen3-0.6B-Base",
   "hub": "Qwen/Qwen3-0.6B-Base",
