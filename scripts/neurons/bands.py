@@ -24,7 +24,8 @@ edges set the bands, each measured on every layer by neuron-lens (findings §3, 
 It prints the bands for the builder's profile (``build-neuron-catalog.py``), with the numbers each
 edge rests on, for ``src/lib/models.ts``'s words. With ``--ladder``, it writes the model's whole
 profile into that file instead, for the models whose words are made from their numbers (the Qwen3
-sizes beside Qwen3-8B, unlabelled): its geometry (neuron-lens's ``release_<model>.json``), its bands
+sizes beside Qwen3-8B): its geometry and whether it is labelled (neuron-lens's ``release_<model>.json``: labels
+of both sides among its released configs), its bands
 with each band's numbers, and the two depths no check of its own measures yet, which take Qwen3-8B's
 at the same relative depth: the layer from which a write's shape is read (§5, the 8B's L21) and the
 last layer whose QK diagonal reads the query through the S-lens (§11, the 8B's L20).
@@ -70,6 +71,7 @@ def ladder(summary: Path, model: str, found, numbers) -> dict:
     return {
         "name": name, "hub": facts["model"], "family": "Qwen3", "size": size, "base": name.endswith("-Base"),
         "layers": layers, "mlp": facts["neurons"], "heads": facts["heads"],
+        "labelled": {f"{model}-neurons-labels", f"{model}-heads-labels"} <= {c[0] for c in facts.get("configs", [])},
         "bands": [{"key": key, "first": first, "last": last,
                    **{k: span(v, first, last, 2) for k, v in numbers.items()}}
                   for key, (first, last) in found.items() if last >= first],  # a small model's writes read through the R-lens from L0

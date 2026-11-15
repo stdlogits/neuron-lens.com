@@ -5,7 +5,7 @@
 // read what drives a neuron through the S-lens but its write through the R-lens, and late layers read
 // both through the R-lens. The builder's profile holds the same layers and lights each read by them;
 // the words for each band live here: written out for Qwen3-8B and Gemma 4 12B, and for the other Qwen3
-// sizes (unlabelled) made from their numbers in ladder.json (bands.py --ladder). The explorer lists the
+// sizes made from their numbers in ladder.json (bands.py --ladder, which also says whether one is labelled). The explorer lists the
 // models with a build on R2 (catalog.json).
 import catalog from "./catalog.json" with { type: "json" };
 import ladder from "./ladder.json" with { type: "json" };
@@ -129,7 +129,7 @@ export const MODELS: Record<ModelId, ModelInfo> = {
 
 /** A Qwen3 size's profile in ladder.json, from its numbers (bands.py --ladder). */
 interface LadderBand { key: BandInfo["key"]; first: number; last: number; write_r: number[]; read_s: number[]; read_r: number[]; write_s: number[] }
-interface Ladder { name: string; hub: string; size: string; base: boolean; layers: number; mlp: number; heads: number; bands: LadderBand[]; late: number; self: number }
+interface Ladder { name: string; hub: string; size: string; base: boolean; labelled: boolean; layers: number; mlp: number; heads: number; bands: LadderBand[]; late: number; self: number }
 
 const share = ([a, b]: number[]) => `${Math.round(a * 100)}–${Math.round(b * 100)}%`;
 const corr = ([a, b]: number[]) => `${a.toFixed(2)}–${b.toFixed(2)}`;
@@ -159,7 +159,7 @@ function fromLadder(id: ModelId, m: Ladder): ModelInfo {
   const early = bands.find((b) => b.key === "early");
   const at = (share: number) => Math.round(share * (m.layers - 1));
   return {
-    id, name: m.name, family: "Qwen3", size: m.size, base: m.base, hub: m.hub, labelled: false,
+    id, name: m.name, family: "Qwen3", size: m.size, base: m.base, hub: m.hub, labelled: m.labelled,
     layers: m.layers, mlp: m.mlp, heads: m.heads, bands,
     writeVerbs: [...(early ? [[early.last, "Writes (weak this early)"] as [number, string]] : []), [m.late - 1, "When pushed, it promotes"], [m.layers - 1, "It predicts the next word"]],
     globalLayers: [], media: [], examples: [],

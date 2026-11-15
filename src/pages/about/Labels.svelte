@@ -44,7 +44,7 @@
 <Part id="labels" title="Labels" onnear={load}>
   {#snippet caption()}
     <p>Every unit is labeled with a plain description of what makes it fire, what it writes back, and for heads, what it attends to: which earlier tokens it points at.</p>
-    <p>The labels were written by Claude Haiku 5.5 after it was presented with all of the evidence shown in the explorer; the percentage is its certainty.</p>
+    <p>The labels were written by Claude Haiku 5.5 from a card of each unit's evidence: the reads that hold at its depth and the contexts where it fires most. The percentage is its certainty.</p>
     <p>A neuron can fire in two different directions, and each side can have a separate meaning. This neuron fires on owls in one direction and on rot in the other.</p>
   {/snippet}
   <div class="spec">

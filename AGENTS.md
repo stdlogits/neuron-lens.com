@@ -3,7 +3,7 @@
 ## What this is
 
 The source of [neuron-lens.com](https://neuron-lens.com): the Neuron Lens explorer of Qwen3-8B's and
-Gemma 4 12B's neurons and attention heads, and, unlabelled, of the other Qwen3 sizes (0.6B to 14B) and the
+Gemma 4 12B's neurons and attention heads, and of the other Qwen3 sizes (0.6B to 14B) and, unlabelled, the
 base models, with its About and Credits pages. A static single-page app
 (Vite 8, Svelte 5 runes, TypeScript; no SvelteKit, no server code) over a prebuilt catalog of static
 files. It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now redirects its old
@@ -89,7 +89,7 @@ graph whatever its shape, and keeps its titles one size on screen, each placed w
 title; one without room waits for a closer zoom. Its Find (`find.ts`) narrows it to the units an ID or a word finds.
 A touch has no hover, so a tap on a unit in either graph opens its card rather than going there.
 The model is picked in two rows: its family, then its size and, where both are up, post-trained or base.
-An unlabelled model (the Qwen3 sizes beside Qwen3-8B) has no Easiest: its layers list every neuron, and its
+An unlabelled model (the Qwen3 bases, or a size whose labels aren't released yet) has no Easiest: its layers list every neuron, and its
 search finds heads and addresses only (a9's calls). Five sizes fill a 320 px row; a sixth needs another layout.
 Phone widths down to 320 px must not scroll sideways.
 
@@ -150,9 +150,10 @@ script's docstring has the full invocation):
    layers with the site's words for them. A new model's bands come from rerunning it. A Qwen3 size beside the 8B
    takes its whole profile from `bands.py <summary> <model> --ladder src/lib/ladder.json` instead (its
    numbers make its band words in `models.ts`; its write-shape layer and QK switch are the 8B's at the same
-   relative depth), after neuron-lens's catalog queue has run its reads-at-firings and steering checks; it has
-   no labels, and Qwen3-8B's translation runs serve it (one tokenizer; contexts the 8B never showed stay
-   untranslated). `NEURON_LAYERS=8,21`
+   relative depth), after neuron-lens's catalog queue has run its reads-at-firings and steering checks. It is
+   labelled once its release record lists labels of both sides (`labelled` in `ladder.json`); its labels' terms
+   get a translation run of their own (`.neuron-lens/<model>-labels`), and Qwen3-8B's runs serve the rest (one
+   tokenizer; contexts the 8B never showed stay untranslated). `NEURON_LAYERS=8,21`
    builds a subset for development.
 4. `scripts/catalog/upload.sh <model>` puts the build on R2 and names it in `src/lib/catalog.json`;
    commit that and deploy (below, "On R2").
