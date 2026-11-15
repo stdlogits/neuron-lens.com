@@ -10,7 +10,7 @@
   import Depth from "./about/Depth.svelte";
   import Languages from "./about/Languages.svelte";
   import { reveal } from "./reveal";
-  import { MODELS, MODEL_ORDER } from "../lib/models";
+  import { COVERAGE, MODELS, MODEL_ORDER } from "../lib/models";
   import { formatCount } from "../lib/data";
   import { ensureTerms, translation } from "../lib/translate.svelte";
 
@@ -37,7 +37,7 @@
 <article class="pg">
   <header class="pg-hero" use:reveal>
     <h1>About</h1>
-    <p class="pg-lead">Neuron Lens shows what each neuron and attention head inside {MODELS["qwen3-8b"].name} and {MODELS["gemma-4-12b"].name} responds to and what it makes the model say. This page explains how they work.</p>
+    <p class="pg-lead">Neuron Lens shows what each neuron and attention head inside {COVERAGE} responds to and what it makes the model say. This page explains how they work.</p>
     <p class="figures">{#each figures as figure (figure.label)}<span><b>{figure.value}</b> {figure.label}</span>{/each}</p>
   </header>
 

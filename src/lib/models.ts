@@ -3,9 +3,13 @@
 // findings §3, §7 and §13): early layers read through the S-lens on both sides, middle layers still
 // read what drives a neuron through the S-lens but its write through the R-lens, and late layers read
 // both through the R-lens. The builder's profile holds the same layers and lights each read by them;
-// the words for each band live here.
+// the words for each band live here: written out for Qwen3-8B and Gemma 4 12B, and for the other Qwen3
+// sizes (unlabelled) made from their numbers in ladder.json (bands.py --ladder). The explorer lists the
+// models with a build on R2 (catalog.json).
+import catalog from "./catalog.json" with { type: "json" };
+import ladder from "./ladder.json" with { type: "json" };
 
-export type ModelId = "qwen3-8b" | "gemma-4-12b";
+export type ModelId = string;
 export type Modality = "image" | "audio";
 
 /** A read, and what it shows: the About page's line for one side of a neuron in a band. */
@@ -28,6 +32,14 @@ export interface BandInfo {
 export interface ModelInfo {
   id: ModelId;
   name: string;
+  /** The picker's rows: the family, then its size and whether it is the base model. */
+  family: "Qwen3" | "Gemma 4";
+  size: string;
+  base: boolean;
+  /** Its Hugging Face id. */
+  hub: string;
+  /** Labelled by Claude Haiku; an unlabelled model lists every neuron (no Easiest) and searches heads and addresses. */
+  labelled: boolean;
   layers: number;
   mlp: number;
   heads: number;
@@ -47,6 +59,7 @@ export const MODELS: Record<ModelId, ModelInfo> = {
   "qwen3-8b": {
     id: "qwen3-8b",
     name: "Qwen3-8B",
+    family: "Qwen3", size: "8B", base: false, hub: "Qwen/Qwen3-8B", labelled: true,
     layers: 36,
     mlp: 12288,
     heads: 32,
@@ -80,6 +93,7 @@ export const MODELS: Record<ModelId, ModelInfo> = {
   "gemma-4-12b": {
     id: "gemma-4-12b",
     name: "Gemma 4 12B",
+    family: "Gemma 4", size: "12B", base: false, hub: "google/gemma-4-12B", labelled: true,
     layers: 48,
     mlp: 15360,
     heads: 16,
@@ -112,9 +126,70 @@ export const MODELS: Record<ModelId, ModelInfo> = {
   },
 };
 
-export const MODEL_ORDER: ModelId[] = ["qwen3-8b", "gemma-4-12b"];
+/** A Qwen3 size's profile in ladder.json, from its numbers (bands.py --ladder). */
+interface LadderBand { key: BandInfo["key"]; first: number; last: number; write_r: number[]; read_s: number[]; read_r: number[]; write_s: number[] }
+interface Ladder { name: string; hub: string; size: string; base: boolean; layers: number; mlp: number; heads: number; bands: LadderBand[]; late: number; self: number }
+
+const share = ([a, b]: number[]) => `${Math.round(a * 100)}–${Math.round(b * 100)}%`;
+const corr = ([a, b]: number[]) => `${a.toFixed(2)}–${b.toFixed(2)}`;
+const LADDER_BANDS: Record<BandInfo["key"], (b: LadderBand) => Omit<BandInfo, "key" | "first" | "last">> = {
+  early: (b) => ({
+    name: "Early layers", short: "Early",
+    summary: "Neurons respond to the input token, and write back what they detect.",
+    reading: `The S-lens works on both sides: in·S names the firing token for ${share(b.read_s)} of the poles that fire, and out·S what the neuron writes back for ${share(b.write_s)}.`,
+    drives: ["S-lens", "the literal token"], writes: ["S-lens", "what it detects, written back"],
+  }),
+  middle: (b) => ({
+    name: "Middle layers", short: "Middle",
+    summary: "Neurons still respond to the input token, but what they write already moves the output.",
+    reading: `in·S names the firing token for ${share(b.read_s)} of poles, while out·R predicts what pushing the neuron does (median r ${corr(b.write_r)}).`,
+    drives: ["S-lens", "the literal token"], writes: ["R-lens", "what steering does"],
+  }),
+  late: (b) => ({
+    name: "Late layers", short: "Late",
+    summary: "Both what drives a neuron and what it writes read as output words.",
+    reading: `The R-lens works on both sides: in·R names what drives a neuron for ${share(b.read_r)} of poles, and out·R predicts what pushing it does (median r ${corr(b.write_r)}).`,
+    drives: ["R-lens", "and the exact drivers"], writes: ["R-lens", "what steering does"],
+  }),
+};
+
+function fromLadder(id: ModelId, m: Ladder): ModelInfo {
+  const bands = m.bands.filter((b) => b.last >= b.first).map((b) => ({ key: b.key, first: b.first, last: b.last, ...LADDER_BANDS[b.key](b) }));
+  const early = bands.find((b) => b.key === "early");
+  const at = (share: number) => Math.round(share * (m.layers - 1));
+  return {
+    id, name: m.name, family: "Qwen3", size: m.size, base: m.base, hub: m.hub, labelled: false,
+    layers: m.layers, mlp: m.mlp, heads: m.heads, bands,
+    writeVerbs: [...(early ? [[early.last, "Writes (weak this early)"] as [number, string]] : []), [m.late - 1, "When pushed, it promotes"], [m.layers - 1, "It predicts the next word"]],
+    globalLayers: [], media: [], examples: [],
+    start: { neurons: at(8 / 35), heads: at(20 / 35) },
+    headCard: ["attends", "writes"],
+  };
+}
+for (const [id, m] of Object.entries(ladder as Record<string, Ladder>)) MODELS[id] ??= fromLadder(id, m);
+
+const FAMILIES: ModelInfo["family"][] = ["Qwen3", "Gemma 4"];
+const sizeOf = (model: ModelInfo) => parseFloat(model.size);
+/** The models with a build up, by family, then base after post-trained, then size. */
+export const MODEL_ORDER: ModelId[] = Object.keys(catalog.builds).filter((id) => id in MODELS).sort((a, b) => {
+  const [x, y] = [MODELS[a], MODELS[b]];
+  return FAMILIES.indexOf(x.family) - FAMILIES.indexOf(y.family) || Number(x.base) - Number(y.base) || sizeOf(x) - sizeOf(y);
+});
 export const DEFAULT_MODEL: ModelId = "qwen3-8b";
-export const isModelId = (value: string | null): value is ModelId => value !== null && value in MODELS;
+/** The models listed, in words: "Qwen3-8B and Gemma 4 12B", or with more Qwen3 sizes up, "Qwen3 from 0.6B to 14B,
+ * post-trained and base, and Gemma 4 12B". */
+export const COVERAGE = (() => {
+  const listed = MODEL_ORDER.map((id) => MODELS[id]);
+  const qwen = listed.filter((model) => model.family === "Qwen3");
+  if (qwen.length < 2) return new Intl.ListFormat("en").format(listed.map((model) => model.name));
+  const sizes = qwen.map(sizeOf);
+  const range = (n: number) => qwen.find((model) => sizeOf(model) === n)!.size;
+  const both = qwen.some((model) => model.base) && qwen.some((model) => !model.base);
+  const rest = listed.filter((model) => model.family !== "Qwen3").map((model) => model.name);
+  return `Qwen3 from ${range(Math.min(...sizes))} to ${range(Math.max(...sizes))}${both ? ", post-trained and base," : ""}${rest.length ? ` and ${rest.join(" and ")}` : ""}`;
+})();
+
+export const isModelId = (value: string | null): value is ModelId => value !== null && MODEL_ORDER.includes(value);
 
 export const bandOf = (model: ModelInfo, layer: number): BandInfo => model.bands.find((band) => layer <= band.last) ?? model.bands[model.bands.length - 1];
 const byDepth = (steps: [number, string][], layer: number) => (steps.find(([last]) => layer <= last) ?? steps[steps.length - 1])[1];

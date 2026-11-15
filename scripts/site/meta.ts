@@ -7,18 +7,14 @@
 /// <reference types="node" />
 import { readFileSync } from "node:fs";
 import type { HtmlTagDescriptor, Plugin } from "vite";
-import { DEFAULT_MODEL, MODELS, MODEL_ORDER, bandRange, type ModelId } from "../../src/lib/models.ts";
+import { COVERAGE, DEFAULT_MODEL, MODELS, MODEL_ORDER, bandRange, type ModelId } from "../../src/lib/models.ts";
 import { ORIGIN, SITE_NAME } from "../../src/lib/site.ts";
 
-const DESCRIPTION = `What each neuron and attention head inside ${MODELS["qwen3-8b"].name} and ${MODELS["gemma-4-12b"].name} responds to, and what it makes the model say.`;
+const DESCRIPTION = `What each neuron and attention head inside ${COVERAGE} responds to, and what it makes the model say.`;
 const CATALOG = "https://huggingface.co/datasets/stdlogits/neuron-lens";
 const RESEARCH = "https://github.com/stdlogits/neuron-lens";
 const LENSES = "https://huggingface.co/stdlogits/rs-lenses";
 const SOURCE = "https://github.com/stdlogits/neuron-lens.com";
-const MODEL_PAGES: Record<ModelId, string> = {
-  "qwen3-8b": "https://huggingface.co/Qwen/Qwen3-8B",
-  "gemma-4-12b": "https://huggingface.co/google/gemma-4-12B",
-};
 // public/card.png, drawn by scripts/site/render.mjs.
 const CARD = {
   url: `${ORIGIN}/card.png`,
@@ -81,7 +77,8 @@ function jsonLd() {
         url: CATALOG,
         name: "neuron-lens",
         alternateName: "The Neuron Lens catalog",
-        description: `Every MLP neuron and attention head of ${models.map((m) => `${m.name} (${count(neurons(m.id))} neurons, ${count(heads(m.id))} heads)`).join(" and ")}, read three ways: from the weights through the R-lens and S-lens, from activations over 15M tokens of web, Chinese, Python and chat text, and from the exact tokens that drive each unit. Gemma 4 12B's neurons are also read through 49,694 images and 46,932 sounds. Every neuron pole and head has labels in words by Claude Haiku 5.5.`,
+        // The release's main holds the labelled models; the other Qwen3 sizes are on its qwen3-ladder branch until released.
+        description: `Every MLP neuron and attention head of ${models.filter((m) => m.labelled).map((m) => `${m.name} (${count(neurons(m.id))} neurons, ${count(heads(m.id))} heads)`).join(" and ")}, read three ways: from the weights through the R-lens and S-lens, from activations over 15M tokens of web, Chinese, Python and chat text, and from the exact tokens that drive each unit. Gemma 4 12B's neurons are also read through 49,694 images and 46,932 sounds. Every neuron pole and head has labels in words by Claude Haiku 5.5.`,
         keywords: ["mechanistic interpretability", "neurons", "attention heads", "language models", "logit lens", "Jacobian lens", "R-lens", "S-lens", ...models.map((m) => m.name)],
         license: "https://creativecommons.org/licenses/by/4.0/",
         isAccessibleForFree: true,
@@ -93,8 +90,8 @@ function jsonLd() {
         // neither the lenses (a model release) nor the research code is a dataset, so neither is
         // named there.
         isBasedOn: [
-          ...models.map((m) => MODEL_PAGES[m.id]),
-          { "@type": "CreativeWork", "@id": LENSES, url: LENSES, name: "rs-lenses", description: "The R-lens and S-lens for both models", license: "https://creativecommons.org/licenses/by/4.0/" },
+          ...models.filter((m) => m.labelled).map((m) => `https://huggingface.co/${m.hub}`),
+          { "@type": "CreativeWork", "@id": LENSES, url: LENSES, name: "rs-lenses", description: "The R-lens and S-lens for each model", license: "https://creativecommons.org/licenses/by/4.0/" },
         ],
         citation: RESEARCH,
         measurementTechnique: ["R-lens and S-lens reads of weights", "activation statistics over 15M tokens", "exact token drivers by substitution", "labels by Claude Haiku 5.5"],
@@ -164,8 +161,12 @@ function llms() {
     models: [
       "| model | layers | neurons a layer | heads a layer | neurons | heads |",
       "| --- | --- | --- | --- | --- | --- |",
-      ...models.map((m) => `| [${m.name}](${MODEL_PAGES[m.id]}) | ${m.layers} | ${count(m.mlp)} | ${m.heads} | ${count(neurons(m.id))} | ${count(heads(m.id))} |`),
+      ...models.map((m) => `| [${m.name}](https://huggingface.co/${m.hub}) | ${m.layers} | ${count(m.mlp)} | ${m.heads} | ${count(neurons(m.id))} | ${count(heads(m.id))} |`),
     ].join("\n"),
+    ladder: models.some((m) => !m.labelled)
+      ? `- \`/${models.find((m) => !m.labelled)!.id}\`, …: the other Qwen3 sizes and their base models (${models.filter((m) => !m.labelled).map((m) => m.name).join(", ")}), unlabelled: their layers list every neuron, and their search finds heads and addresses\n`
+      : "",
+    links: `${new Intl.ListFormat("en").format(models.map((m) => `[${m.name}](https://huggingface.co/${m.hub})`))}: the models, ${models.length > 2 ? "all" : "both"} Apache 2.0`,
     depth: models
       .map((m) => [`- ${m.name}, ${m.layers} layers:`, ...m.bands.map((b) => `  - ${bandRange(b)}, ${b.name.toLowerCase()}: ${b.summary} ${b.reading}`)].join("\n"))
       .join("\n"),

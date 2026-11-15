@@ -40,8 +40,8 @@ export class Lens {
   readonly model = $derived<ModelInfo>(MODELS[this.modelId]);
   readonly unit = $derived<Unit>(this.route.unit);
   readonly layer = $derived<number>(this.route.layer ?? this.model.start[this.unit]);
-  /** Every neuron of the layer, not only the easiest. */
-  readonly all = $derived<boolean>(this.unit === "neurons" && this.route.all);
+  /** Every neuron of the layer, not only the easiest (always, for an unlabelled model: it has no easiest). */
+  readonly all = $derived<boolean>(this.unit === "neurons" && (this.route.all || !this.model.labelled));
   /** The unit's connections, full screen. */
   readonly graphOpen = $derived<boolean>(this.route.index !== null && this.route.graph === true);
   readonly band = $derived(bandOf(this.model, this.layer));

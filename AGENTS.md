@@ -3,7 +3,8 @@
 ## What this is
 
 The source of [neuron-lens.com](https://neuron-lens.com): the Neuron Lens explorer of Qwen3-8B's and
-Gemma 4 12B's neurons and attention heads, with its About and Credits pages. A static single-page app
+Gemma 4 12B's neurons and attention heads, and, unlabelled, of the other Qwen3 sizes (0.6B to 14B) and the
+base models, with its About and Credits pages. A static single-page app
 (Vite 8, Svelte 5 runes, TypeScript; no SvelteKit, no server code) over a prebuilt catalog of static
 files. It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now redirects its old
 `/neuron-lens` and `/neurons` links here; `src/lib/router.svelte.ts` rewrites their queries to paths.
@@ -19,7 +20,8 @@ files. It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now
   (and `search/`), `media/`.
 - `src/pages/`: About, Credits, the missing page.
 - `src/lib/`: `data.ts` (the catalog's types and loaders), `models.ts` (each model's shape, its depth
-  ramp and the words for its depth bands), `router.svelte.ts` (every view is a path), `site.ts` (the
+  ramp and the words for its depth bands; the models listed are those with a build in `catalog.json`), `ladder.json`
+  (the other Qwen3 sizes' profiles, written by `bands.py --ladder`, below), `router.svelte.ts` (every view is a path), `site.ts` (the
   name and origin), `translate.svelte.ts` (the translations, and the site's `Translator` for Ledger),
   `theme.ts` (the theme, from Ledger's `createTheme`), `media.ts`.
 - `src/styles/site.css`: the site's own rules over Ledger's (the no-script summary).
@@ -86,6 +88,9 @@ hue is depth: a link that pushes against is grey and dashed. Full screen, the gr
 graph whatever its shape, and keeps its titles one size on screen, each placed where it covers no mark and no other
 title; one without room waits for a closer zoom. Its Find (`find.ts`) narrows it to the units an ID or a word finds.
 A touch has no hover, so a tap on a unit in either graph opens its card rather than going there.
+The model is picked in two rows: its family, then its size and, where both are up, post-trained or base.
+An unlabelled model (the Qwen3 sizes beside Qwen3-8B) has no Easiest: its layers list every neuron, and its
+search finds heads and addresses only (a9's calls). Five sizes fill a 320 px row; a sixth needs another layout.
 Phone widths down to 320 px must not scroll sideways.
 
 `main.ts` loads `@stdlogits/ledger/ledger.css`, then `site.css`, and installs `translator` with
@@ -142,7 +147,12 @@ script's docstring has the full invocation):
    model's profile (geometry, depth bands, the reads that fail on it) sits at the top of the builder;
    the bands come from `scripts/neurons/bands.py <neuron-lens data/summary> <model>`, which reads
    them off neuron-lens's per-layer census and steering checks, and `src/lib/models.ts` holds the same
-   layers with the site's words for them. A new model's bands come from rerunning it. `NEURON_LAYERS=8,21`
+   layers with the site's words for them. A new model's bands come from rerunning it. A Qwen3 size beside the 8B
+   takes its whole profile from `bands.py <summary> <model> --ladder src/lib/ladder.json` instead (its
+   numbers make its band words in `models.ts`; its write-shape layer and QK switch are the 8B's at the same
+   relative depth), after neuron-lens's catalog queue has run its reads-at-firings and steering checks; it has
+   no labels, and Qwen3-8B's translation runs serve it (one tokenizer; contexts the 8B never showed stay
+   untranslated). `NEURON_LAYERS=8,21`
    builds a subset for development.
 4. `scripts/catalog/upload.sh <model>` puts the build on R2 and names it in `src/lib/catalog.json`;
    commit that and deploy (below, "On R2").

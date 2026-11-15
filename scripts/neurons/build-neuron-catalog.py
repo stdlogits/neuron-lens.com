@@ -77,6 +77,15 @@ PROFILES = {
         "late": 33, "self": [(23, "S"), (47, "R")], "global": list(range(5, 48, 6)), "media": ["image", "audio"], "pinned": [(33, 12225), (14, 8313), (37, 7165)],
     },
 }
+# The Qwen3 sizes beside Qwen3-8B, unlabelled: their profiles from src/lib/ladder.json (bands.py --ladder), with
+# the 8B's write-shape layer and QK switch at the same relative depth.
+LADDER = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../src/lib/ladder.json"), encoding="utf-8"))
+for model, m in LADDER.items():
+    PROFILES.setdefault(model, {
+        "name": m["name"], "layers": m["layers"], "mlp": m["mlp"], "heads": m["heads"],
+        "bands": [(b["last"], b["key"]) for b in m["bands"]], "broken": [],
+        "late": m["late"], "self": [(m["self"], "S"), (m["layers"] - 1, "R")], "global": [], "media": [], "pinned": [],
+    })
 # Which lens each band reads a neuron through: (what drives it, what it writes). A head's OV map is its write.
 BAND_LENSES = {"early": ("S", "S"), "middle": ("S", "R"), "late": ("R", "R")}
 
@@ -634,7 +643,8 @@ def neuron_layer(L):
     wires.tofile(f"{d_out}/graph.bin")
     json.dump({"layer": L, "neurons": rows}, open(f"{d_out}/index.json", "w"), ensure_ascii=False, separators=(",", ":"))
 
-    chosen = sorted(range(MLP), key=lambda k: -neuron_score[k])[:KEEP_PER_LAYER]
+    # The easiest, by the labeller; an unlabelled model has none, and its search finds heads and addresses only.
+    chosen = sorted(range(MLP), key=lambda k: -neuron_score[k])[:KEEP_PER_LAYER] if LABELLED else []
     chosen += [n for layer, n in P["pinned"] if layer == L and n not in chosen]  # the site's own examples stay listed and searchable
     curated = []
     for nrn in chosen:

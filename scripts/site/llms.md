@@ -2,7 +2,7 @@
 
 > {{description}}
 
-Neuron Lens (https://neuron-lens.com) is the explorer of neuron-lens, a public catalog of every MLP neuron and attention head in two open-weight models, by a9lim (https://a9l.im) and treetown (https://logits.ml) with Claude. Its premise is the one argued in Nick Cammarata's "Neural Networks Are Already Clean" (Goodfire, 2026, https://already-clean.goodfire.com/): a model's own neurons are legible units, and apparent polysemanticity mostly comes from ordinary, fixable causes (weak tools, poor architectures, neurons that generalize in a few related directions) rather than superposition, so neurons can be studied directly rather than through a learned decomposition. neuron-lens adds evidence that needs no forward pass: two Jacobian lenses read each neuron's input and output directions from the weights alone, and those reads agree with what steering the neuron does and with what it fires on.
+Neuron Lens (https://neuron-lens.com) is the explorer of neuron-lens, a public catalog of every MLP neuron and attention head in open-weight models, by a9lim (https://a9l.im) and treetown (https://logits.ml) with Claude. Its premise is the one argued in Nick Cammarata's "Neural Networks Are Already Clean" (Goodfire, 2026, https://already-clean.goodfire.com/): a model's own neurons are legible units, and apparent polysemanticity mostly comes from ordinary, fixable causes (weak tools, poor architectures, neurons that generalize in a few related directions) rather than superposition, so neurons can be studied directly rather than through a learned decomposition. neuron-lens adds evidence that needs no forward pass: two Jacobian lenses read each neuron's input and output directions from the weights alone, and those reads agree with what steering the neuron does and with what it fires on.
 
 {{models}}
 
@@ -53,7 +53,7 @@ Every view of the explorer is a path:
 - `/qwen3-8b/L8/n344`: one neuron, here layer 8, neuron 344 of Qwen3-8B, which fires on "owl" and writes toward owls and night
 - `/gemma-4-12b/heads`, `/gemma-4-12b/L27/heads`: a model's or a layer's attention heads
 - `/gemma-4-12b/L27/h4`: one head, here layer 27, head 4 of Gemma 4 12B, which at a word for a group ("both", "respectively") looks back at the members just named
-- `/about`, `/credits`
+{{ladder}}- `/about`, `/credits`
 
 The explorer draws each view in the browser, and this site serves no unit's data as text. To look up a unit, use the catalog on Hugging Face: its tables have a row for every pole and head, by model and layer.
 
@@ -74,5 +74,5 @@ The explorer draws each view in the browser, and this site serves no unit's data
 
 ## Optional
 
-- [Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B) and [Gemma 4 12B](https://huggingface.co/google/gemma-4-12B): the models, both Apache 2.0
+- {{links}}
 - [Drowse](https://drowse.ai): an interpretability workbench for activation steering and trait monitoring, in the browser

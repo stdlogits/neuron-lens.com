@@ -10,7 +10,7 @@ import type { ModelId, ModelInfo, Modality } from "./models";
 
 /** Where a model's catalog files are. `VITE_CATALOG=live npm run dev` reads the live builds on R2 instead of a local copy. */
 const local = import.meta.env.DEV && import.meta.env.VITE_CATALOG !== "live";
-export const dataBase = (model: ModelId) => (local ? `/data/${model}` : `${catalog.origin}/${model}/${catalog.builds[model]}`);
+export const dataBase = (model: ModelId) => (local ? `/data/${model}` : `${catalog.origin}/${model}/${(catalog.builds as Record<string, string>)[model]}`);
 
 export type Unit = "neurons" | "heads";
 export type Trust = "primary" | "trusted" | "weak";

@@ -3,7 +3,10 @@
   import { onMount } from "svelte";
   import { reveal } from "./reveal";
   import { loadMediaCredits, type MediaCredits } from "../lib/data";
-  import { MODELS } from "../lib/models";
+  import { MODELS, MODEL_ORDER } from "../lib/models";
+
+  /** The Qwen3 sizes listed beside the two labelled models. */
+  const ladder = MODEL_ORDER.map((id) => MODELS[id]).filter((model) => !model.labelled);
 
   // Who made Neuron Lens and what it stands on, as a ledger: each line a name, who or what it is,
   // and its licence. The image and sound collections come from the catalog's own credits file, so
@@ -40,6 +43,7 @@
     lines: [
       { name: ext(MODELS["qwen3-8b"].name, "https://huggingface.co/Qwen/Qwen3-8B"), detail: [ext("Qwen team, Alibaba Cloud")], licence: ext("Apache 2.0", "https://www.apache.org/licenses/LICENSE-2.0") },
       { name: ext(MODELS["gemma-4-12b"].name, "https://huggingface.co/google/gemma-4-12B"), detail: [ext("Google")], licence: ext("Apache 2.0", "https://ai.google.dev/gemma/docs/gemma_4_license") },
+      ...(ladder.length ? [{ name: ext(`${new Intl.ListFormat("en").format(ladder.map((model) => model.name))}`, "https://huggingface.co/Qwen"), detail: [ext("Qwen team, Alibaba Cloud")], licence: ext("Apache 2.0", "https://www.apache.org/licenses/LICENSE-2.0") }] : []),
     ],
   };
 

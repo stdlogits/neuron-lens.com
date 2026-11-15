@@ -17,7 +17,8 @@ const path = (page: Page) => { const url = new URL(page.url()); return url.pathn
 test("the explorer opens on Qwen3-8B with its figures", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1, name: "Explorer" })).toBeVisible();
-  await expect(page.getByRole("group", { name: "Model" }).getByRole("button", { name: "Qwen3-8B" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("group", { name: "Model family" }).getByRole("button", { name: "Qwen3" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("group", { name: "Size" }).getByRole("button", { name: "8B" })).toHaveAttribute("aria-pressed", "true");
   // 36 layers of 12,288 neurons and 32 heads.
   const main = page.locator("main");
   await expect(main).toContainText("442,368");
@@ -28,14 +29,14 @@ test("the explorer opens on Qwen3-8B with its figures", async ({ page }) => {
 
 test("switching model changes the address, the figures and the title", async ({ page }) => {
   await page.goto("/");
-  const models = page.getByRole("group", { name: "Model" });
-  await models.getByRole("button", { name: "Gemma 4 12B" }).click();
+  const families = page.getByRole("group", { name: "Model family" });
+  await families.getByRole("button", { name: "Gemma 4" }).click();
   await expect(page).toHaveURL(/\/gemma-4-12b$/);
-  await expect(models.getByRole("button", { name: "Gemma 4 12B" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("group", { name: "Size" }).getByRole("button", { name: "12B" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("main")).toContainText("737,280");
   await expect(page).toHaveTitle("Gemma 4 12B · Neuron Lens");
 
-  await models.getByRole("button", { name: "Qwen3-8B" }).click();
+  await families.getByRole("button", { name: "Qwen3" }).click();
   await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/$/);
   await page.goBack();
   await expect(page).toHaveURL(/\/gemma-4-12b$/);
@@ -123,7 +124,7 @@ test.describe("drowse.ai's old links become paths", () => {
     test(from, async ({ page }) => {
       await page.goto(from);
       await expect(page).toHaveURL(to);
-      await expect(page.getByRole("group", { name: "Model" })).toBeVisible();
+      await expect(page.getByRole("group", { name: "Model family" })).toBeVisible();
     });
   }
 });

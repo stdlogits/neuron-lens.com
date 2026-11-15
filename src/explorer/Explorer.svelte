@@ -6,7 +6,7 @@
   import Connections from "./graph/Connections.svelte";
   import UnitView from "./UnitView.svelte";
   import { Lens, provideLens } from "./lens.svelte";
-  import { MODELS, MODEL_ORDER } from "../lib/models";
+  import { DEFAULT_MODEL, MODELS, MODEL_ORDER, type ModelInfo } from "../lib/models";
   import { formatCount, type Unit } from "../lib/data";
 
   // The explorer: the model and a search, then the atlas of every layer, then the chosen layer's
@@ -14,16 +14,33 @@
   const lens = new Lens();
   provideLens(lens);
 
-  const models = MODEL_ORDER.map((id) => {
-    const { name, layers, mlp, heads, media } = MODELS[id];
-    return { value: id, label: name, hint: `${layers} layers of ${formatCount(mlp)} neurons and ${heads} heads. ${media.length ? "Also images and sound." : "Text only."}` };
-  });
+  // The model, in two rows: its family, then its size and (where both are up) post-trained or base.
+  const listed = MODEL_ORDER.map((id) => MODELS[id]);
+  const shape = ({ layers, mlp, heads, media }: ModelInfo) => `${layers} layers of ${formatCount(mlp)} neurons and ${heads} heads. ${media.length ? "Also images and sound." : "Text only."}`;
+  const families = [...new Set(listed.map((model) => model.family))].map((family) => ({ value: family, label: family }));
+  const sizes = $derived(listed.filter((model) => model.family === lens.model.family && model.base === lens.model.base).map((model) => ({ value: model.id, label: model.size, hint: shape(model) })));
+  const kinds = $derived(new Set(listed.filter((model) => model.family === lens.model.family).map((model) => model.base)).size > 1
+    ? [{ value: "post", label: "Post-trained", hint: "The model as released, trained to chat" }, { value: "base", label: "Base", hint: "The same model before post-training" }]
+    : []);
+  function setFamily(family: string) {
+    const first = MODELS[DEFAULT_MODEL].family === family ? DEFAULT_MODEL : listed.find((model) => model.family === family)?.id;
+    if (first) lens.setModel(first);
+  }
+  /** The other kind at the same size, or else at the nearest size there is. */
+  function setKind(kind: string) {
+    const base = kind === "base", size = Math.log(parseFloat(lens.model.size));
+    const near = listed.filter((model) => model.family === lens.model.family && model.base === base)
+      .sort((a, b) => Math.abs(Math.log(parseFloat(a.size)) - size) - Math.abs(Math.log(parseFloat(b.size)) - size))[0];
+    if (near) lens.setModel(near.id);
+  }
   const units: { value: Unit; label: string; hint: string }[] = [
     { value: "neurons", label: "Neurons", hint: "MLP units, each with two sides" },
     { value: "heads", label: "Heads", hint: "What each looks back at, and carries forward" },
   ];
   const scopes = $derived(lens.unit === "heads"
     ? [{ value: "all", label: "All", count: formatCount(lens.totals.heads), hint: "Every attention head of the model" }]
+    : !lens.model.labelled
+    ? [{ value: "all", label: "All", count: formatCount(lens.totals.neurons), hint: "Every neuron of the model" }]
     : [
       { value: "easiest", label: "Easiest", count: lens.totals.easiest === null ? "" : formatCount(lens.totals.easiest), hint: "The 40 easiest to read in each layer" },
       { value: "all", label: "All", count: formatCount(lens.totals.neurons), hint: "Every neuron of the model" },
@@ -44,7 +61,13 @@
 <div class="explorer" style:--tint={lens.tint}>
   <section class="intro" aria-labelledby="title">
     <h1 id="title" class="rise">Explorer</h1>
-    <div class="rise" style:--i="1"><Segmented options={models} value={lens.modelId} onchange={lens.setModel} label="Model" /></div>
+    <div class="pick rise" style:--i="1">
+      <Segmented options={families} value={lens.model.family} onchange={setFamily} label="Model family" />
+      <div class="row">
+        <Segmented options={sizes} value={lens.modelId} onchange={lens.setModel} label="Size" />
+        {#if kinds.length}<Segmented options={kinds} value={lens.model.base ? "base" : "post"} onchange={setKind} label="Post-trained or base" />{/if}
+      </div>
+    </div>
     <p class="figures rise" style:--i="2">
       {#each lens.figures as figure (figure.label)}<span class="figure" data-tip={figure.tip}><b><MorphText text={figure.value} /></b> {figure.label}</span>{/each}
     </p>
@@ -83,6 +106,8 @@
   /* A container, so the panes below can lay themselves out by the width they have (Connections.svelte). */
   .explorer { container: explorer / inline-size; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s7); min-width: 0; transition: --tint var(--glide) var(--ease); }
   .intro { display: grid; justify-items: start; gap: var(--s5); }
+  .pick { display: grid; justify-items: start; gap: var(--s2); max-width: 100%; }
+  .row { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); max-width: 100%; }
   h1 { font: var(--type-title); letter-spacing: -0.04em; }
   .figures { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s5); color: var(--ink3); font: var(--type-small); }
   .figure { cursor: help; }
