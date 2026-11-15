@@ -73,7 +73,7 @@ PROFILES = {
     },
     "gemma-4-12b": {
         "name": "Gemma 4 12B", "layers": 48, "mlp": 15360, "heads": 16,
-        "bands": [(10, "early"), (13, "middle"), (47, "late")], "broken": [],  # bands.py's rule now gives (12, "middle"): at the next build
+        "bands": [(10, "early"), (12, "middle"), (47, "late")], "broken": [],
         "late": 33, "self": [(23, "S"), (47, "R")], "global": list(range(5, 48, 6)), "media": ["image", "audio"], "pinned": [(33, 12225), (14, 8313), (37, 7165)],
     },
 }

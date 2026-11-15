@@ -18,7 +18,7 @@ edges set the bands, each measured on every layer by neuron-lens (findings §3, 
   (a9's call, 2026-11-15): Qwen3-0.6B-Base's S-lens reads its last six layers better again (0.21-0.26 against
   0.14-0.19), and its input side still reads through the R-lens there. This gives Qwen3-8B's L9 and Gemma 4's L13,
   where the rule before it (the last layer where the S-lens names the token for 15% of firing poles) gave L9 and
-  L14: Gemma 4's profile below has L14 until its catalog is next built. The smaller Qwen3 models never fall below
+  L14. The smaller Qwen3 models never fall below
   15%, since both lenses read their inputs at every depth.
 
 It prints the bands for the builder's profile (``build-neuron-catalog.py``), with the numbers each
