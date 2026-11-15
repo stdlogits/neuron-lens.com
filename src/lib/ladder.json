@@ -65,7 +65,7 @@
   "layers": 28,
   "mlp": 6144,
   "heads": 16,
-  "labelled": false,
+  "labelled": true,
   "bands": [
    {
     "key": "middle",
