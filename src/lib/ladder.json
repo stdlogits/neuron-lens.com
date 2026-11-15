@@ -111,6 +111,83 @@
   "late": 16,
   "self": 15
  },
+ "qwen3-4b": {
+  "name": "Qwen3-4B",
+  "hub": "Qwen/Qwen3-4B",
+  "family": "Qwen3",
+  "size": "4B",
+  "base": false,
+  "layers": 36,
+  "mlp": 9728,
+  "heads": 32,
+  "bands": [
+   {
+    "key": "early",
+    "first": 0,
+    "last": 2,
+    "write_r": [
+     0.16,
+     0.38
+    ],
+    "read_s": [
+     0.27,
+     0.79
+    ],
+    "read_r": [
+     0.07,
+     0.21
+    ],
+    "write_s": [
+     0.17,
+     0.31
+    ]
+   },
+   {
+    "key": "middle",
+    "first": 3,
+    "last": 9,
+    "write_r": [
+     0.36,
+     0.53
+    ],
+    "read_s": [
+     0.22,
+     0.46
+    ],
+    "read_r": [
+     0.07,
+     0.28
+    ],
+    "write_s": [
+     0.09,
+     0.23
+    ]
+   },
+   {
+    "key": "late",
+    "first": 10,
+    "last": 35,
+    "write_r": [
+     0.61,
+     1.0
+    ],
+    "read_s": [
+     0.02,
+     0.18
+    ],
+    "read_r": [
+     0.06,
+     0.4
+    ],
+    "write_s": [
+     0.01,
+     0.12
+    ]
+   }
+  ],
+  "late": 21,
+  "self": 20
+ },
  "qwen3-0.6b-base": {
   "name": "Qwen3-0.6B-Base",
   "hub": "Qwen/Qwen3-0.6B-Base",
@@ -201,5 +278,82 @@
   ],
   "late": 16,
   "self": 15
+ },
+ "qwen3-4b-base": {
+  "name": "Qwen3-4B-Base",
+  "hub": "Qwen/Qwen3-4B-Base",
+  "family": "Qwen3",
+  "size": "4B",
+  "base": true,
+  "layers": 36,
+  "mlp": 9728,
+  "heads": 32,
+  "bands": [
+   {
+    "key": "early",
+    "first": 0,
+    "last": 2,
+    "write_r": [
+     0.13,
+     0.33
+    ],
+    "read_s": [
+     0.28,
+     0.78
+    ],
+    "read_r": [
+     0.05,
+     0.31
+    ],
+    "write_s": [
+     0.17,
+     0.32
+    ]
+   },
+   {
+    "key": "middle",
+    "first": 3,
+    "last": 10,
+    "write_r": [
+     0.35,
+     0.64
+    ],
+    "read_s": [
+     0.2,
+     0.48
+    ],
+    "read_r": [
+     0.04,
+     0.13
+    ],
+    "write_s": [
+     0.1,
+     0.23
+    ]
+   },
+   {
+    "key": "late",
+    "first": 11,
+    "last": 35,
+    "write_r": [
+     0.68,
+     1.0
+    ],
+    "read_s": [
+     0.03,
+     0.15
+    ],
+    "read_r": [
+     0.06,
+     0.23
+    ],
+    "write_s": [
+     0.0,
+     0.1
+    ]
+   }
+  ],
+  "late": 21,
+  "self": 20
  }
 }
