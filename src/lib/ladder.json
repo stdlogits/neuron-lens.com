@@ -122,7 +122,7 @@
   "layers": 36,
   "mlp": 9728,
   "heads": 32,
-  "labelled": false,
+  "labelled": true,
   "bands": [
    {
     "key": "early",
