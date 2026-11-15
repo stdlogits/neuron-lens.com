@@ -55,6 +55,62 @@
   "late": 16,
   "self": 15
  },
+ "qwen3-1.7b": {
+  "name": "Qwen3-1.7B",
+  "hub": "Qwen/Qwen3-1.7B",
+  "family": "Qwen3",
+  "size": "1.7B",
+  "base": false,
+  "layers": 28,
+  "mlp": 6144,
+  "heads": 16,
+  "bands": [
+   {
+    "key": "middle",
+    "first": 0,
+    "last": 9,
+    "write_r": [
+     0.39,
+     0.73
+    ],
+    "read_s": [
+     0.3,
+     0.84
+    ],
+    "read_r": [
+     0.06,
+     0.33
+    ],
+    "write_s": [
+     0.12,
+     0.32
+    ]
+   },
+   {
+    "key": "late",
+    "first": 10,
+    "last": 27,
+    "write_r": [
+     0.74,
+     1.0
+    ],
+    "read_s": [
+     0.07,
+     0.25
+    ],
+    "read_r": [
+     0.08,
+     0.34
+    ],
+    "write_s": [
+     0.0,
+     0.12
+    ]
+   }
+  ],
+  "late": 16,
+  "self": 15
+ },
  "qwen3-0.6b-base": {
   "name": "Qwen3-0.6B-Base",
   "hub": "Qwen/Qwen3-0.6B-Base",
@@ -105,6 +161,41 @@
     "write_s": [
      0.0,
      0.1
+    ]
+   }
+  ],
+  "late": 16,
+  "self": 15
+ },
+ "qwen3-1.7b-base": {
+  "name": "Qwen3-1.7B-Base",
+  "hub": "Qwen/Qwen3-1.7B-Base",
+  "family": "Qwen3",
+  "size": "1.7B",
+  "base": true,
+  "layers": 28,
+  "mlp": 6144,
+  "heads": 16,
+  "bands": [
+   {
+    "key": "middle",
+    "first": 0,
+    "last": 27,
+    "write_r": [
+     0.43,
+     1.0
+    ],
+    "read_s": [
+     0.07,
+     0.83
+    ],
+    "read_r": [
+     0.01,
+     0.29
+    ],
+    "write_s": [
+     0.0,
+     0.33
     ]
    }
   ],
