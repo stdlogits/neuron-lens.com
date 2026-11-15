@@ -223,7 +223,9 @@ export async function checkData(site, rules) {
     assertDataHeaders(response, site, path);
     const index = await response.json();
     assert.equal(index.id, model, `${path} names model ${index.id}`);
-    assert.ok(Array.isArray(index.neurons) && index.neurons.length > 0, `${path} lists no neurons`);
+    // An unlabelled model curates no neurons: its layers list them all.
+    assert.ok(Array.isArray(index.neurons) && (index.neurons.length > 0 || index.labelled === false), `${path} lists no neurons`);
+    assert.ok(index.layerMeta?.length === index.layers, `${path} has ${index.layerMeta?.length} of its ${index.layers} layers`);
   }
   // The edge keeps a file with the headers of the answer that filled its cache, so CORS must be on
   // every answer, asked with an Origin or not: R2 does that when the bucket's CORS allows any origin.
