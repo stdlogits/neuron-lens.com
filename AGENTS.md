@@ -152,7 +152,7 @@ script's docstring has the full invocation):
    numbers make its band words in `models.ts`; its write-shape layer and QK switch are the 8B's at the same
    relative depth), after neuron-lens's catalog queue has run its reads-at-firings and steering checks. It is
    labelled once its release record lists labels of both sides (`labelled` in `ladder.json`); its labels' terms
-   get a translation run of their own (`.neuron-lens/<model>-labels`), and Qwen3-8B's runs serve the rest (one
+   get a translation run of their own (`.neuron-lens/<model>-lean-labels`), and Qwen3-8B's runs serve the rest (one
    tokenizer; contexts the 8B never showed stay untranslated). `NEURON_LAYERS=8,21`
    builds a subset for development.
 4. `scripts/catalog/upload.sh <model>` puts the build on R2 and names it in `src/lib/catalog.json`;
