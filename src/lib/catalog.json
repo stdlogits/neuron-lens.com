@@ -2,7 +2,7 @@
   "origin": "https://data.neuron-lens.com",
   "builds": {
     "qwen3-8b": "6c10912e511a",
-    "gemma-4-12b": "960ac6a6010b",
+    "gemma-4-12b": "ea4bfbaec3d0",
     "qwen3-0.6b": "076d1e44238a",
     "qwen3-0.6b-base": "1df66cabd645",
     "qwen3-1.7b": "39873db3b95c",
