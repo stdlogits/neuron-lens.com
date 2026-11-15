@@ -31,7 +31,7 @@
 
   $effect(() => { document.title = "About · Neuron Lens"; });
   // Its specimens come from both models, so with English on both models' terms load.
-  $effect(() => { if (translation.on) for (const id of MODEL_ORDER) void ensureTerms(id); });
+  $effect(() => { if (translation.on) for (const id of MODEL_ORDER) if (MODELS[id].labelled) void ensureTerms(id); }); // the page's examples are theirs
 </script>
 
 <article class="pg">

@@ -10,7 +10,8 @@
   // The bars are pointer shortcuts into the explorer; keyboards go by the band tabs and their link.
   let modelId = $state<ModelId>("qwen3-8b");
   const model = $derived(MODELS[modelId]);
-  const models = MODEL_ORDER.map((id) => ({ value: id, label: MODELS[id].name }));
+  // The labelled models: the bars are the labeller's confidence.
+  const models = MODEL_ORDER.filter((id) => MODELS[id].labelled).map((id) => ({ value: id, label: MODELS[id].name }));
 
   let chosen = $state<Record<ModelId, string>>({ "qwen3-8b": "middle", "gemma-4-12b": "middle" });
   const band = $derived(model.bands.find((b) => b.key === chosen[modelId]) ?? model.bands[0]);
