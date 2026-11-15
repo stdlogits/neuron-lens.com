@@ -6,6 +6,8 @@
     "qwen3-0.6b": "0c19f0139263",
     "qwen3-0.6b-base": "1df66cabd645",
     "qwen3-1.7b": "92e58dc02b6c",
-    "qwen3-1.7b-base": "c8c853d027f9"
+    "qwen3-1.7b-base": "c8c853d027f9",
+    "qwen3-4b": "b2fd265f4e02",
+    "qwen3-4b-base": "fa3b2831f9c5"
   }
 }
