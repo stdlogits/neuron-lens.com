@@ -11,6 +11,8 @@
 <script lang="ts">
   import { LabelText, Swap, glide } from "@stdlogits/ledger";
   import LabelCell from "./LabelCell.svelte";
+  import { useLens } from "../lens.svelte";
+  import { MODELS } from "../../lib/models";
 
   // The faces table: a sign column, then one column per label ("Fires on", "Writes"; heads add
   // "Attends to"). A neuron's two sides are tabs, the chosen one on a wash that glides between them;
@@ -28,6 +30,10 @@
   } = $props();
 
   const tabs = $derived(rows.length > 1);
+  // A base model's labels are its post-trained model's, written for that model's unit at this address. (The
+  // About page's specimens draw faces outside the explorer, with no lens.)
+  const lens = useLens();
+  const from = $derived(lens?.model.labelsFrom ? MODELS[lens.model.labelsFrom].name : null);
   const id = $props.id();
 
   // Arrow keys move between the sides (the APG tabs pattern, selection following focus).
@@ -62,7 +68,7 @@
   {#if labelled}
     <div class="byline">
       <Swap key={note}>{#if note}<p class="note"><LabelText text={note} interactive /></p>{/if}</Swap>
-      <p class="meta">Labels by Claude Haiku 5.5</p>
+      <p class="meta">Labels by Claude Haiku 5.5{#if from}, written for {from}{/if}</p>
     </div>
   {/if}
 </div>

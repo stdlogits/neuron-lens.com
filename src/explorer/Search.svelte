@@ -4,18 +4,19 @@
   import { FOREIGN, GLIDE, Icon, LabelText, MorphText, ease, expand, fadeOut, glide, reducedMotion, swell } from "@stdlogits/ledger";
   import { useLens } from "./lens.svelte";
   import { findId, findLayer, findWords, type Found, type Result } from "./search/engine";
-  import { headId, loadHeadLayer, loadLayerIndex, loadNeuron, loadSearch, neuronId, parseRef, type SearchFile } from "../lib/data";
+  import { headId, loadHeadLayer, loadLayerIndex, loadNeuron, loadPoleWire, loadWords, neuronId, parseRef, poleId, type Words } from "../lib/data";
   import { bandOf, depthColor } from "../lib/models";
   import { ensureTerms, termFor, translation } from "../lib/translate.svelte";
 
-  // The search under the intro, as wide as the atlas under it: a word finds the curated neurons' poles and
+  // The search under the intro, as wide as the atlas under it: a word finds the poles of every neuron and
   // the heads whose labels hold it, an ID (or a unit's pasted address) opens its unit, and "L8" its layer.
   // The results open below the field as part of the same wash box, and every match lights up on the atlas
   // and in the list (lens.matches) for as long as the query has them; the one looked at (arrowed to or
   // pointed at) is picked out on the atlas too (lens.peek). Each result carries its layer's depth colour and
   // where it sits in depth, and the query is marked in its title. A word with nothing close is matched
   // within a typo (≈), and a query that finds nothing offers what it might mean. Focus on an empty field
-  // shows the recent searches. The search file (about 3 MB) loads on first hover or focus.
+  // shows the recent searches. The word index (about 1–2 MB) loads on first hover or focus; each word's units
+  // are read from it by range as it is asked for, and a result's title, if it isn't among the easiest, as it shows.
   // As the query changes, what stays glides to its new place, what goes fades, and what comes rises; a result
   // looked at for a moment starts loading its unit, so it opens with its evidence already there.
   const lens = useLens();
@@ -29,7 +30,7 @@
   let asked = $state("");
   let open = $state(false);
   let active = $state(-1);
-  let data = $state.raw<{ model: string; file: SearchFile } | null>(null);
+  let data = $state.raw<{ model: string; words: Words } | null>(null);
   let loading = $state(false);
   let failed = $state(false);
   /** Focus arrived from the keyboard (Tab or /): the ring shows. */
@@ -52,13 +53,13 @@
     const model = lens.modelId;
     loading = true;
     failed = false;
-    loadSearch(model).then(
-      (file) => { if (lens.modelId === model) data = { model, file }; },
+    loadWords(model).then(
+      (words) => { if (lens.modelId === model) data = { model, words }; },
       () => { if (lens.modelId === model) failed = true; },
     ).finally(() => { if (lens.modelId === model) loading = false; });
   }
 
-  // Another model: its own search file, and a fresh field.
+  // Another model: its own word index, and a fresh field.
   $effect(() => {
     void lens.modelId;
     untrack(() => {
@@ -75,22 +76,35 @@
   // A word in another script is also looked up in its English, which needs the terms.
   $effect(() => { if (foreign) void ensureTerms(); });
 
-  /** Null while what the query needs is still loading. */
-  const found = $derived.by<Found | null>(() => {
+  /** What the query found, and the query it is for: while the next is read, the last stays. */
+  let answer = $state.raw<{ text: string; found: Found } | null>(null);
+  $effect(() => {
     const text = asked.trim();
     const index = lens.index?.id === lens.modelId ? lens.index : null;
-    if (!text || !index) return null;
-    const byId = findId(text, lens.model, index, lens.heads);
-    if (byId) return byId;
-    const layer = findLayer(text, lens.model);
-    if (layer !== null) return { results: [], matches: { neurons: new Set(), heads: new Set() }, byId: false, terms: [], layer };
-    if (data?.model !== lens.modelId) return null;
-    return findWords(text, lens.model, index, lens.heads, data.file, foreign ? translation.terms : null);
+    const model = lens.model;
+    if (!text || !index) { answer = null; return; }
+    const byId = findId(text, model, index, lens.heads);
+    if (byId) { answer = { text, found: byId }; return; }
+    const layer = findLayer(text, model);
+    if (layer !== null) { answer = { text, found: { results: [], matches: { neurons: new Set(), heads: new Set() }, byId: false, terms: [], layer } }; return; }
+    if (data?.model !== lens.modelId) return;
+    let live = true;
+    findWords(text, model, index, lens.heads, data.words, foreign ? translation.terms : null).then(
+      (found) => { if (live) answer = { text, found }; },
+      () => { if (live) failed = true; },
+    );
+    return () => { live = false; };
   });
+  /** Null while what the query needs is still loading. */
+  const found = $derived(answer && asked.trim() ? answer.found : null);
   const results = $derived(found?.results ?? []);
+  /** Titles read for results outside the easiest, by model, unit and side. */
+  let titles = $state.raw<Record<string, string>>({});
+  const titleKey = (r: Result) => `${lens.modelId}:${r.layer}:${r.index}:${r.side}`;
+  const titleOf = (r: Result) => r.title || titles[titleKey(r)] || "";
   const counts = $derived({ neurons: results.filter((r) => r.unit === "neurons").length, heads: results.filter((r) => r.unit === "heads").length });
   const kept = $derived(kind === "all" ? results : results.filter((r) => r.unit === kind));
-  const settled = $derived(found !== null || failed);
+  const settled = $derived((answer !== null && answer.text === asked.trim()) || failed);
   // A new query starts at the top, with every kind and the first ten.
   $effect(() => { void asked; untrack(() => { limit = SHOWN; kind = "all"; }); });
 
@@ -102,6 +116,21 @@
     if (found?.layer !== undefined) out.push({ kind: "layer", layer: found.layer });
     for (const r of kept.slice(0, limit)) out.push({ kind: "unit", r });
     return out;
+  });
+
+  // A neuron's title, for the results shown that aren't among the easiest: from its record.
+  $effect(() => {
+    const model = lens.modelId;
+    const mlp = lens.model.mlp;
+    for (const row of rows) {
+      if (row.kind !== "unit" || row.r.unit !== "neurons" || row.r.title || titleKey(row.r) in titles) continue;
+      const r = row.r;
+      const key = titleKey(r);
+      loadPoleWire(model, poleId(mlp, r.layer, r.index, r.side === 0 ? 1 : -1)).then(
+        (wire) => { titles = { ...titles, [key]: wire.title }; },
+        () => undefined,
+      );
+    }
   });
 
   // Every match lights up across the explorer while the query has any; none once it clears.
@@ -159,7 +188,7 @@
     : failed && !found ? "Search didn't load."
     : found?.layer !== undefined ? `Layer ${found.layer}.`
     : !results.length ? `No match for “${asked.trim()}”.${found?.suggestion ? ` Did you mean ${found.suggestion}?` : ""}`
-    : results.length === 1 ? "1 match." : `${results.length} matches.`,
+    : results.length === 1 && !found?.more ? "1 match." : `${results.length.toLocaleString("en-US")}${found?.more ? "+" : ""} matches.`,
   );
 
   function changed() {
@@ -392,7 +421,7 @@
   const matchLang = (text: string) => (FOREIGN.test(text) ? termFor(text)?.[2] || undefined : undefined);
   const last = $derived(lens.model.layers - 1);
   /** The count in the field once the panel is put away, so the lit atlas still says what lit it. */
-  const tally = $derived(!panel && asked.trim() && results.length ? (results.length === 1 ? "1 match" : `${results.length.toLocaleString("en-US")} matches`) : "");
+  const tally = $derived(!panel && asked.trim() && results.length ? (results.length === 1 && !found?.more ? "1 match" : `${results.length.toLocaleString("en-US")}${found?.more ? "+" : ""} matches`) : "");
   const nearOnly = $derived(results.length > 0 && results.every((r) => r.fuzzy));
 </script>
 
@@ -483,7 +512,8 @@
                   {:else}
                     {@const r = row.r}
                     <span class="id"><i class="swatch"></i>{idOf(r)}{#if r.side !== 2}{" "}<span class="sign" aria-label={r.side === 0 ? "plus side" : "minus side"}>{r.side === 0 ? "+" : "−"}</span>{/if}</span>
-                    <span class="title" class:dim={!r.title}>{#if r.title}<LabelText text={r.title} />{:else}Open{/if}</span>
+                    {@const title = titleOf(r)}
+                    <span class="title" class:dim={!title}>{#if title}<LabelText text={title} />{:else if r.unit === "heads" || titleKey(r) in titles}Open{:else}&nbsp;{/if}</span>
                     <span class="match" class:fuzzy={r.fuzzy} lang={matchLang(r.matched)}>{#if r.matched}{r.fuzzy ? "≈ " : ""}{r.matched}{/if}</span>
                     <span class="depth" aria-hidden="true" style:--at={r.layer / Math.max(1, last)}><i></i></span>
                   {/if}

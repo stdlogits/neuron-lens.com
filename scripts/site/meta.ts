@@ -163,9 +163,14 @@ function llms() {
       "| --- | --- | --- | --- | --- | --- |",
       ...models.map((m) => `| [${m.name}](https://huggingface.co/${m.hub}) | ${m.layers} | ${count(m.mlp)} | ${m.heads} | ${count(neurons(m.id))} | ${count(heads(m.id))} |`),
     ].join("\n"),
-    ladder: models.some((m) => !m.labelled)
-      ? `- \`/${models.find((m) => !m.labelled)!.id}\`, …: the other Qwen3 sizes and their base models (${models.filter((m) => !m.labelled).map((m) => m.name).join(", ")}), unlabelled: their layers list every neuron, and their search finds heads and addresses\n`
-      : "",
+    ladder: [
+      ...(models.some((m) => m.labelsFrom)
+        ? [`- \`/${models.find((m) => m.labelsFrom)!.id}\`, …: the base models (${models.filter((m) => m.labelsFrom).map((m) => m.name).join(", ")}), shown with their post-trained models' labels, easiest and search over their own evidence\n`]
+        : []),
+      ...(models.some((m) => !m.labelled)
+        ? [`- \`/${models.find((m) => !m.labelled)!.id}\`, …: ${models.filter((m) => !m.labelled).map((m) => m.name).join(", ")}, unlabelled: their layers list every neuron, and their search finds heads and addresses\n`]
+        : []),
+    ].join(""),
     links: `${new Intl.ListFormat("en").format(models.map((m) => `[${m.name}](https://huggingface.co/${m.hub})`))}: the models, ${models.length > 2 ? "all" : "both"} Apache 2.0`,
     depth: models
       .map((m) => [`- ${m.name}, ${m.layers} layers:`, ...m.bands.map((b) => `  - ${bandRange(b)}, ${b.name.toLowerCase()}: ${b.summary} ${b.reading}`)].join("\n"))

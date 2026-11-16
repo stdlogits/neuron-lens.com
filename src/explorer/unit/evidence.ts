@@ -3,7 +3,7 @@
 import { formatValue, stem } from "@stdlogits/ledger";
 import {
   FLAG_AUDIO, FLAG_DETECTOR, FLAG_IMAGE, FLAG_PREDICTS, FLAG_SUPPRESSES, LENSES, percent,
-  type HeadDetail, type LensRead, type Pole, type ReadColumn,
+  type HeadDetail, type LensRead, type NeuronDetail, type Pole, type ReadColumn,
 } from "../../lib/data";
 
 /** A figure: its name over its value. */
@@ -71,6 +71,19 @@ export const primaryTokens = (reads: LensRead[], prefix: string) =>
   (reads.find((read) => read.col.startsWith(prefix) && read.trust === "primary") ?? reads.find((read) => read.col.startsWith(prefix)))?.tokens.map(([token]) => token) ?? [];
 
 export const nth = (n: number) => `${n}${SUFFIX[ordinal.select(n)] ?? "th"}`;
+
+/** The flags the tags read, from a neuron's own detail, as the builder sets them in its index row. */
+export function flagsOf(detail: NeuronDetail): number {
+  let flags = 0;
+  for (const pole of detail.poles) {
+    if (pole.detector) flags |= FLAG_DETECTOR;
+    if (pole.shape?.kind === "predicts") flags |= FLAG_PREDICTS;
+    if (pole.shape?.kind === "suppresses") flags |= FLAG_SUPPRESSES;
+    if (pole.media?.image?.reliable) flags |= FLAG_IMAGE;
+    if (pole.media?.audio?.reliable) flags |= FLAG_AUDIO;
+  }
+  return flags;
+}
 
 /** The tags beside a neuron's band, from its index flags (known before its detail loads). */
 export function neuronTags(flags: number): { label: string; tip: string }[] {

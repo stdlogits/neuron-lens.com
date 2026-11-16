@@ -6,8 +6,9 @@
 //
 // What it keeps, per model (KEEP below): some of the easiest neurons of a layer, deep-linked neurons
 // (with their layer's All list cut to them and the layer's top few), and some heads of a layer. Token
-// ids are renumbered into a small vocab.json, search.json and terms.json keep only what names a kept
-// unit or token, and media documents are renumbered into one block. Media bytes are made up (a 1 × 1
+// ids are renumbered into a small vocab.json, the word index (search/) and terms.json keep only what names a
+// kept unit or token, and media documents are renumbered into one block. A base model that borrows its
+// post-trained model's labels and search (src/lib/models.ts labelsFrom) keeps no word index. Media bytes are made up (a 1 × 1
 // WebP, two frames of silent MP3, one copy for each shown document, since the page keys a tile by
 // where its bytes are) so no collection's images or sounds are copied into the repository.
 // scores.json isn't written: one byte per neuron is ~1 MB a model, so catalog.mjs makes it up. Nor is
@@ -30,6 +31,8 @@ const KEEP = {
   // units the specs name, whatever their rank: "miami" in n3908 and n6321, 罚款 in n6321, n9658's sounds.
   "qwen3-8b": { easiest: { 8: 6 }, neurons: [[8, 344], [8, 3908], [8, 6321]], allTop: 2, heads: { 20: { top: 4, named: [17] }, 31: { top: 0, named: [0] } } },
   "gemma-4-12b": { easiest: { 23: 4 }, neurons: [[33, 12225], [14, 8313], [23, 9658]], allTop: 2, heads: { 27: { top: 0, named: [4] }, 28: { top: 4, named: [6] }, 35: { top: 1, named: [14] } } },
+  // Qwen3-8B's base, shown with Qwen3-8B's labels: the owl neuron and the British-spellings head.
+  "qwen3-8b-base": { easiest: {}, neurons: [[8, 344]], allTop: 1, heads: { 31: { top: 0, named: [0] } } },
 };
 
 const pad = (value, width = 2) => String(value).padStart(width, "0");
@@ -49,6 +52,18 @@ function silentMp3(frames = 2) {
   return Buffer.concat(Array.from({ length: frames }, () => frame));
 }
 const MEDIA_BYTES = { image: WEBP, audio: silentMp3() };
+
+/** Sorted words a line each, each as how many UTF-16 units it shares with the one before (as the builder's front_coded). */
+function frontCoded(words) {
+  let before = "";
+  return words.map((word) => {
+    let n = 0;
+    while (n < 40 && n < word.length && n < before.length && word[n] === before[n]) n += 1;
+    if (n && word.charCodeAt(n - 1) >= 0xd800 && word.charCodeAt(n - 1) <= 0xdbff) n -= 1;
+    before = word;
+    return String.fromCharCode(48 + n) + word.slice(n);
+  }).join("\n");
+}
 
 /** The records of graph.json: record number -> its bytes. */
 const records = (wire, list) => ({ wire, records: Object.fromEntries(list.map(([at, record]) => [at, record.toString("base64")])) });
@@ -212,20 +227,37 @@ async function cut(model) {
   const smallVocab = order.map((old) => vocab[old]);
   await write(model, "vocab.json", smallVocab);
 
-  // search.json: forms that name a kept unit, pointing at its new place.
-  const search = await read(model, "search.json");
-  const forms = {};
-  const display = {};
-  for (const [form, hits] of Object.entries(search.forms)) {
-    const kept = hits.flatMap(([ref, side, weight]) => {
-      if (side === 2) return keptHeads.has(ref) ? [[ref, side, weight]] : [];
-      return newPosition.has(ref) ? [[newPosition.get(ref), side, weight]] : [];
-    });
-    if (!kept.length) continue;
-    forms[form] = kept;
-    if (form in search.display) display[form] = search.display[form];
+  // The word index: the words that name a kept unit, each with only its kept units' postings, in one pack.
+  const forms = [];
+  const counts = [];
+  const shown = [];
+  const kept = [];
+  const words = await read(model, "search/words.json").catch(() => null);
+  if (words) {
+    const lines = words.forms.split("\n");
+    const allForms = [];
+    let before = "";
+    for (const line of lines) allForms.push((before = before.slice(0, line.charCodeAt(0) - 48) + line.slice(1)));
+    const allShown = words.shown.split("\n");
+    const keptPoles = new Set([...detailed].flatMap(([layer, set]) => [...set].flatMap((n) => [layer * 2 * mlp + n, layer * 2 * mlp + mlp + n])));
+    const ID = (1 << 22) - 1, HEAD = 1 << 22;
+    for (let p = 0; p < words.packs.length; p += 1) {
+      const raw = await bytes(model, `search/p${pad(p)}.bin`);
+      const postings = new Uint32Array(raw.buffer, raw.byteOffset, raw.byteLength / 4);
+      let at = 0;
+      for (let k = words.packs[p]; k < (words.packs[p + 1] ?? allForms.length); k += 1) {
+        const mine = [...postings.subarray(at, at + words.counts[k])].filter((x) => (x & HEAD ? keptHeads.has(x & ID) : keptPoles.has(x & ID)));
+        at += words.counts[k];
+        if (!mine.length) continue;
+        forms.push(allForms[k]);
+        shown.push(allShown[k]);
+        counts.push(mine.length);
+        kept.push(...mine);
+      }
+    }
+    await write(model, "search/words.json", { forms: frontCoded(forms), counts, shown: shown.join("\n"), packs: [0] });
+    await write(model, "search/p00.bin", new Uint8Array(new Uint32Array(kept).buffer));
   }
-  await write(model, "search.json", { forms, display });
 
   // terms.json: the kept tokens, and terms quoted in the kept labels.
   const terms = await read(model, "terms.json");
@@ -237,7 +269,7 @@ async function cut(model) {
   const keptTerms = Object.fromEntries(Object.entries(terms).filter(([key]) => tokens.has(key) || labels.includes(key)));
   await write(model, "terms.json", keptTerms);
 
-  console.log(`${model}: ${positions.length} easiest, ${[...detailed.values()].reduce((s, set) => s + set.size, 0)} detailed neurons, ${keptHeads.size} heads, ${order.length} tokens, ${Object.keys(forms).length} search forms, ${Object.keys(keptTerms).length} terms${index.media.length ? `, ${index.media.map((m) => `${mediaDocs[m].length} ${m}`).join(", ")}` : ""}`);
+  console.log(`${model}: ${positions.length} easiest, ${[...detailed.values()].reduce((s, set) => s + set.size, 0)} detailed neurons, ${keptHeads.size} heads, ${order.length} tokens, ${forms.length} search words, ${Object.keys(keptTerms).length} terms${index.media.length ? `, ${index.media.map((m) => `${mediaDocs[m].length} ${m}`).join(", ")}` : ""}`);
 }
 
 await rm(target, { recursive: true, force: true });

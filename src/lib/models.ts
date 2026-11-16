@@ -39,8 +39,12 @@ export interface ModelInfo {
   base: boolean;
   /** Its Hugging Face id. */
   hub: string;
-  /** Labelled by Claude Haiku; an unlabelled model lists every neuron (no Easiest) and searches heads and addresses. */
+  /** Labelled by Claude Haiku (or, for a base model, shown with its post-trained model's labels); an unlabelled
+   * model lists every neuron (no Easiest) and searches heads and addresses. */
   labelled: boolean;
+  /** A base model shown with its post-trained model's labels, ratings, easiest and search (lib/data.ts), its
+   * own evidence otherwise: the two are close enough that the labels hold (a9's call). */
+  labelsFrom?: ModelId;
   layers: number;
   mlp: number;
   heads: number;
@@ -168,6 +172,10 @@ function fromLadder(id: ModelId, m: Ladder): ModelInfo {
   };
 }
 for (const [id, m] of Object.entries(ladder as Record<string, Ladder>)) MODELS[id] ??= fromLadder(id, m);
+for (const model of Object.values(MODELS)) {
+  const post = model.base ? MODELS[model.id.replace(/-base$/, "")] : undefined;
+  if (!model.labelled && post?.labelled && post.id in catalog.builds) Object.assign(model, { labelled: true, labelsFrom: post.id });
+}
 
 const FAMILIES: ModelInfo["family"][] = ["Qwen3", "Gemma 4"];
 const sizeOf = (model: ModelInfo) => parseFloat(model.size);

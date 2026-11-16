@@ -12,7 +12,7 @@
   const model = $derived(MODELS[modelId]);
   // The labelled models (the bars are the labeller's confidence), picked as the explorer picks them:
   // the family, then its size.
-  const labelled = MODEL_ORDER.map((id) => MODELS[id]).filter((m) => m.labelled);
+  const labelled = MODEL_ORDER.map((id) => MODELS[id]).filter((m) => m.labelled && !m.labelsFrom);
   const families = [...new Set(labelled.map((m) => m.family))].map((family) => ({ value: family, label: family }));
   const sizes = $derived(labelled.filter((m) => m.family === model.family).map((m) => ({ value: m.id, label: m.size })));
   const setFamily = (family: string) => { const first = labelled.find((m) => m.family === family); if (first) modelId = first.id; };

@@ -9,8 +9,10 @@
   import { OVERSCAN, type View } from "./ink";
   import { rows, type Layout, type Open, type Placed, type Spot } from "./layout";
   import type { Graph as GraphData, GraphNode, Mode, Reach } from "./trace";
-  import { bandOf, type ModelInfo } from "../../lib/models";
-  import { headId, loadSearch, neuronId, type SearchFile } from "../../lib/data";
+  import { MODELS, bandOf, type ModelInfo } from "../../lib/models";
+  import { headId, loadWords, neuronId, type Words } from "../../lib/data";
+  import { findWords } from "../search/engine";
+  import type { Matches } from "../lens.svelte";
 
   // The unit's connections, full screen: the same graph and motion as the rail's, opening at HOME times
   // its size, moved like a map. Titles stay one size on screen at any zoom, each where it touches no mark
@@ -596,14 +598,14 @@
   /** The query once typing pauses. */
   let asked = $state("");
   let typing = 0;
-  let file = $state.raw<SearchFile | null>(null);
-  let fileFor = "";
+  let words = $state.raw<Words | null>(null);
+  let wordsFor = "";
   let field = $state<HTMLInputElement>();
   function warm() {
     const id = model.id;
-    if (fileFor === id) return;
-    fileFor = id;
-    loadSearch(id).then((loaded) => { if (fileFor === id) file = loaded; }, () => { if (fileFor === id) fileFor = ""; });
+    if (wordsFor === id) return;
+    wordsFor = id;
+    loadWords(id).then((loaded) => { if (wordsFor === id) words = loaded; }, () => { if (wordsFor === id) wordsFor = ""; });
   }
   async function openSearch() {
     warm();
@@ -623,7 +625,17 @@
     typing = window.setTimeout(() => (asked = query), query.trim() ? 160 : 0);
   }
   $effect(() => { if (FOREIGN.test(asked)) void ensureTerms(); });
-  const found = $derived(searching && asked.trim() ? find(asked, graph.nodes, { model, index: lens.index, heads: lens.heads, file: file && fileFor === model.id ? file : null, terms: translation.terms }) : null);
+  /** What the search finds for the query, once read (titles match at once, without it). */
+  let wordsFound = $state.raw<{ text: string; matches: Matches } | null>(null);
+  $effect(() => {
+    const text = asked.trim();
+    const index = lens.index?.id === model.id ? lens.index : null;
+    if (!searching || !text || !index || !words || wordsFor !== model.id) return;
+    let live = true;
+    findWords(text, model, index, lens.heads, words, FOREIGN.test(text) ? translation.terms : null).then((f) => { if (live) wordsFound = { text, matches: f.matches }; }, () => undefined);
+    return () => { live = false; };
+  });
+  const found = $derived(searching && asked.trim() ? find(asked, graph.nodes, { model, found: wordsFound?.text === asked.trim() ? wordsFound.matches : null }) : null);
   /** What it found, top to bottom and left to right, for stepping through. */
   const hits = $derived.by(() => {
     if (!found) return [];
@@ -813,7 +825,7 @@
     {/if}
   </header>
   {#if picked}<Card {picked} close={() => (picked = null)} />{/if}
-  <p class="credit meta"><span class="where">Neuron Lens · {model.name} · </span>Labels by Claude Haiku 5.5</p>
+  <p class="credit meta"><span class="where">Neuron Lens · {model.name} · </span>Labels by Claude Haiku 5.5{#if model.labelsFrom}, written for {MODELS[model.labelsFrom].name}{/if}</p>
 </div>
 
 <style>

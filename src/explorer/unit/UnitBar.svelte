@@ -6,7 +6,7 @@
   import { reading, setDistinctive } from "../../lib/reading.svelte";
   import { setTranslate, translation } from "../../lib/translate.svelte";
   import { bandRange } from "../../lib/models";
-  import { neuronTags } from "./evidence";
+  import { flagsOf, neuronTags } from "./evidence";
 
   // The top of the unit: its ID over its depth and tags, then the tools: English, where it sits in
   // the list, previous and next, and a link to it. It stays in place while the unit below changes;
@@ -20,6 +20,9 @@
       const roles = row ? rolesOf(row[9]).map((role) => ({ label: role.short, tip: role.describe })) : [];
       return lens.globalLayer ? [{ label: "Global attention", tip: "Sees the whole text; other layers see the last 1,024 tokens" }, ...roles] : roles;
     }
+    // A base model's listed rows carry its post-trained model's flags (lib/data.ts): its tags, which are
+    // measurements and not labels, come from its own detail.
+    if (lens.model.labelsFrom) return lens.neuronDetail ? neuronTags(flagsOf(lens.neuronDetail)) : [];
     return lens.selectedNeuronRow ? neuronTags(lens.selectedNeuronRow[5]) : [];
   });
   const prev = $derived(lens.stepTo(-1));

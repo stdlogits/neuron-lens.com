@@ -57,6 +57,19 @@ test("switching model keeps the place, clipped to the new model's shape", async 
   await expect(page).toHaveURL(/\/qwen3-8b\/L33\?all$/);
 });
 
+test("a base model reads with its post-trained model's labels and easiest", async ({ page }) => {
+  // Qwen3-8B-Base's owl neuron: the base's own evidence, under the label Haiku wrote for Qwen3-8B's, which says so.
+  await page.goto("/qwen3-8b-base/L8/n344");
+  await expect(unitHeading(page, "L8·n344")).toBeVisible();
+  await expect(page.getByText("Labels by Claude Haiku 5.5, written for Qwen3-8B")).toBeVisible();
+  await expect(page.locator("#unit")).toContainText("nocturnal animals");
+  // It has Qwen3-8B's Easiest, which holds the owl neuron, so the address keeps no ?all.
+  const scope = page.getByRole("group", { name: "Which units" });
+  await expect(scope.getByRole("button", { name: /^Easiest/ })).toHaveAttribute("aria-pressed", "true");
+  await settle(page);
+  expect(path(page)).toBe("/qwen3-8b-base/L8/n344");
+});
+
 test("a deep link loads that neuron", async ({ page }) => {
   const record = page.waitForRequest((request) => request.url().endsWith("/data/qwen3-8b/neurons/L08/graph.bin"));
   await page.goto("/qwen3-8b/L8/n344");
@@ -255,26 +268,27 @@ test("search finds a word, lights its units, and opens one", async ({ page }) =>
   await expect(bars(page).first()).toBeAttached();
   expect(await lit(page)).toBe(0);
 
-  // "/" finds the field. "miami" is in two units' reads, n3908's more strongly than n6321's.
+  // "/" finds the field. "night" is in the labels of two of the easiest neurons: n11865's title, and the owl
+  // neuron's other label (what it writes), so n11865 comes first.
   await page.keyboard.press("/");
   await expect(search).toBeFocused();
-  await page.keyboard.type("miami");
+  await page.keyboard.type("night");
   await expect(search).toHaveAttribute("aria-expanded", "true");
   await expect(matches.getByRole("option")).toHaveCount(2);
-  await expect(matches.getByRole("option", { name: /^L8·n3908 minus side/ })).toHaveAttribute("aria-selected", "true");
-  await expect(matches.getByRole("option", { name: /^L8·n6321 minus side/ })).toHaveAttribute("aria-selected", "false");
+  await expect(matches.getByRole("option", { name: /^L8·n11865 plus side/ })).toHaveAttribute("aria-selected", "true");
+  await expect(matches.getByRole("option", { name: /^L8·n344 plus side/ })).toHaveAttribute("aria-selected", "false");
   await expect(page.getByText("2 matches.")).toBeAttached();
 
   // Those two units light on the atlas; the others don't.
   await expect.poll(() => lit(page)).toBe(2);
 
   // Choosing a match opens it, closes the results, and keeps the lights while the query stands.
-  await matches.getByRole("option", { name: /^L8·n6321/ }).click();
-  await expect(page).toHaveURL(/\/qwen3-8b\/L8\/n6321$/);
-  await expect(unitHeading(page, "L8·n6321")).toBeVisible();
+  await matches.getByRole("option", { name: /^L8·n344/ }).click();
+  await expect(page).toHaveURL(/\/qwen3-8b\/L8\/n344$/);
+  await expect(unitHeading(page, "L8·n344")).toBeVisible();
   await expect(search).toHaveAttribute("aria-expanded", "false");
   await expect(matches).toHaveCount(0);
-  await expect(search).toHaveValue("miami");
+  await expect(search).toHaveValue("night");
   expect(await lit(page)).toBe(2);
 
   // Clearing it puts the map back.
@@ -298,7 +312,7 @@ test("search forgives a typo, names a layer, and remembers what was chosen", asy
   const matches = page.getByRole("listbox", { name: "Matches" });
   await expect(bars(page).first()).toBeAttached();
 
-  // A letter swapped still finds both units "miami" finds, as close matches, and offers the word.
+  // A letter swapped still finds both units "miami" finds (in n3908's and n6321's labels), as close matches, and offers the word.
   await search.fill("maimi");
   await expect(matches.getByRole("option")).toHaveCount(2);
   await expect(page.getByText(/Did you mean/)).toBeVisible();
@@ -499,10 +513,12 @@ test("a sound tile plays its clip, and only one plays at a time", async ({ page 
 });
 
 test("Translate to English swaps tokens, labels and examples", async ({ page }) => {
-  // Qwen's n6321 fires on 罚款 (fines): the mock's terms.json and its contexts carry Haiku's English.
+  // Qwen's n6321 fires on 罚款 (fines) on its + side, which isn't its clearer one, so it is chosen: the mock's
+  // terms.json and its contexts carry Haiku's English. It isn't among the easiest, so it opens with ?all.
   await page.goto("/qwen3-8b/L8/n6321");
   const english = page.getByRole("switch", { name: "English" });
   const side = page.getByRole("tab", { name: /^Positive side/ });
+  await side.click();
   const token = page.getByRole("button", { name: /^罚款 \(two reads agree\) 8\.0$/ });
   const translated = page.getByRole("button", { name: /^fine \(two reads agree, translated from 罚款\) 8\.0$/ });
   const original = page.getByText("燒烤場）亂拋垃圾可被罰");
@@ -523,16 +539,17 @@ test("Translate to English swaps tokens, labels and examples", async ({ page }) 
   await expect(english).toHaveAttribute("aria-checked", "true");
   await expect(translated).toBeVisible();
   await expect(token).toHaveCount(0);
-  await expect(side).toHaveAccessibleName(/fine \(translated from 罚款\)/);
+  await expect(side).toHaveAccessibleName(/penalty \(translated from 处罚\)/);
   await expect(inEnglish).toBeVisible();
   // An example in English says what it was written in, and keeps the original in that button's name.
   await expect(language.first()).toBeVisible();
   await expect(language.first()).toHaveAccessibleName(/Original: .*燒烤場/);
   // The address is unchanged: the switch is the viewer's, not the page's.
-  expect(path(page)).toBe("/qwen3-8b/L8/n6321");
+  expect(path(page)).toBe("/qwen3-8b/L8/n6321?all");
 
   // The choice is remembered for the viewer.
   await page.reload();
+  await side.click();
   await expect(english).toHaveAttribute("aria-checked", "true");
   await expect(translated).toBeVisible();
   await expect(inEnglish).toBeVisible();

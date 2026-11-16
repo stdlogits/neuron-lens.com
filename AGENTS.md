@@ -61,7 +61,8 @@ draws for itself.
 Follow Ledger exactly: flat and borderless, the depth tint as the one accent and only as fill, Wix
 Madefor only with tabular numbers, motion on one curve through its actions and `Swap`/`MorphText`, show
 rather than tell (no explanatory paragraphs or provenance in the explorer; tips and the About page
-hold the words). The only credit in the explorer is "Labels by Claude Haiku 5.5"; above it sits the
+hold the words). The only credit in the explorer is "Labels by Claude Haiku 5.5" (on a base model, "…, written for
+Qwen3-8B" or its size); above it sits the
 labeller's note on the chosen labels, which is evidence for them, not an explanation of the site. A
 unit's view shows all of its evidence on one page, with nothing behind a "more" button, sorted into
 baskets under a bar that stays in reach, in this order: Weights (every read the labeller saw, and what it adds
@@ -92,7 +93,12 @@ The model is picked in two rows: its family, then its size and, where both are u
 figure picks among the labelled ones the same way). Another model keeps the place (a9's call): the same layer and neuron or
 head number, clipped to its shape and never matched to a similar unit, Easiest or All as it was (a trip through a base model,
 which lists all, changes neither), the filter where it has one, and the side being read.
-An unlabelled model (the Qwen3 bases, or a size whose labels aren't released yet) has no Easiest: its layers list every neuron, and its
+A base model whose post-trained model is labelled (`labelsFrom` in `models.ts`) shows that model's labels, ratings, Easiest
+and search over its own evidence (a9's call: the two are empirically close enough that the labels hold). Its build stays
+unlabelled; `src/lib/data.ts`'s loaders merge the lender's build into it (titles, scores and confidences in the rows,
+graph records and details; the Easiest list, the scores texture, the terms and the word index), so nothing above them
+knows, and a base unit's graph reads two records a node. Its Easiest filters use the lender's flags.
+An unlabelled model (a size whose labels aren't released yet, and its base) has no Easiest: its layers list every neuron, and its
 search finds heads and addresses only (a9's calls). Five sizes fill a 320 px row; a sixth needs another layout.
 Phone widths down to 320 px must not scroll sideways.
 
@@ -146,7 +152,8 @@ script's docstring has the full invocation):
    so rerun this whenever a catalog's `media/*_docs.parquet` change.
 3. `scripts/neurons/build-neuron-catalog.py <catalog> <tokenizer.json> catalog
    <translations.jsonl,...>` writes every neuron and head into `catalog/<model>/`, given every
-   translation run that applies (a term means the same whichever model's run translated it). The
+   translation run under `.neuron-lens/` (a term means the same whichever model's run translated it; the runs
+   added since only reach `terms.json` and the word index, so an earlier build's other files rebuild the same). The
    model's profile (geometry, depth bands, the reads that fail on it) sits at the top of the builder;
    the bands come from `scripts/neurons/bands.py <neuron-lens data/summary> <model>`, which reads
    them off neuron-lens's per-layer census and steering checks, and `src/lib/models.ts` holds the same
@@ -175,9 +182,18 @@ The graph's walk (`trace.ts`) settles a layer before the next, so it reads ahead
 a few layers on is asked for at once, as a read that waits behind any needed now (`range` in `data.ts`) and
 moves up when it is. The graph comes out the same; All settles in about a third of the time.
 
+The search reads the word index (`search/`, `write_search` in the builder): `words.json` lists every word a unit is found
+by, as `stem()` keys it, sorted and front-coded, with how many units each has and how it shows; it loads whole on the
+search's first hover or focus (0.6–1.2 MB gzipped). `p<NN>.bin` packs (4 MiB) hold each word's postings, a uint32 each
+(the unit's id, whether it is a head, whether the word is in its title, the word's weight), a word's best first, so a
+search reads only the head of a long list by range (the engine's `EXACT` and `NEAR`). A labelled model indexes every
+pole's label words, and its Easiest neurons' poles and its heads by all their words (reads, peaks, translations), as
+the curated search did before it; an unlabelled one, its heads. A result outside the Easiest gets its title from its
+graph record as it shows.
+
 The types in `src/lib/data.ts` mirror the builder's output. Change both together, then regenerate the
 e2e mock catalog (`node e2e/fixtures/build.mjs`) so the specs see the new shape. The builder's `stem()`
-keys the search file and the variants a unit agrees on; the explorer computes the same keys with
+keys the word index and the variants a unit agrees on; the explorer computes the same keys with
 Ledger's `stem()`, so the two must stay the same.
 
 ### On R2

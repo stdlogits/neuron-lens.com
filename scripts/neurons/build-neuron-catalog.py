@@ -31,8 +31,11 @@ Output, JSON unless named otherwise:
 - ``heads/index.json``: every head's labels, roles and pattern; ``heads/L<layer>.json``: details;
   ``heads/graph.bin``: a ``HEAD_WIRE`` record per head, layer-major (its title, what drives it through its value, query
   and key, what fires with it and what it drives);
-- ``search.json``: word -> curated neuron poles and heads; ``terms.json``: token -> English;
-  ``vocab.json``: every token decoded, which the details name by id;
+- ``search/words.json`` and ``search/p<NN>.bin``: the word index (``write_search``): every word a unit is
+  found by, and per word its units, best first, read by HTTP range. A labelled model indexes every pole's
+  label words, and its easiest neurons' poles and its heads by all their words (``search_weights``);
+  an unlabelled one indexes its heads only;
+- ``terms.json``: token -> English; ``vocab.json``: every token decoded, which the details name by id;
 - Gemma 4: ``media/<modality>/d<block>.json``: each image's or sound's source, labels, caption (and
   its translation), link, and where ``media.py`` packed it when this site can show it, ``DOC_BLOCK``
   documents to a file, which the poles' top documents name by number. Run ``media.py`` first.
@@ -93,6 +96,7 @@ KEEP_PER_LAYER = 40
 DOC_BLOCK = 2048
 K = 16  # connections a unit keeps per relation (the catalog keeps 64, findings §17)
 PACK = 20 * 2**20  # a units pack's size at most: the edge fetches a pack whole for its first range, then cuts from its copy
+SEARCH_PACK = 4 * 2**20  # a postings pack's size, unless one word's postings are larger: small, so a cold first read is quick
 HUB = 0.03  # a raw read's token in this share of the layer's top 64s is a hub (neuron-lens §6)
 Q = 0.05  # a media test passes at this q-value
 SILENT = 0.05  # a pole whose typical peak is under this is silent
@@ -306,7 +310,12 @@ def shorten(text, n=84):
 
 
 def label_words(text):
-    return [w for w in re.findall(r"[^\W\d_][\w'-]*", (text or "").lower()) if len(w) > 2 and w not in STOP]
+    """A label's words for search: quotes off ('owl' is owl), and a hyphenated word whole and in its parts."""
+    out = []
+    for w in re.findall(r"[^\W\d_][\w'-]*", (text or "").lower()):
+        w = w.strip("'-")
+        out += [x for x in dict.fromkeys([w, *(w.split("-") if "-" in w else [])]) if len(x) > 2 and x not in STOP]
+    return out
 
 
 def hubs_of(ids):
@@ -360,6 +369,37 @@ def read_header(order, primary, trusted, by_family=False):
         key = c.removesuffix("_z") if by_family else c
         out.append({"col": c, "trust": "primary" if key in primary else "trusted" if key in trusted else "weak"})
     return out
+
+
+def label_weights(texts):
+    """Word -> weight for a pole known only by its labels: each label word at a label's weight in search_weights."""
+    weights, display = collections.Counter(), {}
+    for text in texts:
+        for word in label_words(text):
+            k = stem(word)
+            if k:
+                weights[k] = 5
+                display.setdefault(k, word)
+    return weights, display
+
+
+class Postings:
+    """The word index's rows as gathered, one layer (or the heads) at a time: word, unit, weight, whether
+    the word is in the unit's title, and how surely it was labelled (which orders a word's units)."""
+
+    def __init__(self):
+        self.forms, self.display, self.rows = {}, collections.defaultdict(collections.Counter), []
+
+    def add(self, unit, head, weights, shown, said, rank):
+        for k, w in weights.items():
+            if "\n" in k or "\r" in k:
+                continue  # a token with a line break inside: nothing anyone types, and the index is a word a line
+            self.display[k][shown.get(k, k)] += 1  # each way the word was written, counted: the commonest shows
+            self.rows.append((self.forms.setdefault(k, len(self.forms)), unit, head, w, k in said, rank))
+
+    def packed(self):
+        rows = np.array(self.rows, dtype=[("f", "<u4"), ("id", "<u4"), ("head", "?"), ("w", "u1"), ("said", "?"), ("rank", "<f4")])
+        return {"forms": list(self.forms), "display": self.display, "rows": rows}
 
 
 def search_weights(header, reads, peaks, label_texts):
@@ -615,11 +655,27 @@ def neuron_layer(L):
             found, values = DRIVES["pole", target]
             wires[relation]["id"], wires[relation]["v"] = found[L * 2 * MLP:(L + 1) * 2 * MLP], values[L * 2 * MLP:(L + 1) * 2 * MLP].astype("<f2")
 
+    # The easiest, by the labeller; an unlabelled model has none, and its search finds heads and addresses only.
+    chosen = sorted(range(MLP), key=lambda k: -neuron_score[k])[:KEEP_PER_LAYER] if LABELLED else []
+    chosen += [n for layer, n in P["pinned"] if layer == L and n not in chosen]  # the site's own examples stay listed and searchable
+    easiest = set(chosen)
+    postings = Postings()
+
     pack, written, stream = 0, 0, open(f"{d_out}/units-{0:02d}.bin", "wb")
     rows = []
     for nrn in range(MLP):
         i_plus, i_minus = nrn, MLP + nrn
         poles = [pole_detail(i_plus), pole_detail(i_minus)]
+        # Its words for search: every label word of each pole, and an easiest neuron's poles by all their words.
+        for i, p in zip((i_plus, i_minus), poles) if LABELLED else ():
+            texts = [fires[i], writes[i], *[m["label"] for m in (p.get("media") or {}).values() if m["reliable"]]]
+            if nrn in easiest:
+                weights, shown = search_weights(header, p["reads"], p["peaks"], texts)
+                weights = dict(weights.most_common(40))
+            else:
+                weights, shown = label_weights(texts)
+            said = {stem(w) for w in label_words(writes[i] if wc[i] > fc[i] else fires[i])}  # its title's words (title())
+            postings.add(L * 2 * MLP + i, False, weights, shown, said, pole_score[i])
         record = zlib.compress(json.dumps({"n": nrn, "poles": poles}, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), 9)
         if written + len(record) > PACK:
             stream.close()
@@ -643,17 +699,7 @@ def neuron_layer(L):
     wires.tofile(f"{d_out}/graph.bin")
     json.dump({"layer": L, "neurons": rows}, open(f"{d_out}/index.json", "w"), ensure_ascii=False, separators=(",", ":"))
 
-    # The easiest, by the labeller; an unlabelled model has none, and its search finds heads and addresses only.
-    chosen = sorted(range(MLP), key=lambda k: -neuron_score[k])[:KEEP_PER_LAYER] if LABELLED else []
-    chosen += [n for layer, n in P["pinned"] if layer == L and n not in chosen]  # the site's own examples stay listed and searchable
-    curated = []
-    for nrn in chosen:
-        searches = []
-        for side, i in enumerate((nrn, MLP + nrn)):
-            p = pole_detail(i)
-            media_labels = [m["label"] for m in (p.get("media") or {}).values() if m["reliable"]]
-            searches.append(search_weights(header, p["reads"], p["peaks"], [fires[i], writes[i], *media_labels]))
-        curated.append({"row": [L, *rows[nrn]], "search": searches})
+    curated = [{"row": [L, *rows[nrn]]} for nrn in chosen]
     meta = {"layer": L, "band": band(L), "count": len(chosen), "reads": header, "orth": orth_header, "stream": stream_header,
             "stats": {"silent": round(float(silent.mean()), 4), "detector": round(float((detector & ~silent).mean()), 4),
                       "conf": round(float(np.maximum(fc, wc).mean()), 4)}}
@@ -663,7 +709,7 @@ def neuron_layer(L):
     if L in P["global"]:
         meta["global"] = True
     print(f"L{L:02d}: {MLP} neurons, curated {len(chosen)}, silent {meta['stats']['silent']:.2f}", flush=True)
-    return {"meta": meta, "curated": curated, "scores": neuron_score.astype(np.float32)}
+    return {"meta": meta, "curated": curated, "scores": neuron_score.astype(np.float32), "postings": postings.packed()}
 
 
 # ---------- heads
@@ -695,7 +741,7 @@ def heads():
                     "content": num(rows[i]["content_z"]), "write": num(rows[i]["write_mid"]), "writeQ": num(rows[i]["write_mid_q"])}
                 for m, rows in med.items()} or None
 
-    rows, details, search = [], collections.defaultdict(list), []
+    rows, details, postings = [], collections.defaultdict(list), Postings()
     for i in range(n):
         L, h = int(layer[i]), int(head[i])
         A, R, B = a[i], r[i], lab[i]
@@ -738,7 +784,8 @@ def heads():
         details[L].append(detail)
         rows.append([L, h, int(A["kv_head"]), shorten(B["fires"], 72), shorten(B["attends"], 72), shorten(B["writes"], 72),
                      *[int(round(c * 100)) for c in conf], roles, round(score, 3), pattern])
-        search.append(search_weights(header, rd, peaks, [B["fires"], B["attends"], B["writes"]]))
+        weights, shown = search_weights(header, rd, peaks, [B["fires"], B["attends"], B["writes"]])
+        postings.add(L * HEADS + h, True, dict(weights.most_common(40)), shown, (), score)
     os.makedirs(f"{out}/heads", exist_ok=True)
     wires = blank_wires(n, HEAD_WIRE, HEAD_RELATIONS)
     for i in range(n):
@@ -759,7 +806,7 @@ def heads():
         json.dump({"layer": L, "reads": head_header(L), "heads": hs}, open(f"{out}/heads/L{L:02d}.json", "w"), ensure_ascii=False, separators=(",", ":"))
     json.dump({"heads": rows}, open(f"{out}/heads/index.json", "w"), ensure_ascii=False, separators=(",", ":"))
     print(f"heads: {n}", flush=True)
-    return rows, search
+    return rows, postings.packed()
 
 
 # ---------- Gemma 4's media documents
@@ -844,10 +891,88 @@ def invert_sources():
         print(f"sources inverted: {(DRIVES['pole', 'pole'][0][:, 0] != NONE).mean():.2f} of poles drive a pole, {(DRIVES.get(('pole', 'head'), (np.full((1, K), NONE),))[0][:, 0] != NONE).mean():.3f} a head", flush=True)
 
 
+# A posting: the unit's id in the low ID_BITS (a pole's as in graph.bin, a head's layer × heads + head), then
+# whether it is a head, whether the word is in its title, and the word's weight for it (search_weights).
+ID_BITS = 22
+HEAD_BIT, SAID_BIT, WEIGHT_SHIFT = 1 << ID_BITS, 1 << (ID_BITS + 1), ID_BITS + 2
+
+
+def front_coded(words):
+    """Sorted words a line each, each as how many UTF-16 units it shares with the one before (chr(48 + n), at most
+    40) and the rest: the explorer slices JavaScript strings, which count in UTF-16 units."""
+    out, before = [], b""
+    for w in words:
+        b, n = w.encode("utf-16-le"), 0
+        while n < 40 and 2 * n < min(len(b), len(before)) and b[2 * n:2 * n + 2] == before[2 * n:2 * n + 2]:
+            n += 1
+        if n and 0xD800 <= int.from_bytes(b[2 * n - 2:2 * n], "little") <= 0xDBFF:
+            n -= 1  # never split a surrogate pair
+        out.append(chr(48 + n) + b[2 * n:].decode("utf-16-le"))
+        before = b
+    return "\n".join(out)
+
+
+def shown_as(word, shown):
+    """How a word shows, a line: empty when as keyed; else the key with a suffix added, then as is (.), with its first
+    letter a capital (^) or all capitals (!); else ~ and the whole."""
+    if shown == word:
+        return ""
+    if shown.lower().startswith(word):
+        rest = shown[len(word):].lower()
+        for mark, case in ((".", str), ("^", lambda x: x[:1].upper() + x[1:]), ("!", str.upper)):
+            if case(word + rest) == shown:
+                return mark + rest
+    return "~" + shown
+
+
+def write_search(parts):
+    """The word index: ``search/words.json`` lists every word (as stem() keys it), sorted and front-coded
+    (``front_coded``), with how many units each has, how each shows (``shown_as``, a line per word), and the word
+    each postings pack starts at; ``search/p<NN>.bin``
+    holds each word's postings (uint32, ID_BITS and above) end to end in the words' order, a word's best first
+    (by weight, then in its title, then by how surely the unit was labelled), so a search reads only the head of a
+    long list. Returns how many words there are."""
+    assert LAYERS * 2 * MLP < 1 << ID_BITS, "pole ids outgrow the posting"
+    where, written, chunks = {}, collections.defaultdict(collections.Counter), []
+    for part in parts:
+        remap = np.array([where.setdefault(k, len(where)) for k in part["forms"]], np.int64)
+        for k, ways in part["display"].items():
+            written[k].update(ways)
+        rows = part["rows"]
+        chunks.append((remap[rows["f"]] if len(rows) else np.zeros(0, np.int64), rows))
+    words = sorted(where)
+    display = ["\n" not in (x := written[k].most_common(1)[0][0]) and shown_as(k, x) or "" for k in words]
+    place = np.empty(len(words), np.int64)
+    place[[where[k] for k in words]] = np.arange(len(words))
+    f = place[np.concatenate([c for c, _ in chunks])]
+    rows = np.concatenate([r for _, r in chunks])
+    assert rows["w"].max(initial=0) < 16
+    order = np.lexsort((-rows["rank"], ~rows["said"], -rows["w"].astype(int), f))
+    rows = rows[order]
+    postings = (rows["id"].astype(np.uint32) | np.where(rows["head"], HEAD_BIT, 0).astype(np.uint32)
+                | np.where(rows["said"], SAID_BIT, 0).astype(np.uint32) | (rows["w"].astype(np.uint32) << WEIGHT_SHIFT)).astype("<u4")
+    counts = np.bincount(f, minlength=len(words))
+    os.makedirs(f"{out}/search", exist_ok=True)
+    starts, at, size = [0], 0, 0
+    for k, n in enumerate(counts):
+        if size and size + 4 * n > SEARCH_PACK:
+            starts.append(k)
+            size = 0
+        size += 4 * int(n)
+    bounds = np.concatenate([[0], np.cumsum(counts)])
+    for p, first in enumerate(starts):
+        last = starts[p + 1] if p + 1 < len(starts) else len(words)
+        postings[bounds[first]:bounds[last]].tofile(f"{out}/search/p{p:02d}.bin")
+    json.dump({"forms": front_coded(words), "counts": counts.tolist(), "shown": "\n".join(display), "packs": starts},
+              open(f"{out}/search/words.json", "w"), ensure_ascii=False, separators=(",", ":"))
+    print(f"search: {len(words)} words, {len(postings)} postings in {len(starts)} packs", flush=True)
+    return len(words)
+
+
 def main():
     os.makedirs(out, exist_ok=True)
     invert_sources()
-    head_rows, head_search = heads()
+    head_rows, head_postings = heads()
     media_docs()
     with multiprocessing.get_context("fork").Pool(min(6, len(ONLY))) as pool:
         layers = dict(zip(ONLY, pool.map(neuron_layer, ONLY)))
@@ -865,19 +990,7 @@ def main():
         scores.append(base64.b64encode(values.tobytes()).decode())
     json.dump({"layers": scores}, open(f"{out}/scores.json", "w"), separators=(",", ":"))
 
-    # Search: word -> [ref, side, weight]; side 0/1 is a curated neuron's + or − pole (ref indexes
-    # index.json's neurons), side 2 a head (ref = layer * HEADS + head).
-    forms, display = collections.defaultdict(list), {}
-    for ref, c in enumerate(curated):
-        for side, (weights, shown) in enumerate(c["search"]):
-            for k, w in weights.most_common(40):
-                forms[k].append([ref, side, w])
-                display.setdefault(k, shown[k])
-    for row, (weights, shown) in zip(head_rows, head_search):
-        for k, w in weights.most_common(40):
-            forms[k].append([row[0] * HEADS + row[1], 2, w])
-            display.setdefault(k, shown[k])
-    json.dump({"forms": forms, "display": {k: display[k] for k in forms}}, open(f"{out}/search.json", "w"), ensure_ascii=False, separators=(",", ":"))
+    forms = write_search([head_postings, *(res["postings"] for res in layers.values() if res)])
     json.dump(TERMS, open(f"{out}/terms.json", "w"), ensure_ascii=False, separators=(",", ":"))
     json.dump(TOKS, open(f"{out}/vocab.json", "w"), ensure_ascii=False, separators=(",", ":"))
     json.dump({"model": P["name"], "id": MODEL, "layers": LAYERS, "neuronsPerLayer": MLP, "headsPerLayer": HEADS, "wire": WIRE.itemsize, "headWire": HEAD_WIRE.itemsize, "connections": K,
@@ -885,7 +998,7 @@ def main():
                "layerMeta": metas, "neurons": [c["row"] for c in curated],
                "columns": ["layer", "neuron", "titlePlus", "titleMinus", "score", "flags", "confPlus", "confMinus"]},
               open(f"{out}/index.json", "w"), ensure_ascii=False, separators=(",", ":"))
-    print(f"curated {len(curated)}, search forms {len(forms)}, terms {len(TERMS)}, contexts translated {len(CONTEXT_EN)}")
+    print(f"curated {len(curated)}, search words {forms}, terms {len(TERMS)}, contexts translated {len(CONTEXT_EN)}")
 
 
 if __name__ == "__main__":

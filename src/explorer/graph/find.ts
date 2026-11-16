@@ -1,15 +1,15 @@
 // What a search in the full-screen graph finds among the units it shows: a unit by its ID (L8·n344, n344,
-// L8 for a whole layer, h3, L8h3), or by its words: in its title, or among the words the search file holds
-// for it (the words of the curated neurons' poles' and the heads' labels, search/engine.ts), so a word finds a
-// unit whose shown title doesn't say it. A word in another script also looks for its English.
-import { FOREIGN, stem } from "@stdlogits/ledger";
-import { findWords } from "../search/engine";
-import { matchKey } from "../lens.svelte";
-import { parseRef, type CatalogIndex, type HeadRow, type SearchFile, type Terms } from "../../lib/data";
+// L8 for a whole layer, h3, L8h3), or by its words: in its title, or among what the search finds for them
+// (search/engine.ts: every pole's label words, and every word of the easiest neurons and the heads), so a word
+// finds a unit whose shown title doesn't say it. A word in another script also looks for its English.
+import { stem } from "@stdlogits/ledger";
+import { matchKey, type Matches } from "../lens.svelte";
+import { parseRef } from "../../lib/data";
 import type { ModelInfo } from "../../lib/models";
 import type { GraphNode } from "./trace";
 
-export interface Sources { model: ModelInfo; index: CatalogIndex | null; heads: HeadRow[] | null; file: SearchFile | null; terms: Terms | null }
+/** The model, and what the search found for the query (null until it has). */
+export interface Sources { model: ModelInfo; found: Matches | null }
 
 const fold = (text: string) => text.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
 
@@ -41,8 +41,7 @@ export function find(query: string, nodes: GraphNode[], from: Sources): Set<stri
   }
   const words = fold(text).split(/\s+/).filter(Boolean);
   const stems = words.map((word) => fold(stem(word)));
-  const index = from.index?.id === from.model.id ? from.index : null;
-  const fires = from.file && index ? findWords(text, from.model, index, from.heads, from.file, FOREIGN.test(text) ? from.terms : null).matches : null;
+  const fires = from.found;
   for (const n of nodes) {
     const title = fold(n.wire?.title ?? "");
     const titled = words.every((word, i) => title.includes(word) || (stems[i].length >= 3 && title.includes(stems[i])));

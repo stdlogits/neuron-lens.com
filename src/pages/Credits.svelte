@@ -5,8 +5,8 @@
   import { loadMediaCredits, type MediaCredits } from "../lib/data";
   import { MODELS, MODEL_ORDER } from "../lib/models";
 
-  /** The Qwen3 sizes listed beside the two labelled models. */
-  const ladder = MODEL_ORDER.map((id) => MODELS[id]).filter((model) => !model.labelled);
+  /** The other models with a build up (the Qwen3 sizes, post-trained and base), beside the two written out below. */
+  const ladder = MODEL_ORDER.map((id) => MODELS[id]).filter((model) => model.id !== "qwen3-8b" && model.id !== "gemma-4-12b");
 
   // Who made Neuron Lens and what it stands on, as a ledger: each line a name, who or what it is,
   // and its licence. The image and sound collections come from the catalog's own credits file, so

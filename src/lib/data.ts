@@ -2,11 +2,13 @@
 // neuron-lens catalogs. The dev server serves the local copy (catalog/<model>) at /data/<model>; the
 // site reads each model's build from R2 at the data origin, under the build's own name in catalog.json
 // (scripts/catalog/upload.sh writes it). A build's files never change, so a page reads one build
-// throughout, and a new one starts with the deploy that names it.
+// throughout, and a new one starts with the deploy that names it. A base model whose post-trained model
+// is labelled (models.ts labelsFrom) shows that model's labels, ratings, easiest and search over its own
+// evidence: the loaders below merge the two builds, so nothing above them knows.
 
 import type { ContextLine } from "@stdlogits/ledger";
 import catalog from "./catalog.json";
-import type { ModelId, ModelInfo, Modality } from "./models";
+import { MODELS, type ModelId, type ModelInfo, type Modality } from "./models";
 
 /** Where a model's catalog files are. `VITE_CATALOG=live npm run dev` reads the live builds on R2 instead of a local copy. */
 const local = import.meta.env.DEV && import.meta.env.VITE_CATALOG !== "live";
@@ -172,10 +174,20 @@ export interface CatalogIndex {
   layerMeta: LayerMeta[];
   /** The easiest neurons to read: the ones the labeller was surest of. */
   neurons: IndexRow[];
+  /** Whose labels these are, when not the model's own (set here, not by the builder). */
+  labelsFrom?: ModelId;
 }
 
-/** Word -> [ref, side, weight]: side 0/1 is a curated neuron's + or − pole (ref indexes CatalogIndex.neurons), 2 a head (ref = layer × heads + head). */
-export interface SearchFile { forms: Record<string, [number, 0 | 1 | 2, number][]>; display: Record<string, string> }
+/** The word index as stored (search/words.json; write_search in the builder): every word as stem() keys it,
+ * sorted as its postings are laid out and front-coded, a line each; how many units each has; how each shows, a
+ * line each (shown_as); and the word each postings pack (search/p<NN>.bin) starts at. */
+interface WordFile { forms: string; counts: number[]; shown: string; packs: number[] }
+/** A model's word index: each word, how many units it has, how it shows, and where its postings start (its
+ * pack, and its byte offset there). */
+export interface Words { source: ModelId; forms: string[]; counts: number[]; shown: string[]; pack: Uint16Array; offset: Float64Array }
+/** A posting, a uint32: the unit's id (a pole's as in graph.bin, a head's layer × heads + head), whether it is
+ * a head, whether the word is in its title, and the word's weight for it. A word's postings come best first. */
+export const POSTING = { id: (1 << 22) - 1, head: 1 << 22, said: 1 << 23, weightShift: 24 } as const;
 /** Token or quoted term -> [English, romanization, ISO 639-1 language]. */
 export type Terms = Record<string, [string, string, string]>;
 /** An image or sound: its collection, labels, caption, link; a translated caption ([English, language]); and,
@@ -227,17 +239,117 @@ function mediaOf(raw: RawPole["media"], vocab: string[]): Pole["media"] {
   return out;
 }
 
-export const loadIndex = (model: ModelId) => load<CatalogIndex>(model, "index.json");
-export const loadSearch = (model: ModelId) => load<SearchFile>(model, "search.json");
-export const loadTerms = (model: ModelId) => load<Terms>(model, "terms.json");
-/** Every neuron of a layer: [neuron, title +, title −, score, flags, confidence +, confidence −]. */
+/** Whose labels a model shows, when not its own. */
+const lender = (model: ModelId) => MODELS[model]?.labelsFrom ?? null;
+/** Where what follows the labels is read from: the lender's build, or the model's own. */
+const labelled = (model: ModelId) => lender(model) ?? model;
+
+const ownIndex = (model: ModelId) => load<CatalogIndex>(model, "index.json");
+/** The model's index; a borrower's with the lender's easiest and its layers' label confidence. */
+export const loadIndex = (model: ModelId): Promise<CatalogIndex> => {
+  const from = lender(model);
+  if (!from) return ownIndex(model);
+  return memo(`${model}/index+`, async () => {
+    const [own, lent] = await Promise.all([ownIndex(model), ownIndex(from)]);
+    return {
+      ...own, labelled: true, labelsFrom: from, neurons: lent.neurons,
+      layerMeta: own.layerMeta.map((meta, layer) => {
+        const theirs = lent.layerMeta[layer];
+        return { ...meta, count: theirs?.count ?? meta.count, ...(meta.stats && theirs?.stats ? { stats: { ...meta.stats, conf: theirs.stats.conf } } : {}) };
+      }),
+    };
+  });
+};
+/** A borrower's terms are its lender's: they translate the labels as well as the tokens (one tokenizer). */
+export const loadTerms = (model: ModelId) => load<Terms>(labelled(model), "terms.json");
+type RawRow = [number, string, string, number, number, number, number];
+const ownRows = (model: ModelId, layer: number) => load<{ layer: number; neurons: RawRow[] }>(model, `neurons/L${pad(layer)}/index.json`);
+const WRITES_FLAGS = 8 | 16; // FLAG_PLUS_WRITES | FLAG_MINUS_WRITES: which label is each pole's title
+/** Every neuron of a layer: [neuron, title +, title −, score, flags, confidence +, confidence −]; a borrower's
+ * with the lender's titles, score and confidences, and its own flags but for which label each title is. */
 export const loadLayerIndex = (model: ModelId, layer: number) => memo(`${model}/rows:${layer}`, async () => {
-  const file = await load<{ layer: number; neurons: [number, string, string, number, number, number, number][] }>(model, `neurons/L${pad(layer)}/index.json`);
-  return file.neurons.map((row): IndexRow => [layer, ...row]);
+  const from = lender(model);
+  const [own, lent] = await Promise.all([ownRows(model, layer), from ? ownRows(from, layer) : null]);
+  const theirs = new Map(lent?.neurons.map((row) => [row[0], row]));
+  return own.neurons.map((row): IndexRow => {
+    const t = theirs.get(row[0]);
+    return t ? [layer, row[0], t[1], t[2], t[3], (row[4] & ~WRITES_FLAGS) | (t[4] & WRITES_FLAGS), t[5], t[6]] : [layer, ...row];
+  });
 });
-/** Per layer, a base64 string of one byte per neuron: its readability, 0–255. */
-export const loadScores = (model: ModelId) => memo(`${model}/scores`, async () => (await load<{ layers: string[] }>(model, "scores.json")).layers.map(decodeScores));
-export const loadHeadIndex = (model: ModelId) => memo(`${model}/heads`, async () => (await load<{ heads: HeadRow[] }>(model, "heads/index.json")).heads);
+/** Per layer, a base64 string of one byte per neuron: its readability, 0–255 (a borrower's are its lender's). */
+export const loadScores = (model: ModelId) => memo(`${model}/scores`, async () => (await load<{ layers: string[] }>(labelled(model), "scores.json")).layers.map(decodeScores));
+const ownHeadRows = (model: ModelId) => load<{ heads: HeadRow[] }>(model, "heads/index.json");
+/** Every head's row; a borrower's with the lender's labels, confidences and score, and its own roles and pattern. */
+export const loadHeadIndex = (model: ModelId) => memo(`${model}/heads`, async () => {
+  const from = lender(model);
+  const [own, lent] = await Promise.all([ownHeadRows(model), from ? ownHeadRows(from) : null]);
+  if (!lent) return own.heads;
+  const theirs = new Map(lent.heads.map((row) => [`${row[0]}:${row[1]}`, row]));
+  return own.heads.map((row): HeadRow => {
+    const t = theirs.get(`${row[0]}:${row[1]}`);
+    return t ? [row[0], row[1], row[2], t[3], t[4], t[5], t[6], t[7], t[8], row[9], t[10], row[11]] : row;
+  });
+});
+
+// ---------- the word index: read whole, and each word's postings by range
+
+/** A model's word index (a borrower's is its lender's), with where each word's postings start. */
+export const loadWords = (model: ModelId) => memo(`${model}/words`, async (): Promise<Words> => {
+  const source = labelled(model);
+  const file = await load<WordFile>(source, "search/words.json");
+  const lines = file.forms.split("\n");
+  const forms = new Array<string>(lines.length);
+  let before = "";
+  lines.forEach((line, k) => { before = forms[k] = before.slice(0, line.charCodeAt(0) - 48) + line.slice(1); });
+  const shown = file.shown.split("\n").map((line, k) => {
+    if (!line) return forms[k];
+    if (line[0] === "~") return line.slice(1);
+    const whole = forms[k] + line.slice(1);
+    return line[0] === "!" ? whole.toUpperCase() : line[0] === "^" ? whole.charAt(0).toUpperCase() + whole.slice(1) : whole;
+  });
+  const pack = new Uint16Array(forms.length);
+  const offset = new Float64Array(forms.length);
+  for (let p = 0; p < file.packs.length; p += 1) {
+    let at = 0;
+    for (let k = file.packs[p]; k < (file.packs[p + 1] ?? forms.length); k += 1) { pack[k] = p; offset[k] = at; at += 4 * file.counts[k]; }
+  }
+  return { source, forms, counts: file.counts, shown, pack, offset };
+});
+const read = new Map<string, { n: number; postings: Promise<Uint32Array> }>();
+/** The first `n` postings of each of these words, best first. Each word is read once at the most asked of
+ * it, and words close together in a pack share a range. */
+export async function loadPostings(words: Words, wanted: Map<number, number>): Promise<Map<number, Uint32Array>> {
+  const out = new Map<number, Uint32Array>();
+  const fresh: { form: number; n: number }[] = [];
+  for (const [form, asked] of wanted) {
+    const n = Math.min(asked, words.counts[form]);
+    const held = read.get(`${words.source}:${form}`);
+    if (!held || held.n < n) fresh.push({ form, n });
+  }
+  fresh.sort((a, b) => words.pack[a.form] - words.pack[b.form] || words.offset[a.form] - words.offset[b.form]);
+  const GAP = 4096, MOST = 256 * 1024;
+  for (let i = 0; i < fresh.length;) {
+    const first = fresh[i];
+    let j = i + 1;
+    let end = words.offset[first.form] + 4 * first.n;
+    while (j < fresh.length && words.pack[fresh[j].form] === words.pack[first.form] && words.offset[fresh[j].form] - end <= GAP
+      && words.offset[fresh[j].form] + 4 * fresh[j].n - words.offset[first.form] <= MOST) {
+      end = Math.max(end, words.offset[fresh[j].form] + 4 * fresh[j].n);
+      j += 1;
+    }
+    const start = words.offset[first.form];
+    const bytes = range(`${dataBase(words.source)}/search/p${pad(words.pack[first.form])}.bin`, start, end - start);
+    for (const { form, n } of fresh.slice(i, j)) {
+      const postings = bytes.then((buffer) => new Uint32Array(buffer, words.offset[form] - start, n));
+      const key = `${words.source}:${form}`;
+      read.set(key, { n, postings });
+      postings.catch(() => { if (read.get(key)?.postings === postings) read.delete(key); });
+    }
+    i = j;
+  }
+  await Promise.all([...wanted.keys()].map(async (form) => out.set(form, (await read.get(`${words.source}:${form}`)!.postings).subarray(0, Math.min(wanted.get(form)!, words.counts[form])))));
+  return out;
+}
 
 // ---------- ranges: every unit's record is read out of a larger file
 
@@ -373,29 +485,47 @@ export const poleOf = (mlp: number, id: number) => {
 export const headKey = (heads: number, layer: number, head: number) => layer * heads + head;
 export const headOf = (heads: number, id: number) => ({ layer: Math.floor(id / heads), head: id % heads });
 
-/** A pole's record: its title, where its detail is, and its connections. `ahead`: not needed yet, so it waits for what is. */
-export function loadPoleWire(model: ModelId, id: number, ahead = false) {
+function ownPoleWire(model: ModelId, id: number, ahead: boolean) {
   const key = `${model}/wire:${id}`;
   if (!ahead) promote(key);
   return memo(key, async () => {
-    const { wire, neuronsPerLayer: mlp, connections } = await loadIndex(model);
+    const { wire, neuronsPerLayer: mlp, connections } = await ownIndex(model);
     const { layer, neuron, pole } = poleOf(mlp, id);
     return wireOf(await range(`${dataBase(model)}/neurons/L${pad(layer)}/graph.bin`, (neuron + (pole < 0 ? mlp : 0)) * wire, wire, ahead ? key : undefined), connections, POLE_RELATIONS);
   });
 }
-export function loadHeadWire(model: ModelId, id: number, ahead = false) {
+function ownHeadWire(model: ModelId, id: number, ahead: boolean) {
   const key = `${model}/head-wire:${id}`;
   if (!ahead) promote(key);
   return memo(key, async () => {
-    const { headWire, connections } = await loadIndex(model);
+    const { headWire, connections } = await ownIndex(model);
     return wireOf(await range(`${dataBase(model)}/heads/graph.bin`, id * headWire, headWire, ahead ? key : undefined), connections, HEAD_RELATIONS);
   });
 }
+/** A borrower's record: its own, with the lender's title. */
+function withLenderTitle(model: ModelId, id: number, kind: string, own: (model: ModelId, id: number, ahead: boolean) => Promise<Wire>, ahead: boolean) {
+  const from = lender(model);
+  if (!from) return own(model, id, ahead);
+  const [mine, theirs] = [own(model, id, ahead), own(from, id, ahead)];
+  return memo(`${model}/${kind}+:${id}`, async () => {
+    const [m, t] = await Promise.all([mine, theirs]);
+    return { ...m, title: t.title, conf: t.conf, writes: t.writes };
+  });
+}
+/** A pole's record: its title, where its detail is, and its connections. `ahead`: not needed yet, so it waits for what is. */
+export const loadPoleWire = (model: ModelId, id: number, ahead = false) => withLenderTitle(model, id, "wire", ownPoleWire, ahead);
+export const loadHeadWire = (model: ModelId, id: number, ahead = false) => withLenderTitle(model, id, "head-wire", ownHeadWire, ahead);
 
-/** One neuron's detail, from where its record says it is. */
+/** One neuron's detail, from where its record says it is; a borrower's with its lender's labels and scores. */
 export const loadNeuron = (model: ModelId, layer: number, neuron: number): Promise<NeuronDetail | null> => memo(`${model}/neuron:${layer}:${neuron}`, async () => {
-  const index = await loadIndex(model);
-  const [wire, vocab] = await Promise.all([loadPoleWire(model, poleId(index.neuronsPerLayer, layer, neuron, 1)), loadVocab(model)]);
+  const from = lender(model);
+  const [own, theirs] = await Promise.all([ownNeuron(model, layer, neuron), from ? ownNeuron(from, layer, neuron).catch(() => null) : null]);
+  if (!own || !theirs) return own;
+  return { ...own, poles: own.poles.map((pole, i) => ({ ...pole, label: theirs.poles[i].label, score: theirs.poles[i].score })) as [Pole, Pole] };
+});
+const ownNeuron = (model: ModelId, layer: number, neuron: number): Promise<NeuronDetail | null> => memo(`${model}/own-neuron:${layer}:${neuron}`, async () => {
+  const index = await ownIndex(model);
+  const [wire, vocab] = await Promise.all([ownPoleWire(model, poleId(index.neuronsPerLayer, layer, neuron, 1), false), loadVocab(model)]);
   const [pack, offset, length] = wire.detail;
   if (!length) return null;
   const raw = JSON.parse(await inflated(await range(`${dataBase(model)}/neurons/L${pad(layer)}/units-${pad(pack)}.bin`, offset, length))) as { n: number; poles: [RawPole, RawPole] };
@@ -412,10 +542,15 @@ export const loadNeuron = (model: ModelId, layer: number, neuron: number): Promi
     })) as [Pole, Pole],
   };
 });
+type HeadFile = { layer: number; reads: ReadInfo[]; heads: RawHead[] };
+/** A layer's heads in detail; a borrower's with its lender's labels and scores. */
 export const loadHeadLayer = (model: ModelId, layer: number) => memo(`${model}/heads:${layer}`, async () => {
-  const [file, vocab] = await Promise.all([load<{ layer: number; reads: ReadInfo[]; heads: RawHead[] }>(model, `heads/L${pad(layer)}.json`), loadVocab(model)]);
+  const from = lender(model);
+  const [file, vocab, lent] = await Promise.all([load<HeadFile>(model, `heads/L${pad(layer)}.json`), loadVocab(model), from ? load<HeadFile>(from, `heads/L${pad(layer)}.json`).catch(() => null) : null]);
+  const theirs = new Map(lent?.heads.map((head) => [head.h, head]));
   return file.heads.map((head): HeadDetail => ({
     ...head,
+    ...(theirs.has(head.h) ? { label: theirs.get(head.h)!.label, score: theirs.get(head.h)!.score } : {}),
     reads: readsOf(file.reads, head.reads, vocab),
     outRz: tokensOf(head.outRz, vocab),
     drivers: pairsOf(head.drivers, vocab),

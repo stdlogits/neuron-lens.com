@@ -54,7 +54,7 @@ What the site draws for itself, in Ledger:
   are spaced for a two-line title under each mark at the opening zoom. The bar over it holds the unit, the views, the
   reach, Back and Find, with close at the top right; on a phone the views and reach take a row under the unit. Find
   (the search button, "/" or ⌘/ctrl-F) takes a unit's ID (L8·n344, n344, L8, h3) or a word in a unit's title or among
-  its labels (the search file): what it finds stays and rings once, the rest falls away, both spreading out from
+  its labels (the word index): what it finds stays and rings once, the rest falls away, both spreading out from
   the middle of the screen, the view glides to take in what was found, and Enter steps from one to the next.
   The depth axis down the left names the bands; the credit sits at the foot, so a screenshot carries it.
 - A tap (touch or pen) on a unit in either graph opens its card (`src/explorer/graph/Card.svelte`), the tip's words on
@@ -72,4 +72,4 @@ What the site draws for itself, in Ledger:
   size on screen, while where the titles sit is worked out again only once the pinch rests.
   Reduced motion keeps the fades and drops the rest.
 
-The explorer's one credit is "Labels by Claude Haiku 5.5".
+The explorer's one credit is "Labels by Claude Haiku 5.5"; a base model's adds ", written for" its post-trained model.
