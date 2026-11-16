@@ -1,41 +1,37 @@
-// How the atlas shades and places its units. A unit takes one of ten opacities by its rank among
-// every unit of its kind in the model, ten equal shares, so each shade is used as often as the others
-// and the map shows where in depth the labeller was surest. A unit's score is the labeller's
-// confidence alone (the builder's `pole_score`): no test of a read enters it. All mode draws every
-// neuron of a layer as a cell of its column, in neuron order.
+// How the atlas shades and places its units. A unit's opacity is how sure the labeller was of it, on one
+// scale for every model and mode, so a neuron keeps its shade from Easiest to All and a model the labeller
+// was less sure of draws fainter. The score is the one the builder ranks units by (its labels' confidences,
+// the surest first), read as the confidence all of a unit's labels would have to share to reach it, and
+// stretched over the range that runs in for its kind. The Easiest neurons were picked for confidence, so they
+// draw near full. No test of a read enters a score. All mode draws every neuron of a layer as a cell of its
+// column, in neuron order.
 
-/** The ten opacities, faintest to fullest. */
-export const SHADES = [0.1, 0.16, 0.24, 0.32, 0.42, 0.52, 0.62, 0.74, 0.86, 1];
+/** The faintest a unit draws: one with no confidence, or one a filter or a search leaves out. */
+export const FAINT = 0.1;
+/** The faintest a unit a filter keeps draws, clear of what it leaves out. */
+export const KEPT = 0.3;
 /** A column's height in bars in All mode: as many as the easiest list, so both modes stand the same. */
 export const ALL_ROWS = 40;
 
-/** A score's shade (0–9) by its rank among the scores given. */
-export function shadeScale(scores: number[]): (score: number) => number {
-  const sorted = Float64Array.from(scores).sort();
-  return (score) => {
-    let lo = 0, hi = sorted.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (sorted[mid] < score) lo = mid + 1; else hi = mid;
-    }
-    return sorted.length ? Math.min(9, Math.floor((lo / sorted.length) * 10)) : 0;
-  };
+export type Kind = "neuron" | "head";
+/** A score with every label sure: a pole counts its surer label and a third of the other, a neuron its surer
+ *  pole and a quarter of the other (`neuron_score` in the builder); a head its surest label and a ninth of all three. */
+const SURE: Record<Kind, number> = { neuron: 5 / 3, head: 4 / 3 };
+/** The shared confidence each kind draws over, faint to full (the labeller is less sure of heads). */
+const RANGE: Record<Kind, [number, number]> = { neuron: [0.2, 0.85], head: [0.15, 0.65] };
+
+/** How strongly a unit with this score draws: 0 (faint) to 1 (full). */
+export function strength(kind: Kind, score: number): number {
+  const [lo, hi] = RANGE[kind];
+  return Math.min(1, Math.max(0, (score / SURE[kind] - lo) / (hi - lo)));
 }
 
-/** Each confidence byte's shade (0–9), by its rank among every neuron of the model. */
-export function byteShades(scores: Uint8Array[]): Uint8Array {
-  const counts = new Float64Array(256);
-  let total = 0;
-  for (const layer of scores) {
-    for (let i = 0; i < layer.length; i += 1) counts[layer[i]] += 1;
-    total += layer.length;
-  }
-  const shade = new Uint8Array(256);
-  for (let v = 0, below = 0; v < 256; v += 1) {
-    shade[v] = Math.min(9, Math.floor((below / Math.max(1, total)) * 10));
-    below += counts[v];
-  }
-  return shade;
+/** Each All-mode confidence byte's strength. The builder writes a neuron's score as 255 · (score / top)^0.8
+ *  (`scores.json`), top being the model's highest score, which is its easiest neuron's. */
+export function byteStrengths(top: number): Float32Array {
+  const out = new Float32Array(256);
+  if (top > 0) for (let b = 1; b < 256; b += 1) out[b] = strength("neuron", top * (b / 255) ** 1.25);
+  return out;
 }
 
 /** A layer of n neurons laid out in a box w × h: g cells a row, r rows, each cw × ch. */

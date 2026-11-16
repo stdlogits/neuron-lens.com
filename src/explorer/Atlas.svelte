@@ -2,14 +2,14 @@
   import { untrack } from "svelte";
   import Scale from "./atlas/Scale.svelte";
   import { matchKey, useLens, type Matches } from "./lens.svelte";
-  import { ALL_ROWS, SHADES, byteShades, field, shadeScale } from "./atlas/levels";
+  import { ALL_ROWS, FAINT, KEPT, byteStrengths, field, strength } from "./atlas/levels";
   import { GLIDE, IN, ease, fadeOut, glide, hideTip, showTip, type TipContent } from "@stdlogits/ledger";
   import { headId, loadLayerIndex, neuronId, type HeadRow, type IndexRow } from "../lib/data";
   import { depthColor, type ModelId, type ModelInfo } from "../lib/models";
   import { theme } from "../lib/theme";
 
   // The map of every layer: a column a layer, a short bar a unit, the labeller's surest at the top, each
-  // shaded by how sure the labeller was of it. Neurons (the easiest 40 a layer) and heads share one look; All mode
+  // as strong as the labeller was sure of it (`atlas/levels.ts`). Neurons (the easiest 40 a layer) and heads share one look; All mode
   // draws every neuron of a layer instead, a cell each in neuron order, on a canvas. Click a bar to open its unit, a column to open its layer;
   // press and drag to scrub through layers. As a slider: ←/→ layer, ↑/↓ unit, Enter opens.
   const lens = useLens();
@@ -29,15 +29,15 @@
   const last = $derived(lens.model.layers - 1);
   const indexReady = $derived(lens.index?.id === lens.modelId);
   const headsReady = $derived(lens.heads?.length === lens.model.layers * lens.model.heads);
-  /** All mode: each confidence byte's shade, once every layer's scores are in. */
-  const byteShade = $derived<Uint8Array | null>(lens.scores?.length === lens.model.layers ? byteShades(lens.scores) : null);
+  /** All mode: each confidence byte's strength, once every layer's scores and the model's top score are in. */
+  const byteStrength = $derived<Float32Array | null>(lens.scores?.length === lens.model.layers && indexReady ? byteStrengths(lens.index!.neurons.reduce((top, row) => Math.max(top, row[4]), 0)) : null);
   /** The mode asked for, whether its units are in, and whether they failed (so there is nothing to wait for). */
   // (All mode waits for the layer's rows too, which place its selected neuron.)
   const want = $derived<Mode>(lens.unit === "heads" ? "heads" : lens.all ? "all" : "easiest");
-  const wanted = $derived(want === "heads" ? headsReady : want === "all" ? byteShade !== null && lens.selected !== null : indexReady);
+  const wanted = $derived(want === "heads" ? headsReady : want === "all" ? byteStrength !== null && lens.selected !== null : indexReady);
   const failed = $derived(lens.failed || (want === "heads" ? lens.failures.includes(lens.headIndexKey) : want === "all" && lens.failures.some((key) => key === lens.scoresKey || key === lens.rowsKey)));
   // All mode shows the easiest neurons until every layer's scores are in, then crossfades.
-  const mode = $derived<Mode>(want === "all" && !byteShade ? "easiest" : want);
+  const mode = $derived<Mode>(want === "all" && !byteStrength ? "easiest" : want);
   const ready = $derived(mode === "heads" ? headsReady : mode === "all" || indexReady);
 
   function byLayer<T extends IndexRow | HeadRow>(rows: T[], score: number): T[][] {
@@ -49,18 +49,16 @@
   // Sorted as the layer list sorts them, so a bar's place matches the list's.
   const neuronColumns = $derived(byLayer(indexReady ? lens.index!.neurons : [], 4));
   const headColumns = $derived(byLayer(headsReady ? lens.heads! : [], 10));
-  const neuronShade = $derived(shadeScale(indexReady ? lens.index!.neurons.map((row) => row[4]) : []));
-  const headShade = $derived(shadeScale(headsReady ? lens.heads!.map((row) => row[10]) : []));
 
   // A filter or a search narrows the map: what is left keeps its place, everything else fades.
   const matches = $derived(lens.unit === "heads" ? lens.matches.heads : lens.matches.neurons);
   const filtering = $derived(!!(lens.unit === "heads" ? lens.activeFilter.heads : lens.activeFilter.neurons));
-  function opacity(shade: number, passes: boolean, matched: boolean) {
-    // Search hits stand out at full strength; with only a filter, what passes keeps its order of
-    // shades but never sinks to the faintest, which is left to what doesn't.
-    if (matches.size) return passes && matched ? 1 : SHADES[0];
-    if (filtering) return passes ? SHADES[3 + Math.round((shade * 6) / 9)] : SHADES[0];
-    return SHADES[shade];
+  function opacity(s: number, passes: boolean, matched: boolean) {
+    // Search hits stand out at full strength; with only a filter, what passes keeps its strength
+    // but never sinks near the faintest, which is left to what doesn't.
+    if (matches.size) return passes && matched ? 1 : FAINT;
+    if (filtering) return passes ? KEPT + (1 - KEPT) * s : FAINT;
+    return FAINT + (1 - FAINT) * s;
   }
 
   // All mode names a neuron from its layer's full index, loaded the first time it's wanted.
@@ -94,8 +92,8 @@
   /** What there is to draw now, from what has loaded. */
   const fresh = $derived.by<View>(() => {
     let columns: Bar[][] = [];
-    if (ready && mode === "heads") columns = headColumns.map((column) => column.map((row) => ({ unit: row[1], o: opacity(headShade(row[10]), lens.passesHead(row), matches.has(matchKey(row[0], row[1]))), body: row[3], sub: row[4] })));
-    else if (ready && mode === "easiest") columns = neuronColumns.map((column) => column.map((row) => ({ unit: row[1], o: opacity(neuronShade(row[4]), lens.passesNeuron(row), matches.has(matchKey(row[0], row[1]))), body: row[2], sub: row[3] })));
+    if (ready && mode === "heads") columns = headColumns.map((column) => column.map((row) => ({ unit: row[1], o: opacity(strength("head", row[10]), lens.passesHead(row), matches.has(matchKey(row[0], row[1]))), body: row[3], sub: row[4] })));
+    else if (ready && mode === "easiest") columns = neuronColumns.map((column) => column.map((row) => ({ unit: row[1], o: opacity(strength("neuron", row[4]), lens.passesNeuron(row), matches.has(matchKey(row[0], row[1]))), body: row[2], sub: row[3] })));
     const unit = lens.selected;
     const slot = unit === null || mode === "all" ? -1 : columns[lens.layer]?.findIndex((item) => item.unit === unit) ?? -1;
     const rows = mode === "all" ? ALL_ROWS : Math.max(1, ...columns.map((column) => column.length));
@@ -161,7 +159,7 @@
   // Each neuron's opacity, as the bars': lit by a search, narrowed by a filter where its layer's rows
   // are in (the current layer and any pointed at); a cell takes the brightest neuron that falls in it.
   $effect(() => {
-    if (view.mode !== "all" || holding || !canvas || !probe || !byteShade || !lens.scores || width === 0) return;
+    if (view.mode !== "all" || holding || !canvas || !probe || !byteStrength || !lens.scores || width === 0) return;
     void theme.mode;
     const scale = window.devicePixelRatio || 1;
     const W = Math.round(width * scale);
@@ -185,7 +183,7 @@
       const x0 = left(L);
       for (let i = 0; i < bytes.length; i += 1) {
         const row = rows?.[i];
-        const a = Math.round(255 * opacity(byteShade[bytes[i]], row ? lens.passesNeuron(row) : true, lit?.has(i) ?? false));
+        const a = Math.round(255 * opacity(byteStrength[bytes[i]], row ? lens.passesNeuron(row) : true, lit?.has(i) ?? false));
         const cx = i % g;
         const cy = (i - cx) / g;
         const xa = Math.floor((x0 + cx * cw) * scale);
