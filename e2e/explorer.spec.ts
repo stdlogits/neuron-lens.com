@@ -42,6 +42,21 @@ test("switching model changes the address, the figures and the title", async ({ 
   await expect(page).toHaveURL(/\/gemma-4-12b$/);
 });
 
+test("switching model keeps the place, clipped to the new model's shape", async ({ page }) => {
+  // Gemma 4 12B: 48 layers of 15,360 neurons and 16 heads; Qwen3-8B: 36 of 12,288 and 32.
+  await page.goto("/gemma-4-12b/L40/n15000?all");
+  await page.getByRole("group", { name: "Model family" }).getByRole("button", { name: "Qwen3" }).click();
+  await expect(page).toHaveURL(/\/qwen3-8b\/L35\/n12287\?all$/);
+
+  await page.goto("/qwen3-8b/L8/h31");
+  await page.getByRole("group", { name: "Model family" }).getByRole("button", { name: "Gemma 4" }).click();
+  await expect(page).toHaveURL(/\/gemma-4-12b\/L8\/h15$/);
+
+  await page.goto("/gemma-4-12b/L33?all");
+  await page.getByRole("group", { name: "Model family" }).getByRole("button", { name: "Qwen3" }).click();
+  await expect(page).toHaveURL(/\/qwen3-8b\/L33\?all$/);
+});
+
 test("a deep link loads that neuron", async ({ page }) => {
   const record = page.waitForRequest((request) => request.url().endsWith("/data/qwen3-8b/neurons/L08/graph.bin"));
   await page.goto("/qwen3-8b/L8/n344");

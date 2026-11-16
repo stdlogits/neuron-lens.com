@@ -10,8 +10,12 @@
   // The bars are pointer shortcuts into the explorer; keyboards go by the band tabs and their link.
   let modelId = $state<ModelId>("qwen3-8b");
   const model = $derived(MODELS[modelId]);
-  // The labelled models: the bars are the labeller's confidence.
-  const models = MODEL_ORDER.filter((id) => MODELS[id].labelled).map((id) => ({ value: id, label: MODELS[id].name }));
+  // The labelled models (the bars are the labeller's confidence), picked as the explorer picks them:
+  // the family, then its size.
+  const labelled = MODEL_ORDER.map((id) => MODELS[id]).filter((m) => m.labelled);
+  const families = [...new Set(labelled.map((m) => m.family))].map((family) => ({ value: family, label: family }));
+  const sizes = $derived(labelled.filter((m) => m.family === model.family).map((m) => ({ value: m.id, label: m.size })));
+  const setFamily = (family: string) => { const first = labelled.find((m) => m.family === family); if (first) modelId = first.id; };
 
   let chosen = $state<Record<ModelId, string>>({ "qwen3-8b": "middle", "gemma-4-12b": "middle" });
   const band = $derived(model.bands.find((b) => b.key === chosen[modelId]) ?? model.bands[0]);
@@ -38,7 +42,10 @@
     <p>In late layers, the stream is mostly about the output, so the R-lens reads both sides. Many neurons there respond to wider context, and no single token says much about them: read the lenses alongside the firings.</p>
   {/snippet}
   <div class="spec">
-    <Segmented options={models} value={modelId} onchange={(id) => (modelId = id)} label="Model" />
+    <div class="pick">
+      <Segmented options={families} value={model.family} onchange={setFamily} label="Model family" />
+      {#if sizes.length > 1}<Segmented options={sizes} value={modelId} onchange={(id) => (modelId = id)} label="Size" />{/if}
+    </div>
     <div class="figure">
       <Swap key={modelId}>
         {#if layers[modelId]}
@@ -90,7 +97,7 @@
 
 <style>
   .spec { display: grid; justify-items: stretch; gap: var(--s5); min-width: 0; }
-  .spec > :global(:first-child) { justify-self: start; }
+  .pick { display: grid; justify-items: start; gap: var(--s2); max-width: 100%; }
   .figure { display: grid; gap: var(--s2); min-width: 0; }
   .ramp {
     --glide-bg: var(--wash);

@@ -88,7 +88,10 @@ hue is depth: a link that pushes against is grey and dashed. Full screen, the gr
 graph whatever its shape, and keeps its titles one size on screen, each placed where it covers no mark and no other
 title; one without room waits for a closer zoom. Its Find (`find.ts`) narrows it to the units an ID or a word finds.
 A touch has no hover, so a tap on a unit in either graph opens its card rather than going there.
-The model is picked in two rows: its family, then its size and, where both are up, post-trained or base.
+The model is picked in two rows: its family, then its size and, where both are up, post-trained or base (About's depth
+figure picks among the labelled ones the same way). Another model keeps the place (a9's call): the same layer and neuron or
+head number, clipped to its shape and never matched to a similar unit, Easiest or All as it was (a trip through a base model,
+which lists all, changes neither), the filter where it has one, and the side being read.
 An unlabelled model (the Qwen3 bases, or a size whose labels aren't released yet) has no Easiest: its layers list every neuron, and its
 search finds heads and addresses only (a9's calls). Five sizes fill a 320 px row; a sixth needs another layout.
 Phone widths down to 320 px must not scroll sideways.

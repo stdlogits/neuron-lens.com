@@ -1,7 +1,7 @@
 // The explorer's state. The address is the whole of where the viewer is (model, unit, layer, the
 // neuron or head, and whether every neuron of the layer is listed); this class reads it from the
-// router, loads what that place needs, and changes it only by going to another address. The filter
-// and the search's matches are the only state outside the address.
+// router, loads what that place needs, and changes it only by going to another address. The filter,
+// the side read and the search's matches are the only state outside the address.
 import { getContext, setContext, untrack } from "svelte";
 import {
   FLAG_AUDIO, FLAG_CROSSMODAL, FLAG_DETECTOR, FLAG_IMAGE, FLAG_PREDICTS, FLAG_SUPPRESSES, ROLES,
@@ -152,12 +152,12 @@ export class Lens {
         this.loadHeadIndex(model);
       });
     });
-    // A new unit or model: the filter starts over.
+    // A new unit: the filter starts over. A new model keeps it, showing All until (or unless) the model has it.
     $effect(() => {
       void this.unit;
-      void this.modelId;
       untrack(() => (this.filter = "all"));
     });
+    $effect(() => { if (this.model.labelled && this.unit === "neurons") this.listedAll = this.route.all; });
     // All mode: every neuron's score (for the atlas) and the current layer's rows (for the list).
     $effect(() => {
       if (!this.all) return;
@@ -253,10 +253,23 @@ export class Lens {
   };
   unitHref = (unit: Unit, layer: number, index: number | null) => this.hrefFor({ unit, layer, index, all: unit === "neurons" && this.all });
 
+  /** Another model, at the same place: the same layer and unit number (clipped to its shape, not
+   * matched to anything), listed the same way, the neuron read from the same side. */
   setModel = (model: ModelId) => {
     if (model === this.modelId) return;
-    go({ page: "explore", model, layer: null, unit: this.unit, index: null, all: false });
+    const to = MODELS[model];
+    const clip = (value: number | null, size: number) => (value === null ? null : Math.min(value, size - 1));
+    const layer = clip(this.route.layer, to.layers);
+    const index = clip(this.route.index, this.unit === "heads" ? to.heads : to.mlp);
+    if (this.unit === "neurons" && index !== null && (this.neuronDetail || this.chosenSide?.key === this.neuronKey)) {
+      this.chosenSide = { key: `${model}/L${layer ?? to.start.neurons}/n${index}`, side: this.side };
+    }
+    const all = this.unit === "neurons" && (this.model.labelled ? this.route.all : this.listedAll);
+    go(this.hrefFor({ model, layer, index, all }));
   };
+  /** Whether the last labelled model's neurons were all listed: an unlabelled model lists them all
+   * anyway, so a trip through a base model and back keeps Easiest or All as it was. */
+  private listedAll = false;
   setUnit = (unit: Unit) => {
     if (unit === this.unit) return;
     go(this.hrefFor({ unit, index: null, all: false }));
