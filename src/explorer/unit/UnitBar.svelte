@@ -2,7 +2,7 @@
   import { onDestroy } from "svelte";
   import { IconButton, MorphText, Switch, fadeIn } from "@stdlogits/ledger";
   import { useLens } from "../lens.svelte";
-  import { formatCount, rolesOf } from "../../lib/data";
+  import { formatCount, neuronId, rolesOf } from "../../lib/data";
   import { reading, setDistinctive } from "../../lib/reading.svelte";
   import { setTranslate, translation } from "../../lib/translate.svelte";
   import { bandRange } from "../../lib/models";
@@ -25,6 +25,30 @@
     if (lens.model.labelsFrom) return lens.neuronDetail ? neuronTags(flagsOf(lens.neuronDetail)) : [];
     return lens.selectedNeuronRow ? neuronTags(lens.selectedNeuronRow[5]) : [];
   });
+  // Across a pruning (neuron-lens findings §20): a pruned model's neuron names its parent, a parent's its child or
+  // that it was cut. The match is shown as it stands, provisional or not (a9's call); the tip says how it is known.
+  const lineage = $derived.by(() => {
+    const place = lens.lineagePlace;
+    if (!place) return null;
+    const [child, parent] = place.role === "parent" ? [lens.model.name, place.model.name] : [place.model.name, lens.model.name];
+    const pruned = `${child} was pruned from ${parent}.`;
+    const sure = place.status === "identified";
+    const id = place.neuron === null ? "" : neuronId(lens.layer, place.neuron);
+    if (place.status === "cut") return { text: `Cut from ${place.model.name}`, tip: `${pruned} It didn't keep this neuron.` };
+    if (place.status === "near-silent") {
+      return place.role === "parent"
+        ? { text: `From ${place.model.name}, near-silent`, tip: `${pruned} Its near-silent neurons match ${parent}'s as a group, not one by one.` }
+        : { text: `Kept in ${place.model.name} or cut`, tip: `${pruned} It kept some of this layer's near-silent neurons and cut the rest; which ones isn't traced.` };
+    }
+    const how = sure ? "matched by their weights, and how the two fire or what they write agrees"
+      : "matched by their weights alone; how the two fire and what they write don't confirm it yet";
+    return place.role === "parent"
+      ? { text: `${sure ? "From" : "Likely from"} ${place.model.name} `, id, href: place.href, go: [place.model.id, place.neuron] as const,
+          tip: `${pruned} Its ${sure ? "" : "likeliest "}neuron there, ${how}.` }
+      : { text: `${sure ? "Kept" : "Likely kept"} in ${place.model.name} as `, id, href: place.href, go: [place.model.id, place.neuron] as const,
+          tip: `${pruned} This neuron's ${sure ? "" : "likeliest "}counterpart there, ${how}.` };
+  });
+
   const prev = $derived(lens.stepTo(-1));
   const next = $derived(lens.stepTo(1));
   const where = $derived(lens.position >= 0 ? `${formatCount(lens.position + 1)} / ${formatCount(lens.order.length)}` : "");
@@ -48,6 +72,7 @@
     <p class="meta tags">
       <span class="band" data-tip={lens.band.summary} data-tip-title={bandRange(lens.band)}><MorphText text={lens.band.name} numbers={false} /></span>
       {#each tags as tag (tag.label)}<span class="tag" data-tip={tag.tip} in:fadeIn><span class="dot" aria-hidden="true">·</span>{tag.label}</span>{/each}
+      {#if lineage}<span class="tag lineage" data-tip={lineage.tip} in:fadeIn><span class="dot" aria-hidden="true">·</span>{lineage.text}{#if lineage.href && lineage.go}{@const [model, neuron] = lineage.go}<a href={lineage.href} onclick={() => neuron !== null && lens.carrySide(model, lens.layer, neuron)}>{lineage.id}</a>{/if}</span>{/if}
     </p>
   </div>
   <div class="tools">
@@ -69,6 +94,8 @@
   .tag { display: inline-flex; gap: var(--s2); cursor: help; }
   .band, .where { cursor: help; }
   .dot { color: var(--ink3); }
+  .lineage a { text-decoration: underline; text-decoration-color: var(--wash2); text-decoration-thickness: 2px; text-underline-offset: 4px; transition: color var(--fast) var(--ease), text-decoration-color var(--fast) var(--ease); }
+  @media (hover: hover) { .lineage a:hover { color: var(--ink); text-decoration-color: var(--ink3); } }
   .tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
   .gap { width: var(--s2); }
   .where { margin-right: var(--s1); }

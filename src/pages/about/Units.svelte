@@ -3,7 +3,7 @@
   import UnitLink from "./UnitLink.svelte";
   import { Token } from "@stdlogits/ledger";
   import { headId, headline, loadHeadLayer, loadNeuron, neuronId, type LensToken } from "../../lib/data";
-  import { MODELS, depthColor } from "../../lib/models";
+  import { MODELS, MODEL_ORDER, depthColor } from "../../lib/models";
   import { GROUPS, OWL } from "./specimens";
 
   // Two real units over five tokens, drawn in order of depth, each in its own depth's colour: an
@@ -22,6 +22,8 @@
   // How the head at "both" shares its attention among the tokens before it: drawn, not measured.
   const LOOKS = [0.06, 0.42, 0.08, 0.44];
 
+  // The sizes pruned from bigger ones (neuron-lens findings §20), where both are listed.
+  const pruned = MODEL_ORDER.map((id) => MODELS[id]).filter((m) => m.prunedFrom && !m.base && MODEL_ORDER.includes(m.prunedFrom)).map((m) => [m, MODELS[m.prunedFrom!]] as const);
   const qwen = MODELS[OWL.model];
   const gemma = MODELS[GROUPS.model];
   const headTint = depthColor(gemma, GROUPS.layer);
@@ -125,6 +127,7 @@
     <p>A language model reads text as tokens (words or pieces of words) and processes them by converting them to a stream of numbers that then go through a stack of layers: {qwen.layers} in {qwen.name} and {gemma.layers} in {gemma.name}. There are two kinds of processing units.</p>
     <p>An <b>attention head</b> moves information between tokens: it looks back at earlier ones and copies data forward.</p>
     <p>A <b>neuron</b> works on one token at a time: when the token's stream points a certain way, it fires and contributes its own direction.</p>
+    {#if pruned.length}<p>{new Intl.ListFormat("en").format(pruned.map(([child, parent]) => `${child.name} was cut down from ${parent.name}`))}, keeping every head and some of the neurons, the quietest cut first. A neuron's page names the one it came from, or what became of it, and switching between the two models goes there.</p>{/if}
     <p>This is an illustration of both of them on five tokens. This is just an example: the neuron is from {qwen.name} and the head is from {gemma.name}.</p>
   {/snippet}
   <div class="spec">

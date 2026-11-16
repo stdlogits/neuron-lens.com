@@ -8,7 +8,7 @@
 
 import type { ContextLine } from "@stdlogits/ledger";
 import catalog from "./catalog.json";
-import { MODELS, type ModelId, type ModelInfo, type Modality } from "./models";
+import { MODELS, lineageFile, type ModelId, type ModelInfo, type Modality } from "./models";
 
 /** Where a model's catalog files are. `VITE_CATALOG=live npm run dev` reads the live builds on R2 instead of a local copy. */
 const local = import.meta.env.DEV && import.meta.env.VITE_CATALOG !== "live";
@@ -388,6 +388,30 @@ async function range(url: string, offset: number, length: number, ahead?: string
     else if (first && active <= MAX_RANGES - RESERVE) { later.delete(first[0]); first[1](); }
     else active -= 1;
   }
+}
+
+// ---------- lineage: a pruned model's neurons traced to their parents, and back (scripts/neurons/lineage.py)
+
+/** How a neuron's counterpart across a pruning is known (neuron-lens findings §20): `identified` when the weights' match
+ * is also what the two neurons' activations or writes pick, `supported` when it is among their next few, `provisional`
+ * on the weights alone; `near-silent` for a near-silent neuron, which matches the other model's near-silent neurons as a
+ * class but not one by one; `cut` for a parent's neuron the pruned model didn't keep. */
+export type LineageStatus = "identified" | "supported" | "provisional" | "near-silent" | "cut";
+/** In a pruned model a neuron's parent, in its parent its child: the other model's neuron, null where no one neuron is traced. */
+export interface Lineage { neuron: number | null; status: LineageStatus }
+const LINEAGE_STATUS = [null, "identified", "supported", "provisional", "near-silent", "cut"] as const;
+const LINEAGE_RECORD = 4;
+const lineageBuild = (catalog as { lineage?: string }).lineage;
+const lineageBase = local ? "/data/lineage" : lineageBuild ? `${catalog.origin}/lineage/${lineageBuild}` : null;
+
+/** A neuron's counterpart across its model's pruning, or null where the model has none: its record, by range. */
+export async function loadLineage(model: ModelId, layer: number, n: number): Promise<Lineage | null> {
+  const info = MODELS[model];
+  if (!lineageBase || !(info.prunedFrom || info.prunedInto)) return null;
+  const bytes = new DataView(await range(`${lineageBase}/${lineageFile(model)}.bin`, (layer * info.mlp + n) * LINEAGE_RECORD, LINEAGE_RECORD));
+  const other = bytes.getUint16(0, true);
+  const status = LINEAGE_STATUS[bytes.getUint8(2)];
+  return status ? { neuron: other === 0xffff ? null : other, status } : null;
 }
 
 const inflated = (bytes: ArrayBuffer) => new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate"))).text();

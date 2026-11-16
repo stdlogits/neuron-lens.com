@@ -12,5 +12,6 @@
     "qwen3-8b-base": "087e1613d593",
     "qwen3-14b": "bf23436580d5",
     "qwen3-14b-base": "398110a5da72"
-  }
+  },
+  "lineage": "7bdc28003299"
 }

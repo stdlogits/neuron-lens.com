@@ -272,5 +272,24 @@ async function cut(model) {
   console.log(`${model}: ${positions.length} easiest, ${[...detailed.values()].reduce((s, set) => s + set.size, 0)} detailed neurons, ${keptHeads.size} heads, ${order.length} tokens, ${forms.length} search words, ${Object.keys(keptTerms).length} terms${index.media.length ? `, ${index.media.map((m) => `${mediaDocs[m].length} ${m}`).join(", ")}` : ""}`);
 }
 
+/** The pruned pairs' links (scripts/neurons/lineage.py) of the deep-linked neurons, per file (a base reads its
+ * post-trained model's): record number -> its bytes. The mock answers every other record with zeros, no counterpart. */
+async function cutLineage() {
+  let index;
+  try { index = JSON.parse(await readFile(resolve(source, "lineage", "index.json"), "utf8")); } catch { return; }
+  const kept = new Map();
+  for (const [model, keep] of Object.entries(KEEP)) {
+    const file = model.replace(/-base$/, "");
+    if (!index.models[file]) continue;
+    if (!kept.has(file)) kept.set(file, new Set());
+    for (const [layer, n] of keep.neurons) kept.get(file).add(layer * index.models[file].mlp + n);
+  }
+  for (const [file, at] of kept) {
+    const bin = await readFile(resolve(source, "lineage", `${file}.bin`));
+    await write("lineage", `${file}.json`, records(index.record, [...at].sort((a, b) => a - b).map((i) => [i, bin.subarray(i * index.record, (i + 1) * index.record)])));
+  }
+}
+
 await rm(target, { recursive: true, force: true });
 for (const model of Object.keys(KEEP)) await cut(model);
+await cutLineage();

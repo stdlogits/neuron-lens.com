@@ -92,7 +92,12 @@ A touch has no hover, so a tap on a unit in either graph opens its card rather t
 The model is picked in two rows: its family, then its size and, where both are up, post-trained or base (About's depth
 figure picks among the labelled ones the same way). Another model keeps the place (a9's call): the same layer and neuron or
 head number, clipped to its shape and never matched to a similar unit, Easiest or All as it was (a trip through a base model,
-which lists all, changes neither), the filter where it has one, and the side being read.
+which lists all, changes neither), the filter where it has one, and the side being read. The one exception is a pruning
+(neuron-lens findings §20): Qwen3-4B and Qwen3-0.6B were pruned from Qwen3-8B and Qwen3-1.7B, so between a pruned model and
+its parent, post-trained or base, a neuron goes to its traced counterpart, provisional or not, and to the same number only
+where none is traced (a near-silent neuron, or one the pruning cut) (a9's call, 2026-11-16). Heads keep their numbers,
+which are the parent's. A pruned model's neuron also names its parent at the end of its meta line, and a parent's its
+child or that it was cut (`UnitBar.svelte`; DESIGN.md).
 A base model whose post-trained model is labelled (`labelsFrom` in `models.ts`) shows that model's labels, ratings, Easiest
 and search over its own evidence (a9's call: the two are empirically close enough that the labels hold), its labels in
 italic wherever they show, as lent (Ledger's `lent`; a9's call). Its build stays
@@ -168,6 +173,13 @@ script's docstring has the full invocation):
    builds a subset for development.
 4. `scripts/catalog/upload.sh <model>` puts the build on R2 and names it in `src/lib/catalog.json`;
    commit that and deploy (below, "On R2").
+5. The pruned pairs' links, once, apart from any model's build: `scripts/neurons/lineage.py
+   ~/Work/neuron-lens/data/catalog catalog/lineage` turns the neuron-lens catalogs' `lineage` tables (Qwen3-4B, 0.6B,
+   8B, 1.7B) into `catalog/lineage/<model>.bin`, a 4-byte record per neuron (the other model's neuron and how it is
+   known), read by range (`loadLineage` in `data.ts`); a base reads its post-trained model's file (`models.ts`:
+   `prunedFrom`, `prunedInto`, `traced`). `scripts/catalog/upload.sh lineage` puts it on R2 under `lineage/<build>/` and
+   names it in `catalog.json`'s `lineage`, so no model's build changes with it; `deploy.sh` and the deployment check
+   cover it.
 
 Labels come from neuron-lens's `scripts/10_labels.py`, per model. The builder also works without them:
 titles then fall back to a unit's media label or its peak tokens.

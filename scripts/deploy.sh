@@ -45,7 +45,7 @@ if ! git fetch --quiet origin main || ! git merge-base --is-ancestor HEAD origin
 fi
 rev=$(git rev-parse HEAD)
 
-# Every build src/lib/catalog.json names must already be on R2, or the site would point at nothing.
+# Every build src/lib/catalog.json names (the models', and the lineage's) must already be on R2, or the site would point at nothing.
 data=$(node -p 'require("./src/lib/catalog.json").origin')
 while read -r model build; do
   [[ -n "$build" ]] || { echo "deploy: src/lib/catalog.json names no build for $model; upload one (scripts/catalog/upload.sh $model)" >&2; exit 1; }
@@ -53,7 +53,7 @@ while read -r model build; do
   [[ "$code" == 200 ]] || { echo "deploy: $data/$model/$build/index.json answers $code; upload it (scripts/catalog/upload.sh $model)" >&2; exit 1; }
   cors=$(curl -s -o /dev/null -D - "$data/$model/$build/index.json" | tr -d '\r' | awk -F': ' 'tolower($1) == "access-control-allow-origin" { print $2 }')
   [[ "$cors" == "*" ]] || { echo "deploy: $data answers without Access-Control-Allow-Origin: *, so cached files would be refused; the bucket's CORS must allow any origin (scripts/catalog/cors.json; AGENTS.md, On R2)" >&2; exit 1; }
-done < <(node -e 'for (const [model, build] of Object.entries(require("./src/lib/catalog.json").builds)) console.log(model, build)')
+done < <(node -e 'const c = require("./src/lib/catalog.json"); for (const [model, build] of Object.entries(c.builds)) console.log(model, build); if ("lineage" in c) console.log("lineage", c.lineage)')
 
 npm ci
 npm run check

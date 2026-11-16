@@ -15,6 +15,10 @@ What the site draws for itself, in Ledger:
 - The mark (`public/favicon.svg`) and the social card (`scripts/site/card.html`), both described in
   Ledger's DESIGN.md.
 - The header's placement of `ThemeButton`, and the no-script summary's rules (`src/styles/site.css`).
+- A pruned model's neuron, or its parent's, names its counterpart at the end of the unit's meta line, after its tags
+  (`src/explorer/unit/UnitBar.svelte`): "From Qwen3-8B L20·n10768", "Likely from" where only the weights say so, "Kept
+  in Qwen3-4B as …", "Cut from Qwen3-4B", and for a near-silent neuron the group it belongs to, unlinked. The neuron's
+  ID is a link in the Credits page's underline (2 px, `--wash2`, `--ink3` on hover); the tip says how the match is known.
 - The translations Ledger draws (`src/lib/translate.svelte.ts`, installed with `setTranslator`).
 - The atlas's motion (`src/explorer/Atlas.svelte`, `atlas/Scale.svelte`). The page's first plot arrives column by column,
   as Ledger's motion says; after it, another model, or another unit, keeps the plot as it is until its units are in, then

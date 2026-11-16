@@ -6,10 +6,10 @@ import { getContext, setContext, untrack } from "svelte";
 import {
   FLAG_AUDIO, FLAG_CROSSMODAL, FLAG_DETECTOR, FLAG_IMAGE, FLAG_PREDICTS, FLAG_SUPPRESSES, ROLES,
   ROLE_CARRIES, ROLE_DUPLICATE, ROLE_INDUCTION, ROLE_NAMES, ROLE_PREVIOUS, ROLE_SINK,
-  formatCount, headId, loadHeadIndex, loadHeadLayer, loadIndex, loadLayerIndex, loadNeuron, loadScores, neuronId,
-  type CatalogIndex, type HeadDetail, type HeadRow, type IndexRow, type NeuronDetail, type Unit,
+  formatCount, headId, loadHeadIndex, loadHeadLayer, loadIndex, loadLayerIndex, loadLineage, loadNeuron, loadScores, neuronId,
+  type CatalogIndex, type HeadDetail, type HeadRow, type IndexRow, type Lineage, type NeuronDetail, type Unit,
 } from "../lib/data";
-import { DEFAULT_MODEL, MODELS, bandOf, depthColor, type ModelId, type ModelInfo } from "../lib/models";
+import { DEFAULT_MODEL, MODELS, MODEL_ORDER, bandOf, depthColor, traced, type ModelId, type ModelInfo } from "../lib/models";
 import { go, href, router, type ExploreRoute } from "../lib/router.svelte";
 import { setTermsModel } from "../lib/translate.svelte";
 
@@ -58,6 +58,8 @@ export class Lens {
   /** All mode: every neuron of the current layer. */
   layerRows = $state<{ model: ModelId; layer: number; rows: IndexRow[] } | null>(null);
   neuron = $state<{ model: ModelId; layer: number; n: number; detail: NeuronDetail } | null>(null);
+  /** The selected neuron's counterpart across its model's pruning (a pruned model's parent, a parent's child), by its key. */
+  lineage = $state<{ key: string; link: Lineage | null } | null>(null);
   headLayer = $state<{ model: ModelId; layer: number; heads: HeadDetail[] } | null>(null);
   /** The catalog itself failed to load. */
   failed = $state(false);
@@ -120,6 +122,21 @@ export class Lens {
     return poles && poles[1].score > poles[0].score && !poles[1].silent ? 1 : 0;
   });
   setSide = (side: 0 | 1) => { this.chosenSide = { key: this.neuronKey, side }; };
+  /** The selected neuron across its model's pruning (neuron-lens findings §20): in a pruned model its parent, in a
+   * parent its child, with how it is known; the other model's address where one neuron is traced. */
+  readonly lineagePlace = $derived.by(() => {
+    const other = this.model.prunedFrom ?? this.model.prunedInto;
+    const link = this.lineage?.key === this.neuronKey ? this.lineage.link : null;
+    if (!other || !link || !MODEL_ORDER.includes(other)) return null;
+    return {
+      model: MODELS[other], role: this.model.prunedFrom ? ("parent" as const) : ("child" as const), ...link,
+      href: link.neuron === null ? null : this.hrefFor({ model: other, layer: this.layer, index: link.neuron, all: false }),
+    };
+  });
+  /** Going to another model's neuron from this one, read from the same side. */
+  carrySide = (model: ModelId, layer: number, index: number) => {
+    if (this.unit === "neurons" && (this.neuronDetail || this.chosenSide?.key === this.neuronKey)) this.chosenSide = { key: `${model}/L${layer}/n${index}`, side: this.side };
+  };
   /** Query heads sharing the selected head's key-value head (all 16 on Gemma 4's global layers). */
   readonly groupSize = $derived(this.headDetail ? this.headRows.filter((row) => row[2] === this.headDetail!.kv).length : 1);
 
@@ -186,6 +203,15 @@ export class Lens {
       const model = this.modelId;
       const layer = this.layer;
       untrack(() => this.loadHeads(model, layer));
+    });
+    // A neuron of a pruned pair: its counterpart in the other model.
+    $effect(() => {
+      if (this.unit !== "neurons" || this.selected === null || !(this.model.prunedFrom || this.model.prunedInto)) return;
+      const [key, model, layer, n] = [this.neuronKey!, this.modelId, this.layer, this.selected];
+      untrack(() => {
+        if (this.lineage?.key === key) return;
+        loadLineage(model, layer, n).then((link) => { if (this.neuronKey === key) this.lineage = { key, link }; }, () => {});
+      });
     });
     // A neuron in the address that isn't among the layer's easiest opens in All mode.
     $effect(() => {
@@ -257,17 +283,22 @@ export class Lens {
   };
   unitHref = (unit: Unit, layer: number, index: number | null) => this.hrefFor({ unit, layer, index, all: unit === "neurons" && this.all });
 
-  /** Another model, at the same place: the same layer and unit number (clipped to its shape, not
-   * matched to anything), listed the same way, the neuron read from the same side. */
-  setModel = (model: ModelId) => {
+  /** Another model, at the same place: a neuron of a pruned pair goes to its counterpart where one is traced (a9's
+   * call: its parent or child, provisional or not), anything else to the same layer and unit number (clipped to
+   * its shape, not matched to anything); listed the same way, the neuron read from the same side. */
+  setModel = async (model: ModelId) => {
     if (model === this.modelId) return;
+    const [from, key] = [this.modelId, this.neuronKey];
     const to = MODELS[model];
     const clip = (value: number | null, size: number) => (value === null ? null : Math.min(value, size - 1));
     const layer = clip(this.route.layer, to.layers);
-    const index = clip(this.route.index, this.unit === "heads" ? to.heads : to.mlp);
-    if (this.unit === "neurons" && index !== null && (this.neuronDetail || this.chosenSide?.key === this.neuronKey)) {
-      this.chosenSide = { key: `${model}/L${layer ?? to.start.neurons}/n${index}`, side: this.side };
+    let index = clip(this.route.index, this.unit === "heads" ? to.heads : to.mlp);
+    if (this.unit === "neurons" && this.route.index !== null && traced(from, model)) {
+      const link = this.lineage?.key === key ? this.lineage.link : await loadLineage(from, this.layer, this.route.index).catch(() => null);
+      if (this.modelId !== from || this.neuronKey !== key) return; // the viewer moved on meanwhile
+      if (link?.neuron != null) index = link.neuron;
     }
+    if (this.unit === "neurons" && index !== null) this.carrySide(model, layer ?? to.start.neurons, index);
     const all = this.unit === "neurons" && (this.model.labelled ? this.route.all : this.listedAll);
     go(this.hrefFor({ model, layer, index, all }));
   };

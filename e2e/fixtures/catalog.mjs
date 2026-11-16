@@ -83,6 +83,24 @@ async function answerGraph(route, path) {
   });
 }
 
+/** A lineage record (scripts/neurons/lineage.py): the one lineage/<file>.json keeps, or zeros, which read as no counterpart.
+ * @param {import("@playwright/test").Route} route
+ * @param {string} path */
+async function answerLineage(route, path) {
+  const range = /^bytes=(\d+)-(\d+)$/.exec(route.request().headers()["range"] ?? "");
+  if (!range) return route.fulfill({ status: 400 });
+  const [start, end] = [Number(range[1]), Number(range[2])];
+  const size = end - start + 1;
+  const records = await fixture(path.replace(/\.bin$/, ".json")).then((/** @type {{ records: Record<string, string> }} */ file) => file.records, () => ({}));
+  const kept = records[Math.floor(start / size)];
+  return route.fulfill({
+    status: 206,
+    contentType: "application/octet-stream",
+    headers: { "content-range": `bytes ${start}-${end}/*`, "accept-ranges": "bytes" },
+    body: kept ? Buffer.from(kept, "base64") : Buffer.alloc(size),
+  });
+}
+
 /** @param {import("@playwright/test").Route} route */
 async function answer(route) {
   const url = new URL(route.request().url());
@@ -92,6 +110,7 @@ async function answer(route) {
   if (rest.join("/") === "scores.json") return route.fulfill({ status: 200, contentType: "application/json", body: await madeUpScores(model) });
 
   if (path.endsWith("/graph.bin")) return answerGraph(route, path);
+  if (model === "lineage" && path.endsWith(".bin")) return answerLineage(route, path);
 
   let body;
   try {

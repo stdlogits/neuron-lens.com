@@ -58,6 +58,11 @@ export interface ModelInfo {
   start: { neurons: number; heads: number };
   /** The two labels a head's card in the layer strip shows: the ones that held up when checked blind. */
   headCard: ["fires" | "attends" | "writes", "fires" | "attends" | "writes"];
+  /** The model this one was pruned from (neuron-lens findings §20), with the same layers and heads, and each neuron
+   * traced to a parent there (lib/data.ts loadLineage); a base pairs with the parent's base. */
+  prunedFrom?: ModelId;
+  /** The model pruned from this one: each of its neurons traced to a child there, or cut. */
+  prunedInto?: ModelId;
 }
 
 export const MODELS: Record<ModelId, ModelInfo> = {
@@ -176,6 +181,22 @@ for (const model of Object.values(MODELS)) {
   const post = model.base ? MODELS[model.id.replace(/-base$/, "")] : undefined;
   if (!model.labelled && post?.labelled && post.id in catalog.builds) Object.assign(model, { labelled: true, labelsFrom: post.id });
 }
+
+/** The pruned pairs (neuron-lens findings §20; scripts/neurons/lineage.py): the pruned model, then its parent. */
+const PRUNED: [ModelId, ModelId][] = [["qwen3-4b", "qwen3-8b"], ["qwen3-0.6b", "qwen3-1.7b"]];
+for (const [child, parent] of PRUNED) {
+  for (const suffix of ["", "-base"]) {
+    const [c, p] = [MODELS[child + suffix], MODELS[parent + suffix]];
+    if (c && p) Object.assign(c, { prunedFrom: p.id }) && Object.assign(p, { prunedInto: c.id });
+  }
+}
+/** The lineage file a model's neurons are traced in: its post-trained model's, since post-training keeps the indices. */
+export const lineageFile = (model: ModelId) => model.replace(/-base$/, "");
+/** Whether a neuron of one model traces to the other's: a pruned model and its parent, either way, post-trained or base. */
+export const traced = (a: ModelId, b: ModelId) => {
+  const [x, y] = [lineageFile(a), lineageFile(b)];
+  return PRUNED.some(([child, parent]) => (x === child && y === parent) || (x === parent && y === child));
+};
 
 const FAMILIES: ModelInfo["family"][] = ["Qwen3", "Gemma 4"];
 const sizeOf = (model: ModelInfo) => parseFloat(model.size);

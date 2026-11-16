@@ -227,6 +227,21 @@ export async function checkData(site, rules) {
     assert.ok(Array.isArray(index.neurons) && (index.neurons.length > 0 || index.labelled === false), `${path} lists no neurons`);
     assert.ok(index.layerMeta?.length === index.layers, `${path} has ${index.layerMeta?.length} of its ${index.layers} layers`);
   }
+  // The pruned pairs' neuron links (scripts/neurons/lineage.py), a build of their own: the index, and a record of each file by range.
+  if (catalog.lineage) {
+    const path = `/lineage/${catalog.lineage}/index.json`;
+    const response = await getData(site, path);
+    assert.equal(response.status, 200, `${catalog.origin}${path}: HTTP ${response.status}`);
+    assertDataHeaders(response, site, path);
+    const { record, models } = await response.json();
+    for (const model of Object.keys(models)) {
+      const file = `/lineage/${catalog.lineage}/${model}.bin`;
+      const part = await getData(site, file, { Range: `bytes=0-${record - 1}` });
+      assert.equal(part.status, 206, `${file}: HTTP ${part.status} to a Range request, expected 206`);
+      assert.equal((await part.arrayBuffer()).byteLength, record, `${file}: a record isn't ${record} bytes`);
+      assertDataHeaders(part, site, file);
+    }
+  }
   // The edge keeps a file with the headers of the answer that filled its cache, so CORS must be on
   // every answer, asked with an Origin or not: R2 does that when the bucket's CORS allows any origin.
   // Twice with no Origin, the second from the edge's cache, each must carry it.

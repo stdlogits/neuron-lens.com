@@ -4,6 +4,8 @@
 #
 #   scripts/catalog/upload.sh qwen3-8b [gemma-4-12b …]
 #   scripts/catalog/upload.sh --dry-run qwen3-8b      name the build and count what would go up
+#   scripts/catalog/upload.sh lineage                 the pruned pairs' neuron links (scripts/neurons/lineage.py),
+#                                                     named in catalog.json's lineage rather than its builds
 #
 # Each build goes under a prefix of its own, <model>/<build>/, where the build is the first 12 hex digits
 # of a hash over every file's path and contents. A build's files never change, so they are cached for
@@ -83,6 +85,7 @@ for model in "${models[@]}"; do
   code=$(curl -s -o /dev/null -w '%{http_code}' "$origin/$model/$build/index.json")
   [[ "$code" == 200 ]] || { echo "upload: $origin/$model/$build/index.json answers $code" >&2; exit 1; }
   node -e 'const fs = require("fs"), p = "src/lib/catalog.json", c = JSON.parse(fs.readFileSync(p, "utf8"));
-    c.builds[process.argv[1]] = process.argv[2]; fs.writeFileSync(p, JSON.stringify(c, null, 2) + "\n");' "$model" "$build"
+    if (process.argv[1] === "lineage") c.lineage = process.argv[2]; else c.builds[process.argv[1]] = process.argv[2];
+    fs.writeFileSync(p, JSON.stringify(c, null, 2) + "\n");' "$model" "$build"
   echo "upload: $model is up at $origin/$model/$build/; src/lib/catalog.json names it: commit, push and deploy"
 done
