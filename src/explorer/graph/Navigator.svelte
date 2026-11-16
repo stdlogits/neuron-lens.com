@@ -51,13 +51,15 @@
   // inside itself (the label's overflow-wrap).
   let pen: CanvasRenderingContext2D | null = null;
   const set = new Map<string, { width: number; lines: number }>();
+  /** A base model's titles set in italic (Graph.svelte's .label.lent). */
+  const slant = $derived(model.labelsFrom ? "italic " : "");
   const PIECE = /[\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]|[^\s\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]+|\s+/g;
   function setting(text: string) {
-    let found = set.get(text);
+    let found = set.get(slant + text);
     if (found) return found;
     pen ??= document.createElement("canvas").getContext("2d");
     const face = getComputedStyle(document.documentElement).getPropertyValue("--text") || "sans-serif";
-    if (pen) pen.font = `600 12px ${face}`;
+    if (pen) pen.font = `${slant}600 12px ${face}`;
     const width = (piece: string) => (pen ? pen.measureText(piece).width : piece.length * 7);
     let lines = 1;
     let line = 0;
@@ -70,7 +72,7 @@
       line += w;
     }
     found = { width: Math.min(LABEL, Math.max(widest, line)), lines };
-    set.set(text, found);
+    set.set(slant + text, found);
     return found;
   }
   const nameOf = (n: GraphNode) => (n.kind === "head" ? headId(n.layer, n.index) : `${neuronId(n.layer, n.index)} ${n.pole > 0 ? "+" : "−"}`);
@@ -782,7 +784,7 @@
     <div class="top">
       <div class="who">
         <span class="name meta">{name}</span>
-        {#if title}<span class="title"><LabelText text={title} /></span>{/if}
+        {#if title}<span class="title"><LabelText text={title} lent={!!model.labelsFrom} /></span>{/if}
       </div>
       <div class="tools">
         {#if modes.length > 1}<Segmented options={modes} value={mode} onchange={onmode} label="Which connections" />{/if}

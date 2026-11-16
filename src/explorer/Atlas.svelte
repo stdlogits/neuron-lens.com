@@ -1,11 +1,11 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import Scale from "./atlas/Scale.svelte";
-  import { matchKey, useLens } from "./lens.svelte";
+  import { matchKey, useLens, type Matches } from "./lens.svelte";
   import { ALL_ROWS, SHADES, byteShades, field, shadeScale } from "./atlas/levels";
   import { GLIDE, IN, ease, fadeOut, glide, hideTip, showTip, type TipContent } from "@stdlogits/ledger";
   import { headId, loadLayerIndex, neuronId, type HeadRow, type IndexRow } from "../lib/data";
-  import { depthColor } from "../lib/models";
+  import { depthColor, type ModelId, type ModelInfo } from "../lib/models";
   import { theme } from "../lib/theme";
 
   // The map of every layer: a column a layer, a short bar a unit, the labeller's surest at the top, each
@@ -20,21 +20,28 @@
 
   // ---------- what the bars stand for
 
-  /** A bar: its unit and its opacity. */
-  interface Bar { unit: number; o: number }
+  type Mode = "heads" | "all" | "easiest";
+  /** A bar: its unit, its opacity and its labels (for the tip). */
+  interface Bar { unit: number; o: number; body?: string; sub?: string }
+  /** What the plot draws: one model's units in one mode, and the place it marks (the selected unit's slot in its column). */
+  interface View { modelId: ModelId; model: ModelInfo; mode: Mode; ready: boolean; columns: Bar[][]; rows: number; layer: number; unit: number | null; slot: number }
 
-  const layers = $derived(Array.from({ length: lens.model.layers }, (_, L) => L));
   const last = $derived(lens.model.layers - 1);
   const indexReady = $derived(lens.index?.id === lens.modelId);
   const headsReady = $derived(lens.heads?.length === lens.model.layers * lens.model.heads);
   /** All mode: each confidence byte's shade, once every layer's scores are in. */
   const byteShade = $derived<Uint8Array | null>(lens.scores?.length === lens.model.layers ? byteShades(lens.scores) : null);
+  /** The mode asked for, whether its units are in, and whether they failed (so there is nothing to wait for). */
+  // (All mode waits for the layer's rows too, which place its selected neuron.)
+  const want = $derived<Mode>(lens.unit === "heads" ? "heads" : lens.all ? "all" : "easiest");
+  const wanted = $derived(want === "heads" ? headsReady : want === "all" ? byteShade !== null && lens.selected !== null : indexReady);
+  const failed = $derived(lens.failed || (want === "heads" ? lens.failures.includes(lens.headIndexKey) : want === "all" && lens.failures.some((key) => key === lens.scoresKey || key === lens.rowsKey)));
   // All mode shows the easiest neurons until every layer's scores are in, then crossfades.
-  const mode = $derived<"heads" | "all" | "easiest">(lens.unit === "heads" ? "heads" : lens.all && byteShade ? "all" : "easiest");
+  const mode = $derived<Mode>(want === "all" && !byteShade ? "easiest" : want);
   const ready = $derived(mode === "heads" ? headsReady : mode === "all" || indexReady);
 
   function byLayer<T extends IndexRow | HeadRow>(rows: T[], score: number): T[][] {
-    const out: T[][] = layers.map(() => []);
+    const out: T[][] = Array.from({ length: lens.model.layers }, () => []);
     for (const row of rows) out[row[0]]?.push(row);
     for (const column of out) column.sort((a, b) => (b[score] as number) - (a[score] as number));
     return out;
@@ -84,35 +91,46 @@
     if (rows?.model === lens.modelId && !untrack(() => known[rows.layer])) untrack(() => keep(rows.layer, rows.rows));
   });
 
-  const columns = $derived.by<Bar[][]>(() => {
-    if (!ready) return layers.map(() => []);
-    if (mode === "heads") return headColumns.map((column) => column.map((row) => ({ unit: row[1], o: opacity(headShade(row[10]), lens.passesHead(row), matches.has(matchKey(row[0], row[1]))) })));
-    if (mode === "easiest") return neuronColumns.map((column) => column.map((row) => ({ unit: row[1], o: opacity(neuronShade(row[4]), lens.passesNeuron(row), matches.has(matchKey(row[0], row[1]))) })));
-    return layers.map(() => []);
-  });
-  const rows = $derived(mode === "all" ? ALL_ROWS : Math.max(1, ...columns.map((column) => column.length)));
-
-  /** The selected unit's bar in the current column. */
-  const selected = $derived.by(() => {
+  /** What there is to draw now, from what has loaded. */
+  const fresh = $derived.by<View>(() => {
+    let columns: Bar[][] = [];
+    if (ready && mode === "heads") columns = headColumns.map((column) => column.map((row) => ({ unit: row[1], o: opacity(headShade(row[10]), lens.passesHead(row), matches.has(matchKey(row[0], row[1]))), body: row[3], sub: row[4] })));
+    else if (ready && mode === "easiest") columns = neuronColumns.map((column) => column.map((row) => ({ unit: row[1], o: opacity(neuronShade(row[4]), lens.passesNeuron(row), matches.has(matchKey(row[0], row[1]))), body: row[2], sub: row[3] })));
     const unit = lens.selected;
-    if (unit === null || !ready || mode === "all") return -1;
-    return (mode === "heads" ? headColumns : neuronColumns)[lens.layer]?.findIndex((row) => row[1] === unit) ?? -1;
+    const slot = unit === null || mode === "all" ? -1 : columns[lens.layer]?.findIndex((item) => item.unit === unit) ?? -1;
+    const rows = mode === "all" ? ALL_ROWS : Math.max(1, ...columns.map((column) => column.length));
+    return { modelId: lens.modelId, model: lens.model, mode, ready, columns, rows, layer: lens.layer, unit, slot };
   });
+
+  // Another model, or another mode, keeps the plot as it is until its units are in, so the bars move from
+  // the old into the new rather than emptying between them. (A mode that draws the same model's units the same
+  // way doesn't wait: All mode shows the easiest neurons while its scores load.)
+  let kept: View | null = null;
+  const view = $derived.by<View>(() => {
+    const next = fresh;
+    const same = kept?.modelId === next.modelId && kept.mode === next.mode;
+    if (kept && !wanted && !failed && !(same && next.ready)) return kept;
+    if (next.ready) kept = next;
+    return next;
+  });
+  const holding = $derived(view !== fresh);
+  const layers = $derived(Array.from({ length: view.model.layers }, (_, L) => L));
+  const count = $derived(view.model.layers);
 
   // ---------- geometry
 
   let width = $state(0);
   // Phone widths: shorter, thinner bars so the whole map stays in view without scrolling sideways.
-  const narrow = $derived(width > 0 && width / lens.model.layers < 14);
+  const narrow = $derived(width > 0 && width / count < 14);
   const bar = $derived(narrow ? 2 : 3);
   const pitch = $derived(bar + GAP);
-  const height = $derived(PAD * 2 + rows * pitch - GAP);
+  const height = $derived(PAD * 2 + view.rows * pitch - GAP);
 
   // ---------- All mode: every neuron a cell, in neuron order, across the bars' width of its column
 
   const share = $derived(narrow ? 0.7 : 0.62);
-  const grid = $derived(field(lens.model.mlp, (width / lens.model.layers) * share, height - PAD * 2));
-  const left = (L: number) => (L + (1 - share) / 2) * (width / lens.model.layers);
+  const grid = $derived(field(view.model.mlp, (width / count) * share, height - PAD * 2));
+  const left = (L: number) => (L + (1 - share) / 2) * (width / count);
   /** A neuron's cell, in px from the plot's corner. */
   const cell = (L: number, i: number) => ({ x: left(L) + (i % grid.g) * grid.cw, y: PAD + Math.floor(i / grid.g) * grid.ch });
   /** The neuron whose cell holds a point of the plot, if any. */
@@ -121,7 +139,7 @@
     const cy = Math.floor((y - PAD) / grid.ch);
     if (cx < 0 || cx >= grid.g || cy < 0) return null;
     const i = cy * grid.g + cx;
-    return i < lens.model.mlp ? i : null;
+    return i < view.model.mlp ? i : null;
   }
 
   let canvas = $state<HTMLCanvasElement>();
@@ -143,7 +161,7 @@
   // Each neuron's opacity, as the bars': lit by a search, narrowed by a filter where its layer's rows
   // are in (the current layer and any pointed at); a cell takes the brightest neuron that falls in it.
   $effect(() => {
-    if (mode !== "all" || !canvas || !probe || !byteShade || !lens.scores || width === 0) return;
+    if (view.mode !== "all" || holding || !canvas || !probe || !byteShade || !lens.scores || width === 0) return;
     void theme.mode;
     const scale = window.devicePixelRatio || 1;
     const W = Math.round(width * scale);
@@ -161,7 +179,7 @@
     const { g, cw, ch } = grid;
     for (const L of layers) {
       const bytes = lens.scores[L];
-      const [r, gr, b] = rgb(depthColor(lens.model, L));
+      const [r, gr, b] = rgb(depthColor(view.model, L));
       const lit = hits.get(L);
       const rows = filtering ? known[L] : undefined;
       const x0 = left(L);
@@ -195,14 +213,26 @@
   const SWEEP_MOST = 300;
   let sweeping = $state(false);
   let sweepTimer = 0;
+  const any = (m: Matches) => m.neurons.size + m.heads.size > 0;
+  let litBy = untrack(() => ({ matches: lens.matches, filter: lens.activeFilter.value }));
   $effect.pre(() => {
-    void lens.matches;
-    void lens.activeFilter;
+    const now = { matches: lens.matches, filter: lens.activeFilter.value };
     untrack(() => {
+      const before = litBy;
+      litBy = now;
+      if (now.filter === before.filter && (now.matches === before.matches || (!any(now.matches) && !any(before.matches)))) return;
       sweeping = true;
       clearTimeout(sweepTimer);
       sweepTimer = window.setTimeout(() => (sweeping = false), GLIDE + SWEEP_MOST + 40);
     });
+  });
+  // Moving into another model's units, every bar moves at once, and a tip naming the last model's unit goes.
+  let sweptIn = untrack(() => view.modelId);
+  $effect.pre(() => {
+    const model = view.modelId;
+    if (model === sweptIn) return;
+    sweptIn = model;
+    untrack(() => { clearTimeout(sweepTimer); sweeping = false; unpoint(); });
   });
   $effect(() => () => clearTimeout(sweepTimer));
   const sweepFrom = $derived(lens.matches.from ?? lens.layer);
@@ -211,32 +241,43 @@
   // The search result being looked at: its bar lifted and its column washed, or in All mode a dot on its cell.
   const peeked = $derived.by(() => {
     const p = lens.peek;
-    if (!p || p.unit !== lens.unit || !ready) return null;
-    if (mode === "all") {
-      if (p.index >= lens.model.mlp || width === 0) return { layer: p.layer, slot: -1, spot: null };
+    if (!p || p.unit !== lens.unit || !view.ready || holding) return null;
+    if (view.mode === "all") {
+      if (p.index >= view.model.mlp || width === 0) return { layer: p.layer, slot: -1, spot: null };
       const { x, y } = cell(p.layer, p.index);
       return { layer: p.layer, slot: -1, spot: { x: x + grid.cw / 2, y: y + grid.ch / 2 } };
     }
-    const slot = (mode === "heads" ? headColumns : neuronColumns)[p.layer]?.findIndex((row) => row[1] === p.index) ?? -1;
+    const slot = view.columns[p.layer]?.findIndex((item) => item.unit === p.index) ?? -1;
     return { layer: p.layer, slot, spot: null };
   });
 
   /** All mode: the selected neuron's row, marked by an ink bar as wide as a selected bar. */
   const pin = $derived.by(() => {
-    if (mode !== "all" || lens.selected === null || lens.selected >= lens.model.mlp || width === 0) return null;
-    const column = width / lens.model.layers;
-    const { y } = cell(lens.layer, lens.selected);
+    if (view.mode !== "all" || view.unit === null || view.unit >= view.model.mlp || width === 0) return null;
+    const column = width / count;
+    const { y } = cell(view.layer, view.unit);
     const wide = narrow ? 1 : 0.86;
-    return { x: (lens.layer + (1 - wide) / 2) * column, y: y + grid.ch / 2 - bar / 2, w: column * wide };
+    return { x: (view.layer + (1 - wide) / 2) * column, y: y + grid.ch / 2 - bar / 2, w: column * wide };
   });
 
-  // ---------- motion: the first plot of a model arrives column by column; later ones crossfade
+  // ---------- motion: the page's first plot arrives column by column. After it, the bars move into another
+  // model's or mode's (stacks and bars a new model adds come in from the right; those it lacks fade), and the
+  // All field crossfades.
 
-  let arrived: string | null = null;
-  const plot = $derived.by(() => {
-    const arrive = ready && arrived !== lens.modelId;
-    if (arrive) arrived = lens.modelId;
-    return { key: `${lens.modelId}:${mode}:${ready}`, arrive };
+  let arrived = $state(false);
+  const arriving = $derived(!arrived && (view.mode === "all" || view.columns.some((column) => column.length > 0)));
+  $effect(() => {
+    if (!arriving) return;
+    const timer = setTimeout(() => (arrived = true), untrack(() => count) * 16 + IN + 100);
+    return () => clearTimeout(timer);
+  });
+  const plotKey = $derived(view.mode === "all" ? `all:${view.modelId}` : "bars");
+  // A plot's own first frame adds nothing (what it starts with is there at once); once drawn, it is settled.
+  let settled = $state("");
+  $effect(() => {
+    const key = plotKey;
+    const frame = requestAnimationFrame(() => (settled = key));
+    return () => cancelAnimationFrame(frame);
   });
   function plotIn(_node: Element, arrive: boolean) {
     return arrive ? { duration: 0 } : { duration: IN, easing: ease, css: (t: number) => `opacity: ${t}` };
@@ -265,29 +306,33 @@
 
   function spot(event: PointerEvent) {
     const box = area!.getBoundingClientRect();
-    const column = box.width / lens.model.layers;
-    const L = Math.max(0, Math.min(last, Math.floor((event.clientX - box.left) / column)));
+    const column = box.width / count;
+    const L = Math.max(0, Math.min(count - 1, Math.floor((event.clientX - box.left) / column)));
     const x = event.clientX - box.left;
     const y = event.clientY - box.top;
     const i = Math.floor((y - PAD + GAP / 2) / pitch);
-    const slot = y - PAD + GAP / 2 >= 0 && event.clientY < box.bottom && i < columns[L].length ? i : null;
+    const slot = y - PAD + GAP / 2 >= 0 && event.clientY < box.bottom && i < (view.columns[L]?.length ?? 0) ? i : null;
     const along = Math.max(0, Math.min(0.999, (x - L * column - column * 0.19) / (column * 0.62)));
     return { L, slot, along, x, y };
   }
 
+  /** The unit under a point; none while the plot still shows the last model's or mode's. */
   function unitAt(L: number, slot: number | null, x: number, y: number): number | null {
-    if (mode === "all") return y < height ? neuronAt(L, x, y) : null;
-    return slot === null ? null : columns[L]?.[slot]?.unit ?? null;
+    if (holding) return null;
+    if (view.mode === "all") return y < height ? neuronAt(L, x, y) : null;
+    return slot === null ? null : view.columns[L]?.[slot]?.unit ?? null;
   }
 
+  /** A unit's ID over its labels, in italic where they were written for the post-trained model. */
   function content(L: number, slot: number, unit: number): TipContent {
-    if (mode === "heads") {
-      const row = headColumns[L][slot];
-      return { title: headId(L, unit), body: row?.[3], sub: row?.[4] };
+    const lent = view.model.labelsFrom ? "both" : undefined;
+    if (view.mode === "all") {
+      const row = known[L]?.[unit];
+      if (!row) peek(L);
+      return { title: neuronId(L, unit), body: row?.[2], sub: row?.[3], lent };
     }
-    const row = mode === "all" ? known[L]?.[unit] : neuronColumns[L][slot];
-    if (!row && mode === "all") peek(L);
-    return { title: neuronId(L, unit), body: row?.[2], sub: row?.[3] };
+    const item = view.columns[L]?.[slot];
+    return { title: view.mode === "heads" ? headId(L, unit) : neuronId(L, unit), body: item?.body, sub: item?.sub, lent };
   }
 
   /** Name the unit under the pointer in the tip, which glides from bar to bar (or cell to cell). */
@@ -297,15 +342,15 @@
     if (!refresh && pointed?.unit === unit && pointed.layer === L) return;
     pointed = { layer: L, slot: slot ?? -1, along, x, y, unit };
     const box = area!.getBoundingClientRect();
-    const column = box.width / lens.model.layers;
+    const column = box.width / count;
     let rect: DOMRect;
-    if (mode === "all") {
+    if (view.mode === "all") {
       const at = cell(L, unit);
       spotted = { x: at.x + grid.cw / 2, y: at.y + grid.ch / 2 };
       rect = new DOMRect(box.left + spotted.x - 3, box.top + spotted.y - 3, 6, 6);
     } else {
       if (lit?.layer !== L || lit.slot !== slot) lit = { layer: L, slot: slot! };
-      const wide = L === lens.layer && slot === selected ? 0.86 : 0.62;
+      const wide = L === view.layer && slot === view.slot ? 0.86 : 0.62;
       rect = new DOMRect(box.left + L * column + (column * (1 - wide)) / 2, box.top + PAD + slot! * pitch, column * wide, bar);
     }
     // The first waits for the pointer to rest, as every tip does; once one shows, the rest follow the pointer at once.
@@ -345,7 +390,7 @@
     const at = spot(event);
     const unit = unitAt(at.L, at.slot, at.x, at.y);
     if (unit !== null) lens.open(lens.unit, at.L, unit);
-    else goLayer(at.L);
+    else goLayer(Math.min(last, at.L));
   }
   function leave() {
     if (press) return;
@@ -388,7 +433,7 @@
   aria-valuetext={valueText}
   bind:this={host}
   bind:clientWidth={width}
-  style:--count={lens.model.layers}
+  style:--count={count}
   style:--bar="{bar}px"
   onpointerdown={down}
   onpointermove={move}
@@ -400,17 +445,17 @@
 >
   <div class="plot" class:sweeping bind:this={area} use:glide style:height="{height}px">
     {#each layers as L (L)}
-      <span class="col" class:hot={hover === L || peeked?.layer === L} aria-current={L === lens.layer ? "true" : undefined}></span>
+      <span class="col" class:hot={hover === L || peeked?.layer === L} aria-current={L === view.layer ? "true" : undefined}></span>
     {/each}
-    {#key plot.key}
-      <div class="bars" class:arrive={plot.arrive} in:plotIn={plot.arrive} out:fadeOut>
-        {#if mode === "all"}
+    {#key plotKey}
+      <div class="bars" class:arrive={arriving} class:settled={settled === plotKey} in:plotIn={arriving} out:fadeOut>
+        {#if view.mode === "all"}
           <canvas class="field" bind:this={canvas} style:width="{width}px" style:height="{height}px" aria-hidden="true"></canvas>
         {:else}
-          {#each columns as column, L}
-            <div class="stack" style:--c={depthColor(lens.model, L)} style:--L={L} style:--sweep={sweepOf(L)}>
-              {#each column as item, i}
-                <i class:sel={L === lens.layer && i === selected} class:lit={lit?.layer === L && lit.slot === i} class:peek={peeked?.layer === L && peeked.slot === i} style:--o={item.o}></i>
+          {#each view.columns as column, L (L)}
+            <div class="stack" style:--c={depthColor(view.model, L)} style:--L={L} style:--sweep={sweepOf(L)} out:fadeOut>
+              {#each column as item, i (i)}
+                <i class:sel={L === view.layer && i === view.slot} class:lit={lit?.layer === L && lit.slot === i} class:peek={peeked?.layer === L && peeked.slot === i} style:--o={item.o} out:fadeOut></i>
               {/each}
             </div>
           {/each}
@@ -418,11 +463,11 @@
       </div>
     {/key}
     {#if pin}<span class="pin" style:width="{pin.w}px" style:transform="translate({pin.x}px, {pin.y}px)"></span>{/if}
-    {#if spotted && mode === "all"}<span class="spot" style:transform="translate({spotted.x}px, {spotted.y}px)"></span>{/if}
+    {#if spotted && view.mode === "all"}<span class="spot" style:transform="translate({spotted.x}px, {spotted.y}px)"></span>{/if}
     {#if peeked?.spot && !spotted}<span class="spot" style:transform="translate({peeked.spot.x}px, {peeked.spot.y}px)"></span>{/if}
     <span class="probe" bind:this={probe} aria-hidden="true"></span>
   </div>
-  <Scale model={lens.model} layer={lens.layer} {hover} {width} dots={lens.unit === "heads"} />
+  <Scale model={view.model} layer={view.layer} {hover} {width} dots={view.mode === "heads"} />
 </div>
 
 <style>
@@ -457,16 +502,26 @@
   .bars {
     position: absolute;
     inset: 0;
-    display: grid;
-    grid-template-columns: repeat(var(--count), minmax(0, 1fr));
     pointer-events: none;
   }
+  /* Each stack sits at its layer's share of the width, so another model's count of layers moves the stacks
+     rather than reflowing them. */
   .stack {
+    position: absolute;
+    top: 0;
+    left: calc(var(--L) * 100% / var(--count));
+    width: calc(100% / var(--count));
     display: grid;
     align-content: start;
     justify-items: center;
     gap: 2px;
     padding: var(--s2) 0;
+    transition: left var(--glide) var(--ease), width var(--glide) var(--ease);
+  }
+  /* What a new model adds once the plot is drawn: a layer comes in from the right edge, a bar fades in. */
+  @starting-style {
+    .settled:not(.arrive) .stack { left: 100%; }
+    .settled:not(.arrive) .stack i { opacity: 0; }
   }
   /* 3 × 2 px bars (2 px on phones) and radius 2: finer than the space and radius scales go. */
   .stack i {

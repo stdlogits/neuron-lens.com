@@ -1,6 +1,6 @@
 <script module lang="ts">
   /** A unit tapped in the graph: what its tip would say, and where it leads. */
-  export interface Picked { key: string; name: string; title: string; sub?: string; href: string; color: string }
+  export interface Picked { key: string; name: string; title: string; lent?: boolean; sub?: string; href: string; color: string }
 </script>
 
 <script lang="ts">
@@ -48,7 +48,7 @@
         <span class="name meta"><i class="swatch" style:background={picked.color}></i>{picked.name}</span>
         <IconButton icon="close" label="Close" onclick={close} />
       </div>
-      {#if picked.title}<p class="title"><LabelText text={picked.title} /></p>{/if}
+      {#if picked.title}<p class="title"><LabelText text={picked.title} lent={picked.lent} /></p>{/if}
       {#if picked.sub}<p class="sub meta">{picked.sub}</p>{/if}
       <a class="go" href={picked.href}>Go to {picked.name}</a>
     </div>

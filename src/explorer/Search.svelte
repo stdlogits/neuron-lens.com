@@ -513,7 +513,7 @@
                     {@const r = row.r}
                     <span class="id"><i class="swatch"></i>{idOf(r)}{#if r.side !== 2}{" "}<span class="sign" aria-label={r.side === 0 ? "plus side" : "minus side"}>{r.side === 0 ? "+" : "−"}</span>{/if}</span>
                     {@const title = titleOf(r)}
-                    <span class="title" class:dim={!title}>{#if title}<LabelText text={title} />{:else if r.unit === "heads" || titleKey(r) in titles}Open{:else}&nbsp;{/if}</span>
+                    <span class="title" class:dim={!title}>{#if title}<LabelText text={title} lent={!!lens.model.labelsFrom} />{:else if r.unit === "heads" || titleKey(r) in titles}Open{:else}&nbsp;{/if}</span>
                     <span class="match" class:fuzzy={r.fuzzy} lang={matchLang(r.matched)}>{#if r.matched}{r.fuzzy ? "≈ " : ""}{r.matched}{/if}</span>
                     <span class="depth" aria-hidden="true" style:--at={r.layer / Math.max(1, last)}><i></i></span>
                   {/if}

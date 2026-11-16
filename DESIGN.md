@@ -16,6 +16,12 @@ What the site draws for itself, in Ledger:
   Ledger's DESIGN.md.
 - The header's placement of `ThemeButton`, and the no-script summary's rules (`src/styles/site.css`).
 - The translations Ledger draws (`src/lib/translate.svelte.ts`, installed with `setTranslator`).
+- The atlas's motion (`src/explorer/Atlas.svelte`, `atlas/Scale.svelte`). The page's first plot arrives column by column,
+  as Ledger's motion says; after it, another model, or another unit, keeps the plot as it is until its units are in, then
+  the bars move into theirs (240 ms): each layer's stack glides to its share of the width, a model with more layers
+  bringing the new ones in from the right edge and one with fewer letting the rest slide off it and fade, while every
+  bar takes its new strength and depth colour, new bars fade in and spare ones fade out. The layer numbers and band
+  names glide with the columns, and the column wash with them. The All field, a canvas, crossfades instead.
 - The search (`src/explorer/Search.svelte`, matching in `search/engine.ts`), as wide as the atlas under it. A word finds
   the curated neurons' poles and the heads whose labels hold it; an ID (or a unit's pasted address) opens its unit, and
   "L8" or "layer 8" its layer. Each word counts: units matching every word come first, and a title holding the whole
@@ -29,7 +35,7 @@ What the site draws for itself, in Ledger:
   As the query changes, results that stay glide to their new places (240 ms), those that go fade (120 ms) and new ones
   rise; the chips' paper slides like a segmented control's, counts morph, and the notes open and close. On the atlas,
   a change of what is lit (a search, a filter) spreads out from the best match's layer, 10 ms a layer, at most 300 ms;
-  a bar pointed at or looked at never waits. A result looked at for 180 ms starts loading its unit, so it opens ready.
+  a bar pointed at or looked at never waits, and moving into another model's units never sweeps. A result looked at for 180 ms starts loading its unit, so it opens ready.
   Reduced motion keeps the fades and drops the glides.
 - The connections graph (`src/explorer/graph/`): a band per layer down the page, a dot per neuron side
   and a bar per head, both in the depth colour of their layer. A link is as heavy as its
@@ -72,4 +78,6 @@ What the site draws for itself, in Ledger:
   size on screen, while where the titles sit is worked out again only once the pinch rests.
   Reduced motion keeps the fades and drops the rest.
 
-The explorer's one credit is "Labels by Claude Haiku 5.5"; a base model's adds ", written for" its post-trained model.
+The explorer's one credit is "Labels by Claude Haiku 5.5"; a base model's adds ", written for" its post-trained model,
+and its labels are italic wherever they show, as lent (Ledger's `lent`): the unit's faces and the labeller's note, the
+rail, both graphs' titles, tips and cards, the search's results and the atlas's tips.

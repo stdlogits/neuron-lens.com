@@ -166,7 +166,7 @@
     if (!touch || !onpick || event.defaultPrevented) return;
     event.preventDefault();
     hideTip();
-    onpick({ key: node.key, name: nameOf(node), title: node.wire?.title ?? "", sub: standing(node), href: href(node.kind, node.layer, node.index), color: depthColor(model, node.layer) });
+    onpick({ key: node.key, name: nameOf(node), title: node.wire?.title ?? "", lent: !!model.labelsFrom, sub: standing(node), href: href(node.kind, node.layer, node.index), color: depthColor(model, node.layer) });
   }
   const depth = $derived(rows(graph, HEIGHT, model.layers, crop ?? undefined));
   /** The layer numbers down the left, every fifth; with the rail cropped, those it shows, and at its top a ^ for
@@ -275,6 +275,7 @@
         use:hush
         href={href(node.kind, node.layer, node.index)}
         data-tip={node.wire?.title || nameOf(node)}
+        data-tip-lent={node.wire?.title && model.labelsFrom ? "body" : undefined}
         data-tip-title={nameOf(node)}
         data-tip-sub={standing(node)}
         aria-label={`${nameOf(node)}${node.wire?.title ? `: ${node.wire.title}` : ""}`}
@@ -284,7 +285,7 @@
         onblur={() => point(null)}
         onpointerdown={pressed}
         onclick={(event) => clicked(event, node)}
-      ><i style:background={depthColor(model, node.layer)}></i>{#if labels?.has(node.key)}<span class="label {labels.get(node.key)}" use:titled={[node.key, labels.get(node.key)!]} in:fadeIn out:fadeOut>{node.wire?.title || nameOf(node)}</span>{/if}</a>
+      ><i style:background={depthColor(model, node.layer)}></i>{#if labels?.has(node.key)}<span class="label {labels.get(node.key)}" class:lent={!!(node.wire?.title && model.labelsFrom)} use:titled={[node.key, labels.get(node.key)!]} in:fadeIn out:fadeOut>{node.wire?.title || nameOf(node)}</span>{/if}</a>
     {/each}
   {/if}
 </div>
@@ -362,6 +363,8 @@
     scale: var(--s);
     transition: opacity var(--in) var(--ease), color var(--fast) var(--ease);
   }
+  /* A base model's titles were written for its post-trained model: italic, as a lent label is. */
+  .label.lent { font-style: italic; }
   .label.below { top: 100%; left: 50%; transform-origin: top center; translate: -50% calc(3px * var(--s)); }
   .label.above { bottom: 100%; left: 50%; transform-origin: bottom center; translate: -50% calc(-3px * var(--s)); }
   .label.right { top: 50%; left: 100%; transform-origin: left center; translate: calc(3px * var(--s)) -50%; text-align: start; }

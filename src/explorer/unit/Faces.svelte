@@ -55,19 +55,19 @@
       {#if tabs}
         <button type="button" class="face tab" role="tab" id={`${id}-${i}`} aria-selected={selected === i} aria-controls={panel} tabindex={selected === i ? 0 : -1} onclick={() => (selected = i)} onkeydown={key}>
           <span class="sign" aria-hidden="true" data-tip={row.tip} data-tip-title={row.name}>{row.sign}</span><span class="sr-only">{row.name}. </span>
-          {#each row.cells as cell, j (j)}<LabelCell label={cell.label} confidence={cell.confidence} column={columns[j]} />{/each}
+          {#each row.cells as cell, j (j)}<LabelCell label={cell.label} confidence={cell.confidence} column={columns[j]} lent={!!from} />{/each}
         </button>
       {:else}
         <div class="face still">
           <span class="sign" aria-hidden="true">{row.sign}</span>
-          {#each row.cells as cell, j (j)}<LabelCell label={cell.label} confidence={cell.confidence} column={columns[j]} interactive />{/each}
+          {#each row.cells as cell, j (j)}<LabelCell label={cell.label} confidence={cell.confidence} column={columns[j]} lent={!!from} interactive />{/each}
         </div>
       {/if}
     {/each}
   </div>
   {#if labelled}
     <div class="byline">
-      <Swap key={note}>{#if note}<p class="note"><LabelText text={note} interactive /></p>{/if}</Swap>
+      <Swap key={note}>{#if note}<p class="note"><LabelText text={note} interactive lent={!!from} /></p>{/if}</Swap>
       <p class="meta">Labels by Claude Haiku 5.5{#if from}, written for {from}{/if}</p>
     </div>
   {/if}

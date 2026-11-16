@@ -4,14 +4,14 @@
   // One label of the faces table over its confidence. Under a quarter, the label fades to the
   // softest ink. On a narrow pane, where the columns stack, the cell names its column. An unlabelled
   // model's cells hold measured tokens instead, with no confidence.
-  let { label, confidence, column, interactive = false }: { label: string; confidence?: number; column: string; interactive?: boolean } = $props();
+  let { label, confidence, column, interactive = false, lent = false }: { label: string; confidence?: number; column: string; interactive?: boolean; lent?: boolean } = $props();
 
   const pct = $derived(confidence === undefined ? null : Math.round(confidence * 100));
 </script>
 
 <span class="lab" class:low={confidence !== undefined && confidence < 0.25}>
   <span class="col head">{column}<span class="sr-only">: </span></span>
-  <span class="t"><LabelText text={label} {interactive} /></span>
+  <span class="t"><LabelText text={label} {interactive} {lent} /></span>
   {#if pct !== null}<span class="c meta" data-tip="The labeller's confidence">{pct}%<span class="sr-only"> confident</span></span>{/if}
 </span>
 

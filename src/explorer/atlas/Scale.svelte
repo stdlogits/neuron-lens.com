@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fadeOut } from "@stdlogits/ledger";
   import { bandOf, type ModelInfo } from "../../lib/models";
 
   // Beneath the atlas: each column's layer number (a dot under Gemma 4's global-attention layers
@@ -25,6 +26,14 @@
   const step = $derived([1, 2, 3, 4, 6, 8, 12].find((s) => s * column >= ROOM) ?? 12);
   const numbered = (L: number) => L === layer || (L % step === 0 && Math.abs(L - layer) * column >= ROOM);
 
+  // Another model's count of layers moves the numbers and the words with the columns, once the first frame has placed them.
+  let placed = $state(false);
+  $effect(() => {
+    if (width === 0 || placed) return;
+    const frame = requestAnimationFrame(() => (placed = true));
+    return () => cancelAnimationFrame(frame);
+  });
+
   // Each band's word sits centred under its columns and may overhang them. Where words would collide,
   // the current band's wins, then the one under the pointer, then the widest band: a narrow band
   // names itself whenever it is current, and its neighbours step aside.
@@ -49,22 +58,30 @@
 
 <div class="nums" class:dotted={model.globalLayers.length > 0} style:--count={model.layers} aria-hidden="true">
   {#each layers as L (L)}
-    <span class="cell" class:on={L === layer}>
+    <span class="cell" class:on={L === layer} class:first={L === 0} class:last={L === model.layers - 1} style:--L={L} out:fadeOut>
       <span class="n" class:shown={numbered(L)}>{L}</span>
       {#if global.has(L)}<i class:shown={dots}></i>{/if}
     </span>
   {/each}
 </div>
-<div class="bands" aria-hidden="true">
+<div class="bands" class:placed aria-hidden="true">
   {#each spans as span, i (span.band.key)}
     <span class="band" class:on={span.band === current} class:shown={named[i]} style:translate="{span.x}px 0" bind:offsetWidth={words[i]}>{span.band.short}</span>
   {/each}
 </div>
 
 <style>
-  .nums { display: grid; grid-template-columns: repeat(var(--count), minmax(0, 1fr)); height: 16px; }
+  .nums { position: relative; height: 16px; }
   .nums.dotted { height: 22px; }
-  .cell { position: relative; }
+  /* Each column's number sits at its layer's share of the width, as the atlas's stacks do. */
+  .cell {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--L) * 100% / var(--count));
+    width: calc(100% / var(--count));
+    transition: left var(--glide) var(--ease), width var(--glide) var(--ease);
+  }
   /* Numbers are centred on their column and may overhang it: narrow columns are thinned instead. */
   .n {
     position: absolute;
@@ -80,9 +97,10 @@
     transition: opacity var(--fast) var(--ease), color var(--glide) var(--ease);
   }
   /* The end numbers stay inside the map when their columns are narrower than they are. */
-  .cell:first-child .n { left: max(0px, 50% - 0.5ch); translate: none; }
-  .cell:last-child .n { left: auto; right: max(0px, 50% - 1ch); translate: none; }
+  .first .n { left: max(0px, 50% - 0.5ch); translate: none; }
+  .last .n { left: auto; right: max(0px, 50% - 1ch); translate: none; }
   .n.shown { opacity: 1; }
+  @starting-style { .n.shown, .cell i.shown { opacity: 0; } }
   .on .n { color: var(--ink); font-weight: 600; }
   .cell i {
     position: absolute;
@@ -111,6 +129,7 @@
     opacity: 0;
     transition: opacity var(--glide) var(--ease), color var(--glide) var(--ease);
   }
+  .placed .band { transition: opacity var(--glide) var(--ease), color var(--glide) var(--ease), translate var(--glide) var(--ease); }
   .band.shown { opacity: 1; }
   .band.on { color: var(--ink); font-weight: 500; }
 </style>

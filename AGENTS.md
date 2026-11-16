@@ -94,7 +94,8 @@ figure picks among the labelled ones the same way). Another model keeps the plac
 head number, clipped to its shape and never matched to a similar unit, Easiest or All as it was (a trip through a base model,
 which lists all, changes neither), the filter where it has one, and the side being read.
 A base model whose post-trained model is labelled (`labelsFrom` in `models.ts`) shows that model's labels, ratings, Easiest
-and search over its own evidence (a9's call: the two are empirically close enough that the labels hold). Its build stays
+and search over its own evidence (a9's call: the two are empirically close enough that the labels hold), its labels in
+italic wherever they show, as lent (Ledger's `lent`; a9's call). Its build stays
 unlabelled; `src/lib/data.ts`'s loaders merge the lender's build into it (titles, scores and confidences in the rows,
 graph records and details; the Easiest list, the scores texture, the terms and the word index), so nothing above them
 knows, and a base unit's graph reads two records a node. Its Easiest filters use the lender's flags.

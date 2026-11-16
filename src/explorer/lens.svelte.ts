@@ -127,6 +127,7 @@ export class Lens {
   readonly rowsKey = $derived(`${this.modelId}/L${this.layer}/rows`);
   readonly headLayerKey = $derived(`${this.modelId}/L${this.layer}/heads`);
   readonly headIndexKey = $derived(`${this.modelId}/heads`);
+  readonly scoresKey = $derived(`${this.modelId}/scores`);
   /** What the reading pane needs here failed to load: it offers to try again. */
   readonly detailFailed = $derived(
     this.unit === "heads"
@@ -164,7 +165,10 @@ export class Lens {
       const model = this.modelId;
       const layer = this.layer;
       untrack(() => {
-        if (!this.scores) void loadScores(model).then((scores) => { if (this.modelId === model) this.scores = scores; }, () => undefined);
+        if (!this.scores) {
+          const key = `${model}/scores`;
+          void loadScores(model).then((scores) => { this.settle(key); if (this.modelId === model) this.scores = scores; }, () => this.fail(key));
+        }
         this.loadRows(model, layer);
       });
     });
