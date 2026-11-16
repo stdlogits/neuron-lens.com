@@ -651,8 +651,9 @@
   /* The query in the titles: the tint's wash, as a selection is. */
   :global(::highlight(search-terms)) { background-color: color-mix(in oklch, var(--tint) 26%, transparent); color: var(--ink); }
 
-  .under { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s4); }
-  .random { height: 32px; padding: 0 var(--s4); border: 0; border-radius: var(--r-pill); background: var(--wash); color: var(--ink); font: var(--type-control); cursor: pointer; transition: background-color var(--fast) var(--ease), scale var(--fast) var(--ease); }
+  /* Random keeps to the right, with or without examples beside it, and on a line of its own when they wrap. */
+  .under { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); }
+  .random { margin-left: auto; height: 32px; padding: 0 var(--s4); border: 0; border-radius: var(--r-pill); background: var(--wash); color: var(--ink); font: var(--type-control); cursor: pointer; transition: background-color var(--fast) var(--ease), scale var(--fast) var(--ease); }
   .random:active { scale: 0.97; }
   .random:disabled { color: var(--ink3); cursor: default; }
   @media (hover: hover) { .random:hover:not(:disabled) { background: var(--wash2); } }
