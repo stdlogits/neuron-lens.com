@@ -519,16 +519,21 @@ export const loadHeadWire = (model: ModelId, id: number, ahead = false) => withL
 /** One neuron's detail, from where its record says it is; a borrower's with its lender's labels and scores. */
 export const loadNeuron = (model: ModelId, layer: number, neuron: number): Promise<NeuronDetail | null> => memo(`${model}/neuron:${layer}:${neuron}`, async () => {
   const from = lender(model);
-  const [own, theirs] = await Promise.all([ownNeuron(model, layer, neuron), from ? ownNeuron(from, layer, neuron).catch(() => null) : null]);
+  const [own, theirs] = await Promise.all([ownNeuron(model, layer, neuron), from ? rawNeuron(from, layer, neuron).catch(() => null) : null]);
   if (!own || !theirs) return own;
   return { ...own, poles: own.poles.map((pole, i) => ({ ...pole, label: theirs.poles[i].label, score: theirs.poles[i].score })) as [Pole, Pole] };
 });
-const ownNeuron = (model: ModelId, layer: number, neuron: number): Promise<NeuronDetail | null> => memo(`${model}/own-neuron:${layer}:${neuron}`, async () => {
+type RawNeuron = { n: number; poles: [RawPole, RawPole] };
+/** A neuron's detail as stored, its tokens still ids (a lender's is read only for its labels and scores). */
+const rawNeuron = async (model: ModelId, layer: number, neuron: number): Promise<RawNeuron | null> => {
   const index = await ownIndex(model);
-  const [wire, vocab] = await Promise.all([ownPoleWire(model, poleId(index.neuronsPerLayer, layer, neuron, 1), false), loadVocab(model)]);
-  const [pack, offset, length] = wire.detail;
+  const [pack, offset, length] = (await ownPoleWire(model, poleId(index.neuronsPerLayer, layer, neuron, 1), false)).detail;
   if (!length) return null;
-  const raw = JSON.parse(await inflated(await range(`${dataBase(model)}/neurons/L${pad(layer)}/units-${pad(pack)}.bin`, offset, length))) as { n: number; poles: [RawPole, RawPole] };
+  return JSON.parse(await inflated(await range(`${dataBase(model)}/neurons/L${pad(layer)}/units-${pad(pack)}.bin`, offset, length))) as RawNeuron;
+};
+const ownNeuron = async (model: ModelId, layer: number, neuron: number): Promise<NeuronDetail | null> => {
+  const [index, raw, vocab] = await Promise.all([ownIndex(model), rawNeuron(model, layer, neuron), loadVocab(model)]);
+  if (!raw) return null;
   const { reads = [], orth = [], stream = [] } = index.layerMeta[layer];
   return {
     n: raw.n,
@@ -541,7 +546,7 @@ const ownNeuron = (model: ModelId, layer: number, neuron: number): Promise<Neuro
       media: mediaOf(pole.media, vocab),
     })) as [Pole, Pole],
   };
-});
+};
 type HeadFile = { layer: number; reads: ReadInfo[]; heads: RawHead[] };
 /** A layer's heads in detail; a borrower's with its lender's labels and scores. */
 export const loadHeadLayer = (model: ModelId, layer: number) => memo(`${model}/heads:${layer}`, async () => {
