@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { CatalogIndex } from "../src/lib/data";
+import { FAINT } from "../src/explorer/atlas/levels";
 import { fixture, serveCatalog, silentClip } from "./fixtures/catalog.mjs";
 
 // The explorer on the mock catalog (e2e/fixtures). These tests hold the address and the state behind
@@ -185,9 +186,15 @@ test("a Gemma neuron shows its images from the media pack", async ({ page }) => 
 const easiest = (index: CatalogIndex, layer: number) => index.neurons.filter((row) => row[0] === layer).sort((a, b) => b[4] - a[4]).map((row) => row[1]);
 const atlas = (page: Page) => page.getByRole("slider", { name: "Layer" });
 // A bar is an <i> in its layer's column with no role of its own, so it is found by structure: the
-// columns run in layer order, each from the labeller's surest unit down. --o is how lit it is (1 is lit).
+// columns run in layer order, each from the labeller's surest unit down. --o is how strongly it draws
+// (src/explorer/atlas/levels.ts). At rest that is how sure the labeller was of it, which is above FAINT and
+// reaches 1 for the surest, so 1 alone doesn't mean a search lit it: a search draws its matches at 1 and
+// every other bar at FAINT. The bars a search has lit are those at 1 while some bar is faint.
 const bars = (page: Page) => atlas(page).locator(".stack i");
-const lit = (page: Page) => bars(page).evaluateAll((list) => list.filter((bar) => Number((bar as HTMLElement).style.getPropertyValue("--o")) === 1).length);
+const lit = async (page: Page) => {
+  const shades = await bars(page).evaluateAll((list) => list.map((bar) => Number((bar as HTMLElement).style.getPropertyValue("--o"))));
+  return shades.includes(FAINT) ? shades.filter((shade) => shade === 1).length : 0;
+};
 const place = (page: Page, at: number, of: number) => page.getByText(`${at} of ${of}`, { exact: true });
 const unitHeading = (page: Page, id: string) => page.getByRole("heading", { level: 2, name: id });
 
