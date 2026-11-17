@@ -28,6 +28,10 @@
   ! Cache-Control
   Cache-Control: public, max-age=14400
 
+/*.webp
+  ! Cache-Control
+  Cache-Control: public, max-age=14400
+
 /*.svg
   ! Cache-Control
   Cache-Control: public, max-age=14400

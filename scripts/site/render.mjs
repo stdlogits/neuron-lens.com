@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Draws the site's images into public/: the social card (card.png) and the icons made from the mark
+// Draws the site's images into public/: the social card (card.webp) and the icons made from the mark
 // (public/favicon.svg): favicon.ico, apple-touch-icon.png and the manifest's icons. The card is a painting with
 // the name set over it (Ledger's DESIGN.md, "The marks and the cards"): scripts/site/paint/lens.py paints it from
 // the built catalog, and scripts/site/card.html sets the type. So run this after the catalog is in catalog/, and
@@ -25,6 +25,13 @@ async function paint(folder) {
   const { stdout } = await promisify(execFile)(process.env.PYTHON ?? "python3", [at("scripts/site/paint/lens.py"), at("catalog/qwen3-8b"), "2", art]);
   process.stdout.write(stdout);
   return art;
+}
+
+/** The card as WebP at quality 92, as a9l.im's cards are: a painting weighs a tenth of its PNG that way. Pillow,
+ *  which the painting already needs, encodes it. */
+async function webp(png, out) {
+  const encode = "import sys; from PIL import Image; Image.open(sys.argv[1]).save(sys.argv[2], 'WEBP', quality=92, method=6)";
+  await promisify(execFile)(process.env.PYTHON ?? "python3", ["-c", encode, png, out]);
 }
 
 /** An .ico holding PNGs, one entry per size. */
@@ -53,7 +60,9 @@ try {
   await card.goto(pathToFileURL(at("scripts/site/card.html")).href);
   await card.evaluate((data) => window.draw(data), { art: pathToFileURL(await paint(folder)).href });
   await card.evaluate(() => document.fonts.ready);
-  await writeFile(at("public/card.png"), await card.screenshot({ type: "png" }));
+  const shot = join(folder, "card.png");
+  await writeFile(shot, await card.screenshot({ type: "png" }));
+  await webp(shot, at("public/card.webp"));
 
   // The mark in light colours: as drawn (rounded, on transparency) or full bleed, where a platform
   // rounds or masks it itself (iOS, Android's maskable icons).

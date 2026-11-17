@@ -15,9 +15,9 @@ const CATALOG = "https://huggingface.co/datasets/stdlogits/neuron-lens";
 const RESEARCH = "https://github.com/stdlogits/neuron-lens";
 const LENSES = "https://huggingface.co/stdlogits/rs-lenses";
 const SOURCE = "https://github.com/stdlogits/neuron-lens.com";
-// public/card.png, painted and set by scripts/site/render.mjs.
+// public/card.webp, painted and set by scripts/site/render.mjs.
 const CARD = {
-  url: `${ORIGIN}/card.png`,
+  url: `${ORIGIN}/card.webp`,
   width: 2400,
   height: 1260,
   alt: "Neuron Lens: a lens held up to a night sky of out-of-focus lights, one for each neuron of Qwen3-8B, and through it a little owl against the moon; below, neuron 344 of layer 8 and a line it fires on, hear the sound of the owls.",
@@ -121,7 +121,7 @@ function headTags(): HtmlTagDescriptor[] {
     meta({ property: "og:description", content: DESCRIPTION }),
     meta({ property: "og:locale", content: "en_US" }),
     meta({ property: "og:image", content: CARD.url }),
-    meta({ property: "og:image:type", content: "image/png" }),
+    meta({ property: "og:image:type", content: "image/webp" }),
     meta({ property: "og:image:width", content: String(CARD.width) }),
     meta({ property: "og:image:height", content: String(CARD.height) }),
     meta({ property: "og:image:alt", content: CARD.alt }),

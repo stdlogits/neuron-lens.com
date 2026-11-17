@@ -131,7 +131,8 @@ The site describes the project and points at the Hub release; it never writes a 
 or pages (a9's call: anyone who wants the data uses `stdlogits/neuron-lens`). `robots.txt` welcomes
 every crawler; the catalog's own host, `data.neuron-lens.com`, has a robots.txt that keeps them out.
 
-`node scripts/site/render.mjs` draws the images into `public/`: the social card (`card.png`) and, from
+`node scripts/site/render.mjs` draws the images into `public/`: the social card (`card.webp`: WebP at
+quality 92, as a9l.im's cards are, because a painting weighs a tenth of its PNG that way) and, from
 `favicon.svg`, `favicon.ico`, `apple-touch-icon.png` and the manifest's icons. The card is a painting with the
 name set over it, as Ledger draws one (its DESIGN.md, "The marks and the cards"; no mark tile). `scripts/site/paint/lens.py`
 paints it with Ledger's paint (`@stdlogits/ledger/paint`, Python with numpy, scipy and Pillow; `PYTHON`, or

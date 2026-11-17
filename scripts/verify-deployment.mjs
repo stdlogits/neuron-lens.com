@@ -154,7 +154,7 @@ const SITE_FILES = [
   ["/icon-192.png", ["image/png"]],
   ["/icon-512.png", ["image/png"]],
   ["/icon-maskable-512.png", ["image/png"]],
-  ["/card.png", ["image/png"]],
+  ["/card.webp", ["image/webp"]],
   ["/manifest.webmanifest", ["application/manifest+json"]],
   ["/llms.txt", ["text/plain", "text/markdown"]],
   ["/sitemap.xml", ["application/xml", "text/xml"]],
