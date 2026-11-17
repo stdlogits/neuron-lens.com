@@ -1,38 +1,30 @@
 #!/usr/bin/env node
-// Draws the site's images into public/: the social card (card.png, from scripts/site/card.html) and
-// the icons made from the mark (public/favicon.svg): favicon.ico, apple-touch-icon.png and the
-// manifest's icons. The card's atlas comes from the built catalog, so run it after the catalog is in
-// catalog/, and again when the mark, the card or Qwen3-8B's catalog changes.
+// Draws the site's images into public/: the social card (card.png) and the icons made from the mark
+// (public/favicon.svg): favicon.ico, apple-touch-icon.png and the manifest's icons. The card is a painting with
+// the name set over it (Ledger's DESIGN.md, "The marks and the cards"): scripts/site/paint/lens.py paints it from
+// the built catalog, and scripts/site/card.html sets the type. So run this after the catalog is in catalog/, and
+// again when the mark, the card or Qwen3-8B's catalog changes. Painting needs Python with numpy, scipy and Pillow
+// (PYTHON, or python3).
 //
 //   node scripts/site/render.mjs
 
-import { readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { chromium } from "@playwright/test";
 
 const root = resolve(fileURLToPath(import.meta.url), "../../..");
 const at = (path) => resolve(root, path);
 
-// The atlas's shades and the card's unit, as src/explorer/atlas/levels.ts and the explorer have them.
-const SHADES = [0.1, 0.16, 0.24, 0.32, 0.42, 0.52, 0.62, 0.74, 0.86, 1];
-const UNIT = { layer: 8, n: 344 };
-
-/** Qwen3-8B's atlas: each layer's easiest neurons, the labeller's surest first, shaded by rank in the model. */
-async function atlas() {
-  const index = JSON.parse(await readFile(at("catalog/qwen3-8b/index.json"), "utf8"));
-  const scores = Float64Array.from(index.neurons.map((row) => row[4])).sort();
-  const shade = (score) => {
-    let below = 0;
-    while (below < scores.length && scores[below] < score) below += 1;
-    return SHADES[Math.min(9, Math.floor((below / scores.length) * 10))];
-  };
-  const columns = Array.from({ length: index.layers }, () => []);
-  for (const row of index.neurons) columns[row[0]].push(row);
-  for (const column of columns) column.sort((a, b) => b[4] - a[4]);
-  const slot = columns[UNIT.layer].findIndex((row) => row[1] === UNIT.n);
-  if (slot < 0) throw new Error(`L${UNIT.layer} n${UNIT.n} is no longer among the layer's easiest neurons`);
-  return { columns: columns.map((column) => column.map((row) => shade(row[4]))), here: { layer: UNIT.layer, slot } };
+/** The card's painting, at twice the card's size and reduced, into a folder of its own. */
+async function paint(folder) {
+  const art = join(folder, "lens.png");
+  const { stdout } = await promisify(execFile)(process.env.PYTHON ?? "python3", [at("scripts/site/paint/lens.py"), at("catalog/qwen3-8b"), "2", art]);
+  process.stdout.write(stdout);
+  return art;
 }
 
 /** An .ico holding PNGs, one entry per size. */
@@ -54,11 +46,12 @@ function ico(pngs) {
   return Buffer.concat([header, ...pngs.map((png) => png.data)]);
 }
 
+const folder = await mkdtemp(join(tmpdir(), "neuron-lens-card-"));
 const browser = await chromium.launch();
 try {
-  const card = await browser.newPage({ viewport: { width: 1200, height: 630 }, deviceScaleFactor: 2, colorScheme: "light" });
+  const card = await browser.newPage({ viewport: { width: 1200, height: 630 }, deviceScaleFactor: 2, colorScheme: "dark" });
   await card.goto(pathToFileURL(at("scripts/site/card.html")).href);
-  await card.evaluate((data) => window.draw(data), await atlas());
+  await card.evaluate((data) => window.draw(data), { art: pathToFileURL(await paint(folder)).href });
   await card.evaluate(() => document.fonts.ready);
   await writeFile(at("public/card.png"), await card.screenshot({ type: "png" }));
 
@@ -81,4 +74,5 @@ try {
   await writeFile(at("public/favicon.ico"), ico(small));
 } finally {
   await browser.close();
+  await rm(folder, { recursive: true });
 }

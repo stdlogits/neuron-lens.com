@@ -12,8 +12,8 @@ What the site draws for itself, in Ledger:
 - The depth ramp per model (`depthColor`, `src/lib/models.ts`), which the explorer sets as `--tint`
   for the current layer, and its three depth bands. A read through the lens its band doesn't use on that side is quiet
   (the whole read at reduced opacity, full again when pointed at or focused) and comes last.
-- The mark (`public/favicon.svg`) and the social card (`scripts/site/card.html`), both described in
-  Ledger's DESIGN.md.
+- The mark (`public/favicon.svg`) and the social card (`scripts/site/paint/lens.py`, the painting, and
+  `scripts/site/card.html`, its type), both described in Ledger's DESIGN.md.
 - The header's placement of `ThemeButton`, and the no-script summary's rules (`src/styles/site.css`).
 - A pruned model's neuron, or its parent's, names its counterpart at the end of the unit's meta line, after its tags
   (`src/explorer/unit/UnitBar.svelte`): "From Qwen3-8B L20·n10768", "Likely from" where only the weights say so, "Kept

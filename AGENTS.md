@@ -131,10 +131,16 @@ The site describes the project and points at the Hub release; it never writes a 
 or pages (a9's call: anyone who wants the data uses `stdlogits/neuron-lens`). `robots.txt` welcomes
 every crawler; the catalog's own host, `data.neuron-lens.com`, has a robots.txt that keeps them out.
 
-`node scripts/site/render.mjs` draws the images into `public/`: the social card (`card.png`, from
-`scripts/site/card.html` in the site's own tokens: Qwen3-8B's atlas from the built catalog and
-L8·n344 as the explorer shows it) and, from `favicon.svg`, `favicon.ico`, `apple-touch-icon.png` and
-the manifest's icons. Rerun it when the mark, the card or Qwen3-8B's catalog changes.
+`node scripts/site/render.mjs` draws the images into `public/`: the social card (`card.png`) and, from
+`favicon.svg`, `favicon.ico`, `apple-touch-icon.png` and the manifest's icons. The card is a painting with the
+name set over it, as Ledger draws one (its DESIGN.md, "The marks and the cards"; no mark tile). `scripts/site/paint/lens.py`
+paints it with Ledger's paint (`@stdlogits/ledger/paint`, Python with numpy, scipy and Pillow; `PYTHON`, or
+`python3`) from the built catalog: every easiest neuron of Qwen3-8B a light out of focus, as bright as the
+labeller was sure of it, in its layer's column, and a lens, the mark's figure, on L8·n344 with an owl through
+it. `scripts/site/card.html` sets the type in Ledger's `card.css`: the name, the unit's ID and its firing. A
+light's place within its column is a fixed scramble of its neuron number, so the same catalog paints the same
+card. Rerun it when the mark, the card or Qwen3-8B's catalog changes, and change the card's alt text
+(`scripts/site/meta.ts`) with what it shows.
 
 ## The catalog
 

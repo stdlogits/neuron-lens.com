@@ -15,12 +15,12 @@ const CATALOG = "https://huggingface.co/datasets/stdlogits/neuron-lens";
 const RESEARCH = "https://github.com/stdlogits/neuron-lens";
 const LENSES = "https://huggingface.co/stdlogits/rs-lenses";
 const SOURCE = "https://github.com/stdlogits/neuron-lens.com";
-// public/card.png, drawn by scripts/site/render.mjs.
+// public/card.png, painted and set by scripts/site/render.mjs.
 const CARD = {
   url: `${ORIGIN}/card.png`,
   width: 2400,
   height: 1260,
-  alt: "Neuron Lens: neuron 344 of layer 8 in Qwen3-8B fires on owls and writes owl, noct, night and bedtime, above the atlas of the model's 36 layers.",
+  alt: "Neuron Lens: a lens held up to a night sky of out-of-focus lights, one for each neuron of Qwen3-8B, and through it a little owl against the moon; below, neuron 344 of layer 8 and a line it fires on, hear the sound of the owls.",
 };
 
 const count = (n: number) => n.toLocaleString("en-US");
