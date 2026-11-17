@@ -1,5 +1,6 @@
 // Where a graph's nodes sit: depth down the page, a band per layer, and across it whatever crosses
-// the fewest links (a few sweeps of the barycentre rule; the unit stays on the centre line). While the
+// the fewest links (a few sweeps of the barycentre rule; the unit stays on the centre line, with as many of
+// its siblings on its left as on its right, each on the side nearer what it shares). While the
 // walk is still growing the graph, `was` holds where everything already is: each row keeps its order and
 // a new node joins beside what it connects to, so only the finished graph is seated from scratch. The
 // rail spreads each row across its width; the navigator (`open`) seats each node as far from the next as
@@ -93,6 +94,14 @@ export function layout(graph: Graph, width: number, height: number, layers: numb
     }
   };
 
+  // The unit's own row keeps it in the middle, its siblings split evenly to either side in the order given.
+  const middle = (list: GraphNode[]) => {
+    const at = list.findIndex((n) => n.side === "focus");
+    if (at < 0) return;
+    const [unit] = list.splice(at, 1);
+    list.splice(Math.floor(list.length / 2), 0, unit);
+  };
+
   // Strongest in the middle, the rest to either side.
   for (const list of byLayer.values()) {
     list.sort((a, b) => b.flow - a.flow);
@@ -109,6 +118,7 @@ export function layout(graph: Graph, width: number, height: number, layers: numb
         return [n.key, was.get(n.key) ?? (around.length ? around.reduce((a, b) => a + b, 0) / around.length : centre)] as const;
       }));
       list.sort((a, b) => guess.get(a.key)! - guess.get(b.key)!);
+      middle(list);
       seat(list);
     }
   }
@@ -123,6 +133,7 @@ export function layout(graph: Graph, width: number, height: number, layers: numb
       };
       const wanted = new Map(list.map((n) => [n.key, barycentre(n)]));
       list.sort((a, b) => wanted.get(a.key)! - wanted.get(b.key)!);
+      middle(list);
       seat(list);
     }
   }

@@ -46,7 +46,10 @@ What the site draws for itself, in Ledger:
   flow, in the depth colour of its source, or grey and dashed where it pushes against: the one hue is depth.
   A head is a node like a neuron, with links both ways. On a head's own page, what feeds it is what feeds the input chosen
   (Value, Query or Key). A path through any other head goes by its value, and a path into a head's query or key stops there,
-  because what those set is where the head looks. The rail shows only the layers the graph reaches, as far apart as
+  because what those set is where the head looks. The unit's own row, which no link reaches, holds its siblings, split
+  evenly to its left and right, each on the side nearer what it shares: smaller marks, linked only to the parents and
+  children they share with it, and lighting those and the unit's own links to them when pointed at. The rail lists them
+  under Siblings, each with how many of the unit's sources (↑) and of what it feeds (↓) it shares. The rail shows only the layers the graph reaches, as far apart as
   ever, with the same room above its first row and below its last; the layer numbers down the left keep to them, and a ^
   at the top (a v at the bottom) stands for the layers left out, its tip saying how many.
 - The full-screen graph (`src/explorer/graph/Navigator.svelte`, at a unit's address with `?graph`): the same marks, links

@@ -6,7 +6,7 @@
   import { Ink, OVERSCAN, type View } from "./ink";
   import { layout, rows, spanOf, type Crop, type Layout, type Open, type Spot } from "./layout";
   import { Stage, type Look, type Seated, type Shown } from "./stage";
-  import { headInput, type Graph, type GraphEdge, type Mode } from "./trace";
+  import { headInput, siblingTip, type Graph, type GraphEdge, type Mode } from "./trace";
   import type { Picked } from "./Card.svelte";
 
   // The unit's directed graph, drawn at true depth: a band per layer down the page, so what feeds it
@@ -110,9 +110,22 @@
       for (const e of graph.edges) if (e.from === hovered || e.to === hovered) { edges.add(e.key); nodes.add(e.from); nodes.add(e.to); }
       return { edges, nodes };
     }
-    // Toward the unit: forward along links from above it, backward from below it.
+    // A sibling: what it shares with the unit, and the unit's own links to that.
+    const siblings = new Set(graph.nodes.filter((n) => n.side === "sibling").map((n) => n.key));
+    if (start.side === "sibling") {
+      const focus = graph.nodes.find((n) => n.side === "focus")?.key;
+      const shared = new Set<string>();
+      for (const e of graph.edges) if (e.from === hovered || e.to === hovered) { edges.add(e.key); shared.add(e.from === hovered ? e.to : e.from); }
+      for (const e of graph.edges) {
+        if ((e.from === focus && shared.has(e.to)) || (e.to === focus && shared.has(e.from))) { edges.add(e.key); nodes.add(e.from); nodes.add(e.to); }
+      }
+      for (const key of shared) nodes.add(key);
+      return { edges, nodes };
+    }
+    // Toward the unit: forward along links from above it, backward from below it, never through a sibling.
     const onward = new Map<string, GraphEdge[]>();
     for (const e of graph.edges) {
+      if (siblings.has(e.from) || siblings.has(e.to)) continue;
       const here = start.side === "up" ? e.from : e.to;
       const list = onward.get(here);
       if (list) list.push(e);
@@ -133,6 +146,7 @@
   /** How it stands to the unit, under its title in the tip. */
   function standing(n: Seated): string | undefined {
     if (n.side === "focus") return undefined;
+    if (n.side === "sibling") return siblingTip(n.shares ?? [0, 0], mode, n.kind);
     if (mode === "with") return `Active at ${Math.round(n.flow * 5)} of its first 5 top firings`;
     if (mode !== "weights") {
       const share = percent(Math.min(1, n.flow), n.flow < 0.1 ? 1 : 0);

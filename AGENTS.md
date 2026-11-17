@@ -84,7 +84,13 @@ Left is always what comes in and right what goes out. Beside them the rail holds
 directed graph at true depth, and its strongest links in words. The graph opens at Near (only the units most
 of its flow passes through); Far and All follow it further. Wired to, driven by and fires with are
 three relations and stay three views (findings §17). A head has no wired to, because two heads meet through a matrix and not a dot product;
-what drives it is split over its three inputs, so its views are Value, Query, Key and Fires with. A link's sign has no colour of its own, since the one
+what drives it is split over its three inputs, so its views are Value, Query, Key and Fires with.
+Each view but Fires with also shows the unit's siblings, beside it in its own row (a9's idea, 2026-11-17): units of its layer (heads for
+a head) that share both what feeds it and what it feeds in that view's relation. They are a kind of node, like what is above and below it,
+and not a fourth relation, so Wired to and Driven by each have their own. `siblings` in `trace.ts` reads them from the unit's first parents'
+and children's records, already on the page: each parent's links down into the row and each child's up from it, weighted as the walk
+weighs the unit's own, summed per unit, a sibling sharing both the same way (their geometric mean). Fires with has none: its lists hold
+only earlier neurons, one way. On Qwen3-8B their labels share a word with the unit's about half the time, against 6% for random units of the layer. A link's sign has no colour of its own, since the one
 hue is depth: a link that pushes against is grey and dashed. Full screen, the graph moves like a map, held over the
 graph whatever its shape, and keeps its titles one size on screen, each placed where it covers no mark and no other
 title; one without room waits for a closer zoom. Its Find (`find.ts`) narrows it to the units an ID or a word finds.

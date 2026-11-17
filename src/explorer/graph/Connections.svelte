@@ -4,14 +4,14 @@
   import Card, { type Picked } from "./Card.svelte";
   import Graph from "./Graph.svelte";
   import Navigator from "./Navigator.svelte";
-  import { focusOf, headInput, nodeKey, trace, type Graph as GraphData, type Mode, type Reach, type Take } from "./trace";
+  import { focusOf, headInput, nodeKey, siblingTip, trace, type Graph as GraphData, type Mode, type Reach, type Take } from "./trace";
   import { useLens } from "../lens.svelte";
   import { depthColor } from "../../lib/models";
   import { headId, headOf, neuronId, percent, poleOf, type Link, type Through, type Wire } from "../../lib/data";
 
   // The chosen unit among the others: its directed graph at true depth, then the strongest links on
-  // each side in words. A choice between what feeds it in real text, what its weights wire it to,
-  // and what fires with it, because those are three different lists.
+  // each side in words, and its siblings. A choice between what feeds it in real text, what its weights
+  // wire it to, and what fires with it, because those are three different lists.
   const lens = useLens();
 
   let mode = $state<Mode>("context");
@@ -118,7 +118,7 @@
   const nodeOf = $derived(new Map((graph?.nodes ?? []).map((node) => [node.key, node])));
   const focusWire = $derived(graph?.nodes.find((node) => node.side === "focus")?.wire ?? null);
 
-  interface Row { key: string; kind: "neuron" | "head"; name: string; layer: number; href: string; value: number; title: string; low: boolean; mirrored: boolean; through: Through[] }
+  interface Row { key: string; kind: "neuron" | "head"; name: string; layer: number; href: string; value: number; title: string; low: boolean; mirrored: boolean; through: Through[]; shares?: [number, number] }
 
   function row(kind: "neuron" | "head", [id, value]: Link, mirrored = false): Row {
     const key = nodeKey(kind, id);
@@ -161,20 +161,35 @@
   const THROUGH = ["value", "query", "key"];
 
   const SHOWN = 8;
+  /** Its siblings, as the walk found them once it settled (trace.ts): strongest first. */
+  const siblingRows = $derived((graph?.nodes ?? [])
+    .filter((node) => node.side === "sibling")
+    .sort((a, b) => b.flow - a.flow)
+    .slice(0, SHOWN)
+    .map((node): Row => ({ ...row(node.kind, [node.id, node.flow]), shares: node.shares })));
+  const SIBLING_TIPS = {
+    weights: "Neurons in its layer wired from and to the same neurons",
+    neuron: "Neurons in its layer driven by the same units, and driving the same",
+    head: "Heads in its layer driven by the same units, and driving the same",
+  };
   const sides = $derived.by(() => {
     if (!focusWire) return [];
     const { links } = focusWire;
     const byStrength = (rows: Row[]) => rows.sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, SHOWN);
     const drives = { title: "Drives", tip: "Later units it drives most", rows: byStrength([...links.drives.map((link) => row("neuron", link)), ...headTargets(links.drivesHeads)]) };
+    // Only once the walk has looked for them, so the list doesn't say None before it has.
+    const siblings = graph?.settled || siblingRows.length ? [{ title: "Siblings", tip: SIBLING_TIPS[shownMode === "weights" ? "weights" : isHead ? "head" : "neuron"], rows: siblingRows }] : [];
     if (shownMode === "with") return [{ title: "Fires with", tip: "Earlier neurons active when it fires, beyond their usual rate", rows: links.with.slice(0, SHOWN).map((link) => row("neuron", link)) }];
     if (shownMode === "weights") return [
       { title: "Wired from", tip: "Earlier neurons that move it most, by weight", rows: byStrength(collapsed(links.in)) },
       { title: "Wired to", tip: "Later neurons it moves most, by weight", rows: byStrength(collapsed(links.out)) },
+      ...siblings,
     ];
     const from = shownMode === "query" || shownMode === "key" ? focusWire[shownMode]! : links;
     return [
       { title: "Driven by", tip: isHead ? DRIVEN_TIPS[input] : "Earlier units that make up most of its activation", rows: byStrength([...from.driven.map((link) => row("neuron", link)), ...from.heads.map((link) => row("head", link))]) },
       drives,
+      ...siblings,
     ];
   });
   /** One list giving way to the next: a new unit, or a new view of it. */
@@ -185,13 +200,15 @@
   const graphHref = (kind: "neuron" | "head", layer: number, index: number) => lens.hrefFor({ unit: kind === "head" ? "heads" : "neurons", layer, index, all: kind === "neuron" && lens.all, graph: true });
   const focusNode = $derived(graph?.nodes.find((node) => node.side === "focus") ?? null);
   const focusName = $derived(focusNode ? (focusNode.kind === "head" ? headId(focusNode.layer, focusNode.index) : `${neuronId(focusNode.layer, focusNode.index)} ${focusNode.pole > 0 ? "+" : "−"}`) : "");
-  const shownValue = (value: number) => {
+  const shownValue = (title: string, { value, shares }: Row) => {
+    if (title === "Siblings") return `↑${shares?.[0] ?? 0} ↓${shares?.[1] ?? 0}`;
     if (shownMode === "with") return `${Math.round(value * 5)} of 5`;
     if (shownMode === "weights") return `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(2)}`;
     return `${value >= 0 ? "+" : "−"}${percent(Math.abs(value))}`;
   };
   /** What a row's number is. */
-  function valueTip(title: string, { value, kind, through }: Row): string {
+  function valueTip(title: string, { value, kind, through, shares }: Row): string {
+    if (title === "Siblings") return siblingTip(shares ?? [0, 0], shownMode, kind);
     if (title === "Fires with") return `Active at ${Math.round(value * 5)} of its first 5 top firings`;
     if (title === "Wired from") return "How far its firing moves this neuron";
     if (title === "Wired to") return "How far this neuron's firing moves it";
@@ -251,7 +268,7 @@
             {#each side.rows as item, i (item.key)}
               <a class="row rise" style:--i={i} class:on={lit === item.key} href={item.href} onpointerenter={() => point(item.key)} onpointerleave={() => point(null)}>
                 <span class="id"><i class="swatch" style:background={depthColor(lens.model, item.layer)}></i>{item.name}{#if item.mirrored}<span class="mirror" data-tip="Its other side pushes the opposite way">±</span>{/if}{#if item.through.length}<span data-tip="The inputs of that head it reaches, strongest first">· {item.through.map((through) => THROUGH[through]).join(", ")}</span>{/if}</span>
-                <span class="value" data-tip={valueTip(side.title, item)}><Meter value={Math.abs(item.value) / top(side.rows)} label={valueTip(side.title, item)} />{shownValue(item.value)}</span>
+                <span class="value" data-tip={valueTip(side.title, item)}><Meter value={Math.abs(item.value) / top(side.rows)} label={valueTip(side.title, item)} />{shownValue(side.title, item)}</span>
                 <span class="title" class:low={item.low}>{#key item.title}<span in:fadeIn>{#if item.title}<LabelText text={item.title} lent={!!lens.model.labelsFrom} />{:else}&nbsp;{/if}</span>{/key}</span>
               </a>
             {:else}
