@@ -10,7 +10,7 @@ as a pin bump.
 What the site draws for itself, in Ledger:
 
 - The depth ramp per model (`depthColor`, `src/lib/models.ts`), which the explorer sets as `--tint`
-  for the current layer, and its three depth bands. A read through the lens its band doesn't use on that side is quiet
+  for the current layer, and its depth bands. A read other than the one its depth's label cards rest on is quiet
   (the whole read at reduced opacity, full again when pointed at or focused) and comes last.
 - The mark (`public/favicon.svg`) and the social card (`scripts/site/paint/lens.py`, the painting, and
   `scripts/site/card.html`, its type), both described in Ledger's DESIGN.md.

@@ -214,7 +214,7 @@ test("clicking a layer in the atlas opens that layer", async ({ page }) => {
   await page.mouse.click(box.x + (33.5 * box.width) / index.layers, box.y + box.height - 2);
   await expect(page).toHaveURL(/\/gemma-4-12b\/L33$/);
   await expect(atlas(page)).toHaveAttribute("aria-valuenow", "33");
-  await expect(atlas(page)).toHaveAttribute("aria-valuetext", /^Layer 33, Late layers/);
+  await expect(atlas(page)).toHaveAttribute("aria-valuetext", /^Layer 33, Motor layers/);
   await expect(unitHeading(page, `L33·n${easiest(index, 33)[0]}`)).toBeVisible();
   await expect(page).toHaveTitle("Gemma 4 12B · Neuron Lens");
 
@@ -223,7 +223,7 @@ test("clicking a layer in the atlas opens that layer", async ({ page }) => {
   await page.mouse.click(bar.x + bar.width / 2, bar.y + bar.height / 2);
   await expect(page).toHaveURL(new RegExp(`/gemma-4-12b/L23/n${middle[1]}$`));
   await expect(atlas(page)).toHaveAttribute("aria-valuenow", "23");
-  await expect(atlas(page)).toHaveAttribute("aria-valuetext", new RegExp(`^Layer 23, Late layers, neuron ${middle[1]}$`));
+  await expect(atlas(page)).toHaveAttribute("aria-valuetext", new RegExp(`^Layer 23, Workspace layers, neuron ${middle[1]}$`));
   await expect(unitHeading(page, `L23·n${middle[1]}`)).toBeVisible();
 
   // Each choice is a history entry.

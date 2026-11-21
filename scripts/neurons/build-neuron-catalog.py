@@ -13,7 +13,7 @@ the + poles first) and ``heads/<table>.parquet`` (a row per head) for its tables
 ``neurons/{image,audio}/``, ``neurons/{image,audio}_optimised.parquet``, ``heads/{image,audio}.parquet`` and ``media/*_docs.parquet``.
 Every neuron and head is written, with everything the page would otherwise compute baked in: decoded
 tokens, the hub filter, merged variants, strength percentiles, which reads to trust at each depth
-(each depth band's lens on each side, ``BAND_LENSES``), the tokens two lenses (or a lens and
+(the model's reading plan, from neuron-lens: ``src/lib/depth.json``, ``bands.py``), the tokens two lenses (or a lens and
 a measurement) agree on, the translations from ``translate.py`` (every run's ``translations.jsonl``
 under ``.neuron-lens/``, comma-separated: a term means the same whichever model's run translated it), and for Gemma 4 each
 pole's image and sound evidence.
@@ -62,8 +62,7 @@ from tokenizers import Tokenizer
 
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
-# Per model: its geometry; its depth bands (last layer, key), from scripts/neurons/bands.py; the reads
-# the findings say fail on it at every depth; the layer from which a write's shape is read (§5); and
+# Per model: its geometry; the reads the findings say fail on it at every depth; and
 # which lens a head's QK diagonal reads its query through (last layer, lens): the S-lens, a position
 # holding a token seeking an earlier copy (duplicate-token heads), then the R-lens, a position about
 # to say a token seeking an earlier copy (copy suppression's lookup; neuron-lens findings §11, §13:
@@ -71,26 +70,26 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 PROFILES = {
     "qwen3-8b": {
         "name": "Qwen3-8B", "layers": 36, "mlp": 12288, "heads": 32,
-        "bands": [(3, "early"), (8, "middle"), (35, "late")], "broken": [],
-        "late": 21, "self": [(20, "S"), (35, "R")], "global": [], "media": [], "pinned": [(8, 344)],
+        "broken": [], "self": [(20, "S"), (35, "R")], "global": [], "media": [], "pinned": [(8, 344)],
     },
     "gemma-4-12b": {
         "name": "Gemma 4 12B", "layers": 48, "mlp": 15360, "heads": 16,
-        "bands": [(10, "early"), (12, "middle"), (47, "late")], "broken": [],
-        "late": 33, "self": [(23, "S"), (47, "R")], "global": list(range(5, 48, 6)), "media": ["image", "audio"], "pinned": [(33, 12225), (14, 8313), (37, 7165)],
+        "broken": [], "self": [(23, "S"), (47, "R")], "global": list(range(5, 48, 6)), "media": ["image", "audio"], "pinned": [(33, 12225), (14, 8313), (37, 7165)],
     },
 }
-# The Qwen3 sizes beside Qwen3-8B, unlabelled: their profiles from src/lib/ladder.json (bands.py --ladder), with
-# the 8B's write-shape layer and QK switch at the same relative depth.
-LADDER = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../src/lib/ladder.json"), encoding="utf-8"))
+# The Qwen3 sizes beside Qwen3-8B: their profiles from src/lib/ladder.json (bands.py), with the 8B's QK switch at the
+# same relative depth.
+LIB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../src/lib")
+LADDER = json.load(open(f"{LIB}/ladder.json", encoding="utf-8"))
 for model, m in LADDER.items():
     PROFILES.setdefault(model, {
-        "name": m["name"], "layers": m["layers"], "mlp": m["mlp"], "heads": m["heads"],
-        "bands": [(b["last"], b["key"]) for b in m["bands"]], "broken": [],
-        "late": m["late"], "self": [(m["self"], "S"), (m["layers"] - 1, "R")], "global": [], "media": [], "pinned": [],
+        "name": m["name"], "layers": m["layers"], "mlp": m["mlp"], "heads": m["heads"], "broken": [],
+        "self": [(m["self"], "S"), (m["layers"] - 1, "R")], "global": [], "media": [], "pinned": [],
     })
-# Which lens each band reads a neuron through: (what drives it, what it writes). A head's OV map is its write.
-BAND_LENSES = {"early": ("S", "S"), "middle": ("S", "R"), "late": ("R", "R")}
+# Every model's reading plan and depth bands (bands.py, from neuron-lens's arch.PLANS; findings §8): which read a label
+# card shows at each depth, so which the page lights: the input read the card shows, the R-lens write read at every
+# depth, and a head's OV read by the plan's head line; the bands are cut at the same edges.
+DEPTH = json.load(open(f"{LIB}/depth.json", encoding="utf-8"))
 
 KEEP_PER_LAYER = 40
 DOC_BLOCK = 2048
@@ -141,6 +140,9 @@ catalog, tokjson, out_root = sys.argv[1:4]
 translation_paths = [x for x in (sys.argv[4] if len(sys.argv) > 4 else "").split(",") if x]
 MODEL = os.path.basename(os.path.normpath(catalog))
 P = PROFILES[MODEL]
+PLAN = DEPTH[MODEL]["plan"]
+P |= {"bands": [(b["last"], b["key"]) for b in DEPTH[MODEL]["bands"]],
+      "late": PLAN["late"]}  # the layer from which a write's shape is read (§5): the plan's next-word line
 LAYERS, MLP, HEADS = P["layers"], P["mlp"], P["heads"]
 out = f"{out_root}/{MODEL}"
 ONLY = sorted({int(x) for x in os.environ.get("NEURON_LAYERS", "").split(",") if x}) or list(range(LAYERS))
@@ -208,17 +210,18 @@ def by_depth(steps, L):
 
 
 def neuron_lit(L):
-    """The reads a neuron at this depth is read through, the plain read of each side first: its band's
-    lens on each side (``BAND_LENSES``). The page shows the rest quieter."""
-    read, write = BAND_LENSES[band(L)]
-    return [f"read_{read}", f"write_{write}", f"read_{read}_z", f"write_{write}_z"]
+    """The reads a neuron at this depth is read through, the plain read of each side first: the reading plan's (the
+    S-lens's input read through its ``s_last``, then the R-lens's; the R-lens's write read). The page shows the rest
+    quieter."""
+    read = "S" if L <= PLAN["s_last"] else "R"
+    return [f"read_{read}", "write_R", f"read_{read}_z", "write_R_z"]
 
 
 def head_header(L):
-    """A head file's reads: its OV map through its band's write lens, then QK: what it attends to (through
+    """A head file's reads: its OV map through the lens of its plan's head line, then QK: what it attends to (through
     the S-lens) and its diagonal with the query through the lens its depth reads it with (``self``), then
     the OV map through the other lens and the other diagonal. ``qk_self_R`` starts at L1, reading L − 1's output."""
-    ov = f"ov_{BAND_LENSES[band(L)][1]}"
+    ov = PLAN["heads_early_read"] if L <= PLAN["heads_early"] else "ov_R"
     other = "ov_R" if ov == "ov_S" else "ov_S"
     seek = f"qk_self_{by_depth(P['self'], L)}"
     unseek = [c for c in ("qk_self_S", "qk_self_R") if c != seek and (L > 0 or c != "qk_self_R")]
@@ -566,7 +569,7 @@ def neuron_layer(L):
         return s
 
     header = read_header(trusted + [c for c in NEURON_READS if c not in trusted], {c for c in trusted if not c.endswith("_z")}, set(trusted))
-    # A measurement of the stream is as trusted as its band's lens, even where the weight read through that lens fails.
+    # A measurement of the stream is as trusted as the weight read the plan lights on its side, even where that read fails.
     orth_header = matched_reads(ORTH_READS, set(lit))
     stream_header = matched_reads(STREAM_READS, set(lit), primary={"pred"}) if firings is not None else []
     flow = {c: col(firings, c).astype(float) for c in ("parallel", "orthogonal", "n_firings")} if firings is not None else None

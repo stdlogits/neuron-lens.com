@@ -1,102 +1,87 @@
-"""A model's depth bands, by which lens works on each side of its neurons.
+"""Each model's depth bands and reading plan, for the catalog's build and the site's words for each band.
 
-    python3 scripts/neurons/bands.py ~/Work/neuron-lens/data/summary <model>
-    python3 scripts/neurons/bands.py ~/Work/neuron-lens/data/summary <model> --ladder src/lib/ladder.json
+    python3 scripts/neurons/bands.py ~/Work/neuron-lens/data/summary [<model> ...]
 
-Early layers are read through the S-lens on both sides: what drives a neuron and what it writes look
-like input tokens. Middle layers still read through the S-lens, but write through the R-lens: what a
-neuron writes already moves the output. Late layers are read through the R-lens on both sides. So two
-edges set the bands, each measured on every layer by neuron-lens (findings §3, §7, §13):
+The bands are neuron-lens's (its ``data/summary/depth.json``, from ``arch.PLANS``; findings §8). Each model's reading
+plan says which read a label card shows at each depth, set by blind ratings of each read's coherence, and its edges cut
+the depth into sensory layers (the input read is the S-lens's: the literal tokens), association layers (the R-lens's,
+which often names a concept associated with what drives the neuron rather than the tokens it fires on), workspace
+layers, and motor layers (from where a write often names the next word). A base model takes its post-trained model's
+plan. The plan also says which read the site lights on each side: the input read the card shows, the R-lens write read
+at every depth, and a head's OV read by its plan's head line (the builder's ``neuron_lit``, ``head_header``).
 
-- the R-lens starts working for writes at the first layer from which its read of a neuron's write
-  predicts what steering the neuron does, at a median Pearson r of at least ``WRITE_R`` over the
-  sampled poles, and stays there (``causal_lens_<model>.json``, steering at 1×);
-- the input side turns to the R-lens once, at the first layer where its read of a pole's input names the
-  token under its top firings for at least as many of the poles that fire as the S-lens's does, net of chance
-  (``reads_at_firings_<model>.json``), and does so on at least half of the layers from there to the last; each
-  share a running median over three layers, so one layer alone doesn't make a regime. The bands stay in order
-  (a9's call, 2026-11-15): Qwen3-0.6B-Base's S-lens reads its last six layers better again (0.21-0.26 against
-  0.14-0.19), and its input side still reads through the R-lens there. This gives Qwen3-8B's L9 and Gemma 4's L13,
-  where the rule before it (the last layer where the S-lens names the token for 15% of firing poles) gave L9 and
-  L14. The smaller Qwen3 models never fall below
-  15%, since both lenses read their inputs at every depth.
-
-It prints the bands for the builder's profile (``build-neuron-catalog.py``), with the numbers each
-edge rests on, for ``src/lib/models.ts``'s words. With ``--ladder``, it writes the model's whole
-profile into that file instead, for the models whose words are made from their numbers (the Qwen3
-sizes beside Qwen3-8B): its geometry and whether it is labelled (neuron-lens's ``release_<model>.json``: labels
-of both sides among its released configs), its bands
-with each band's numbers, and the two depths no check of its own measures yet, which take Qwen3-8B's
-at the same relative depth: the layer from which a write's shape is read (§5, the 8B's L21) and the
-last layer whose QK diagonal reads the query through the S-lens (§11, the 8B's L20).
+This writes ``src/lib/depth.json``: for every model with a build (``src/lib/catalog.json``), the ones in
+``ladder.json`` and any named, its plan, its bands, and per band the spans of the numbers its words cite, from
+neuron-lens's census and steering checks: the share of firing poles whose in·S, in·R or out·R names the firing or the
+next token, net of chance (``reads_at_firings_<model>.json``), and the median r between out·R and what steering at 1×
+does (``causal_lens_<model>.json``). It also rewrites the profiles in ``src/lib/ladder.json`` (the Qwen3 sizes beside
+Qwen3-8B, with any named), whose words are made from their numbers: geometry and whether it is labelled
+(``release_<model>.json``: labels of both sides among its released configs), and the one depth no check of its own
+measures yet, which takes Qwen3-8B's at the same relative depth: the last layer whose QK diagonal reads the query
+through the S-lens (§11, the 8B's L20).
 """
 import json
 import sys
 from pathlib import Path
 
-WRITE_R = 0.35
-LATE_8B, SELF_8B, LAYERS_8B = 21, 20, 36
+ROOT = Path(__file__).resolve().parents[2]
+DEPTH, LADDER, CATALOG = ROOT / "src/lib/depth.json", ROOT / "src/lib/ladder.json", ROOT / "src/lib/catalog.json"
+SELF_8B, LAYERS_8B = 20, 36
+OWN_PROFILE = {"qwen3-8b", "gemma-4-12b"}  # profiles written out in the builder and models.ts
 
 
-def bands(summary: Path, model: str):
-    at_firings = json.loads((summary / f"reads_at_firings_{model}.json").read_text())["neurons"]["layers"]
+def numbers(summary: Path, model: str) -> dict:
+    """Per layer: the census's shares of firing poles, and steering's median r."""
+    rows = sorted(json.loads((summary / f"reads_at_firings_{model}.json").read_text())["neurons"]["layers"],
+                  key=lambda row: row["layer"])
     causal = json.loads((summary / f"causal_lens_{model}.json").read_text())["targets"]["steer 1x"]
     lens = next(k for k in causal if k not in ("logit", "J"))  # the R-lens, whatever the run named it
-    steer = causal[lens]["r_med"]
-    last = len(steer) - 1
-    write = next(L for L in range(last + 1) if all(r >= WRITE_R for r in steer[L:]))
-    rows = sorted(at_firings, key=lambda row: row["layer"])
     share = lambda key: [row[key] / max(1e-9, 1 - row["silent"]) for row in rows]  # of the poles that fire
-    read_s, read_r = share("read_S_net"), share("read_R_net")
-    med3 = lambda x: [sorted(x[max(0, L - 1):L + 2])[len(x[max(0, L - 1):L + 2]) // 2] for L in range(len(x))]
-    s, r = med3(read_s), med3(read_r)
-    wins = [r[L] >= s[L] for L in range(last + 1)]
-    read = next((L for L in range(last + 1) if wins[L] and 2 * sum(wins[L:]) >= last + 1 - L), last + 1)
-    if write > read:
-        sys.exit(f"{model}: writes turn to the R-lens (L{write}) after reads do (L{read}): no middle band by this rule")
-    numbers = {"write_r": steer, "read_s": read_s, "read_r": read_r, "write_s": share("write_S_net")}
-    return {"early": (0, write - 1), "middle": (write, read - 1), "late": (read, last)}, numbers
+    return {"read_s": share("read_S_net"), "read_r": share("read_R_net"), "next_r": share("write_R_net"),
+            "write_r": causal[lens]["r_med"]}
 
 
-def span(values, first, last, digits):
+def span(values, first, last, digits=2):
     picked = values[first:last + 1]
     return [round(min(picked), digits), round(max(picked), digits)]
 
 
-def ladder(summary: Path, model: str, found, numbers) -> dict:
+def depth(summary: Path, model: str, plans: dict) -> dict:
+    entry = plans[model.removesuffix("-base")]
+    nums = numbers(summary, model)
+    assert len(nums["write_r"]) == entry["plan"]["layers"], f"{model}: summaries and plan disagree on its layers"
+    return {"plan": entry["plan"], "bands": [{"key": b["role"], "first": b["first"], "last": b["last"],
+                                              **{k: span(v, b["first"], b["last"]) for k, v in nums.items()}}
+                                             for b in entry["bands"]]}
+
+
+def ladder(summary: Path, model: str, plan: dict) -> dict:
     """The model's profile, for ``src/lib/ladder.json``."""
     facts = json.loads((summary / f"release_{model}.json").read_text())
     name, layers = facts["model"].split("/")[-1], facts["layers"]
-    size = name.removeprefix("Qwen3-").removesuffix("-Base")
+    assert layers == plan["layers"], f"{model}: release and plan disagree on its layers"
     return {
-        "name": name, "hub": facts["model"], "family": "Qwen3", "size": size, "base": name.endswith("-Base"),
-        "layers": layers, "mlp": facts["neurons"], "heads": facts["heads"],
+        "name": name, "hub": facts["model"], "family": "Qwen3", "size": name.removeprefix("Qwen3-").removesuffix("-Base"),
+        "base": name.endswith("-Base"), "layers": layers, "mlp": facts["neurons"], "heads": facts["heads"],
         "labelled": {f"{model}-neurons-labels", f"{model}-heads-labels"} <= {c[0] for c in facts.get("configs", [])},
-        "bands": [{"key": key, "first": first, "last": last,
-                   **{k: span(v, first, last, 2) for k, v in numbers.items()}}
-                  for key, (first, last) in found.items() if last >= first],  # a small model's writes read through the R-lens from L0
-        "late": round(LATE_8B / LAYERS_8B * layers), "self": round(SELF_8B / (LAYERS_8B - 1) * (layers - 1)),
+        "self": round(SELF_8B / (LAYERS_8B - 1) * (layers - 1)),
     }
 
 
 def main():
-    summary, model = Path(sys.argv[1]).expanduser(), sys.argv[2]
-    found, numbers = bands(summary, model)
-    if "--ladder" in sys.argv:
-        path = Path(sys.argv[sys.argv.index("--ladder") + 1])
-        every = json.loads(path.read_text()) if path.exists() else {}
-        every[model] = ladder(summary, model, found, numbers)
-        path.write_text(json.dumps(dict(sorted(every.items(), key=lambda kv: (kv[1]["base"], float(kv[1]["size"][:-1])))),
-                                   indent=1, ensure_ascii=False) + "\n")
-        print(f"{model} in {path}: {json.dumps(every[model]['bands'])}")
-        return
-    print(f'"bands": [{", ".join(f"({last}, {key!r})" for key, (_, last) in found.items())}],'.replace("'", '"'))
-    for key, (first, last) in found.items():
-        layers = range(first, last + 1)
-        if not layers:
-            continue
-        print(f"  {key:6s} L{first}-{last}: write r {min(numbers['write_r'][L] for L in layers):.2f}-{max(numbers['write_r'][L] for L in layers):.2f}, "
-              f"in·S names the firing token for {min(numbers['read_s'][L] for L in layers):.0%}-{max(numbers['read_s'][L] for L in layers):.0%} of firing poles")
+    summary, named = Path(sys.argv[1]).expanduser(), sys.argv[2:]
+    plans = json.loads((summary / "depth.json").read_text())
+    old_ladder = json.loads(LADDER.read_text()) if LADDER.exists() else {}
+    built = json.loads(CATALOG.read_text())["builds"]
+    models = sorted({*built, *old_ladder, *named})
+    out = {m: depth(summary, m, plans) for m in models}
+    DEPTH.write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
+    for m, d in out.items():
+        print(f"{m}: " + ", ".join(f"{b['key']} L{b['first']}-{b['last']}" for b in d["bands"]))
+    rungs = {m: ladder(summary, m, out[m]["plan"]) for m in sorted({*old_ladder, *named} - OWN_PROFILE)}
+    LADDER.write_text(json.dumps(dict(sorted(rungs.items(), key=lambda kv: (kv[1]["base"], float(kv[1]["size"][:-1])))),
+                                 indent=1, ensure_ascii=False) + "\n")
+    print(f"{DEPTH.relative_to(ROOT)}: {len(out)} models; {LADDER.relative_to(ROOT)}: {len(rungs)}")
 
 
 if __name__ == "__main__":

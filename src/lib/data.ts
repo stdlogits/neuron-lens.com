@@ -1,8 +1,10 @@
 // The catalog the explorer reads, prebuilt by scripts/neurons/build-neuron-catalog.py from the
 // neuron-lens catalogs. The dev server serves the local copy (catalog/<model>) at /data/<model>; the
-// site reads each model's build from R2 at the data origin, under the build's own name in catalog.json
-// (scripts/catalog/upload.sh writes it). A build's files never change, so a page reads one build
-// throughout, and a new one starts with the deploy that names it. A base model whose post-trained model
+// site reads each model's build from R2 at the data origin: the build catalog.json names is a manifest,
+// <model>/<build>.json, from each of its files' paths to the object holding it, o/<hash of its contents>
+// (scripts/catalog/upload.sh writes both). Neither ever changes, so a page reads one build throughout,
+// a new one starts with the deploy that names it, and a file that a new build shares with an old one is
+// the same object, sent once. A base model whose post-trained model
 // is labelled (models.ts labelsFrom) shows that model's labels, ratings, easiest and search over its own
 // evidence: the loaders below merge the two builds, so nothing above them knows.
 
@@ -12,7 +14,26 @@ import { MODELS, lineageFile, type ModelId, type ModelInfo, type Modality } from
 
 /** Where a model's catalog files are. `VITE_CATALOG=live npm run dev` reads the live builds on R2 instead of a local copy. */
 const local = import.meta.env.DEV && import.meta.env.VITE_CATALOG !== "live";
-export const dataBase = (model: ModelId) => (local ? `/data/${model}` : `${catalog.origin}/${model}/${(catalog.builds as Record<string, string>)[model]}`);
+const { lineage } = catalog as { lineage?: string };
+const builds: Record<string, string> = { ...catalog.builds, ...(lineage ? { lineage } : {}) };
+const manifests = new Map<string, Promise<Record<string, string>>>();
+/** A catalog file's address, for a model's build or the pruned pairs' lineage: on the dev server its path, on R2 the
+ * object its build's manifest names for it. */
+export async function dataUrl(set: ModelId | "lineage", path: string): Promise<string> {
+  if (local) return `/data/${set}/${path}`;
+  let manifest = manifests.get(set);
+  if (!manifest) {
+    manifest = fetch(`${catalog.origin}/${set}/${builds[set]}.json`).then((response) => {
+      if (!response.ok) throw new Error(`${set}'s manifest: ${response.status}`);
+      return response.json() as Promise<Record<string, string>>;
+    });
+    manifest.catch(() => manifests.delete(set));  // retried when next asked, rather than failing forever
+    manifests.set(set, manifest);
+  }
+  const object = (await manifest)[path];
+  if (!object) throw new Error(`${set}/${path}: not in its build`);
+  return `${catalog.origin}/o/${object}`;
+}
 
 export type Unit = "neurons" | "heads";
 export type Trust = "primary" | "trusted" | "weak";
@@ -211,7 +232,7 @@ function memo<T>(key: string, make: () => Promise<T>): Promise<T> {
   return pending;
 }
 
-const load = <T>(model: ModelId, name: string) => memo(`${model}/${name}`, () => fetch(`${dataBase(model)}/${name}`).then((response) => {
+const load = <T>(model: ModelId, name: string) => memo(`${model}/${name}`, async () => fetch(await dataUrl(model, name)).then((response) => {
   if (!response.ok) throw new Error(`${name}: ${response.status}`);
   return response.json() as Promise<T>;
 }));
@@ -338,7 +359,7 @@ export async function loadPostings(words: Words, wanted: Map<number, number>): P
       j += 1;
     }
     const start = words.offset[first.form];
-    const bytes = range(`${dataBase(words.source)}/search/p${pad(words.pack[first.form])}.bin`, start, end - start);
+    const bytes = dataUrl(words.source, `search/p${pad(words.pack[first.form])}.bin`).then((url) => range(url, start, end - start));
     for (const { form, n } of fresh.slice(i, j)) {
       const postings = bytes.then((buffer) => new Uint32Array(buffer, words.offset[form] - start, n));
       const key = `${words.source}:${form}`;
@@ -401,14 +422,12 @@ export type LineageStatus = "identified" | "supported" | "provisional" | "near-s
 export interface Lineage { neuron: number | null; status: LineageStatus }
 const LINEAGE_STATUS = [null, "identified", "supported", "provisional", "near-silent", "cut"] as const;
 const LINEAGE_RECORD = 4;
-const lineageBuild = (catalog as { lineage?: string }).lineage;
-const lineageBase = local ? "/data/lineage" : lineageBuild ? `${catalog.origin}/lineage/${lineageBuild}` : null;
 
 /** A neuron's counterpart across its model's pruning, or null where the model has none: its record, by range. */
 export async function loadLineage(model: ModelId, layer: number, n: number): Promise<Lineage | null> {
   const info = MODELS[model];
-  if (!lineageBase || !(info.prunedFrom || info.prunedInto)) return null;
-  const bytes = new DataView(await range(`${lineageBase}/${lineageFile(model)}.bin`, (layer * info.mlp + n) * LINEAGE_RECORD, LINEAGE_RECORD));
+  if (!(local || "lineage" in builds) || !(info.prunedFrom || info.prunedInto)) return null;
+  const bytes = new DataView(await range(await dataUrl("lineage", `${lineageFile(model)}.bin`), (layer * info.mlp + n) * LINEAGE_RECORD, LINEAGE_RECORD));
   const other = bytes.getUint16(0, true);
   const status = LINEAGE_STATUS[bytes.getUint8(2)];
   return status ? { neuron: other === 0xffff ? null : other, status } : null;
@@ -515,7 +534,7 @@ function ownPoleWire(model: ModelId, id: number, ahead: boolean) {
   return memo(key, async () => {
     const { wire, neuronsPerLayer: mlp, connections } = await ownIndex(model);
     const { layer, neuron, pole } = poleOf(mlp, id);
-    return wireOf(await range(`${dataBase(model)}/neurons/L${pad(layer)}/graph.bin`, (neuron + (pole < 0 ? mlp : 0)) * wire, wire, ahead ? key : undefined), connections, POLE_RELATIONS);
+    return wireOf(await range(await dataUrl(model, `neurons/L${pad(layer)}/graph.bin`), (neuron + (pole < 0 ? mlp : 0)) * wire, wire, ahead ? key : undefined), connections, POLE_RELATIONS);
   });
 }
 function ownHeadWire(model: ModelId, id: number, ahead: boolean) {
@@ -523,7 +542,7 @@ function ownHeadWire(model: ModelId, id: number, ahead: boolean) {
   if (!ahead) promote(key);
   return memo(key, async () => {
     const { headWire, connections } = await ownIndex(model);
-    return wireOf(await range(`${dataBase(model)}/heads/graph.bin`, id * headWire, headWire, ahead ? key : undefined), connections, HEAD_RELATIONS);
+    return wireOf(await range(await dataUrl(model, "heads/graph.bin"), id * headWire, headWire, ahead ? key : undefined), connections, HEAD_RELATIONS);
   });
 }
 /** A borrower's record: its own, with the lender's title. */
@@ -553,7 +572,7 @@ const rawNeuron = async (model: ModelId, layer: number, neuron: number): Promise
   const index = await ownIndex(model);
   const [pack, offset, length] = (await ownPoleWire(model, poleId(index.neuronsPerLayer, layer, neuron, 1), false)).detail;
   if (!length) return null;
-  return JSON.parse(await inflated(await range(`${dataBase(model)}/neurons/L${pad(layer)}/units-${pad(pack)}.bin`, offset, length))) as RawNeuron;
+  return JSON.parse(await inflated(await range(await dataUrl(model, `neurons/L${pad(layer)}/units-${pad(pack)}.bin`), offset, length))) as RawNeuron;
 };
 const ownNeuron = async (model: ModelId, layer: number, neuron: number): Promise<NeuronDetail | null> => {
   const [index, raw, vocab] = await Promise.all([ownIndex(model), rawNeuron(model, layer, neuron), loadVocab(model)]);
@@ -623,9 +642,10 @@ export function mediaUrl(model: ModelId, modality: Modality, where: [number, num
     mediaUrls.set(key, held);
   } else {
     const [pack, offset, length] = where;
-    const url = `${dataBase(model)}/media/${modality}/p${pad(pack, 3)}.bin`;
+    const address = dataUrl(model, `media/${modality}/p${pad(pack, 3)}.bin`);
     const type = modality === "image" ? "image/webp" : "audio/mpeg";
     const made = (async () => {
+      const url = await address;
       let whole = wholePacks.get(url);
       if (!whole) {
         const response = await fetch(url, { headers: { Range: `bytes=${offset}-${offset + length - 1}` } });

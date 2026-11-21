@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Checks a deployed neuron-lens.com: every path answers as Cloudflare Pages should serve this build,
 // with the headers public/_headers sets and the files the site serves about itself; the catalog builds
-// src/lib/catalog.json names answer from R2 as the explorer reads them; and the explorer shows images
+// src/lib/catalog.json names answer from R2 as the explorer reads them (each build's manifest, then the objects it names); and the explorer shows images
 // and plays sounds under that CSP (the dev server sends no CSP, so only a deployed site can fail that way).
 //
 //   node scripts/verify-deployment.mjs [origin]      default https://neuron-lens.com
@@ -199,10 +199,28 @@ export async function checkAssets(origin, rules, html, buildDir) {
 
 // `catalog` (imported above as the explorer imports it, src/lib/data.ts) is the site's own record of where its catalog is.
 const IMMUTABLE = "public, max-age=31536000, immutable";
-/** A file of a model's build, as a path on the data origin. */
-const dataPath = (model, file) => `/${model}/${catalog.builds[model]}/${file}`;
 /** A catalog file as the site fetches it: across origins, from the page at `site`. */
 const getData = (site, path, headers = {}) => get(catalog.origin, path, { Origin: site, ...headers });
+const builds = { ...catalog.builds, ...(catalog.lineage ? { lineage: catalog.lineage } : {}) };
+const manifests = new Map();
+/** A build's manifest, `/<model>/<build>.json`: each of its files' paths to its object. Checked as the site reads it. */
+async function manifestOf(site, set) {
+  if (!manifests.has(set)) {
+    const path = `/${set}/${builds[set]}.json`;
+    const response = await getData(site, path);
+    assert.equal(response.status, 200, `${catalog.origin}${path}: HTTP ${response.status}`);
+    assert.equal(mime(response), "application/json", `${path}: ${mime(response)}`);
+    assertDataHeaders(response, site, path);
+    manifests.set(set, await response.json());
+  }
+  return manifests.get(set);
+}
+/** A file of a build (a model's, or the lineage's), as a path on the data origin: the object its manifest names. */
+async function dataPath(site, set, file) {
+  const object = (await manifestOf(site, set))[file];
+  assert.ok(object, `${set}'s build ${builds[set]} has no ${file}`);
+  return `/o/${object}`;
+}
 
 /** A build's file is open to any page (CORS: the catalog is public) and cached for good, since a build never changes. */
 function assertDataHeaders(response, site, path) {
@@ -216,7 +234,7 @@ export async function checkData(site, rules) {
   assert.ok(connect.includes(catalog.origin), `public/_headers: connect-src doesn't allow the catalog's origin ${catalog.origin}`);
   for (const model of Object.keys(catalog.builds)) {
     assert.ok(catalog.builds[model], `src/lib/catalog.json names no build for ${model}`);
-    const path = dataPath(model, "index.json");
+    const path = await dataPath(site, model, "index.json");
     const response = await getData(site, path);
     assert.equal(response.status, 200, `${catalog.origin}${path}: HTTP ${response.status}`);
     assert.equal(mime(response), "application/json", `${path}: ${mime(response)}`);
@@ -229,13 +247,13 @@ export async function checkData(site, rules) {
   }
   // The pruned pairs' neuron links (scripts/neurons/lineage.py), a build of their own: the index, and a record of each file by range.
   if (catalog.lineage) {
-    const path = `/lineage/${catalog.lineage}/index.json`;
+    const path = await dataPath(site, "lineage", "index.json");
     const response = await getData(site, path);
     assert.equal(response.status, 200, `${catalog.origin}${path}: HTTP ${response.status}`);
     assertDataHeaders(response, site, path);
     const { record, models } = await response.json();
     for (const model of Object.keys(models)) {
-      const file = `/lineage/${catalog.lineage}/${model}.bin`;
+      const file = await dataPath(site, "lineage", `${model}.bin`);
       const part = await getData(site, file, { Range: `bytes=0-${record - 1}` });
       assert.equal(part.status, 206, `${file}: HTTP ${part.status} to a Range request, expected 206`);
       assert.equal((await part.arrayBuffer()).byteLength, record, `${file}: a record isn't ${record} bytes`);
@@ -245,19 +263,19 @@ export async function checkData(site, rules) {
   // The edge keeps a file with the headers of the answer that filled its cache, so CORS must be on
   // every answer, asked with an Origin or not: R2 does that when the bucket's CORS allows any origin.
   // Twice with no Origin, the second from the edge's cache, each must carry it.
-  const cached = dataPath("qwen3-8b", "heads/graph.bin");
+  const cached = await dataPath(site, "qwen3-8b", "heads/graph.bin");
   for (let i = 0; i < 2; i += 1) {
     const response = await get(catalog.origin, cached, { Range: "bytes=0-15" });
     await response.body?.cancel();
     assert.equal(response.headers.get("access-control-allow-origin"), "*",
       `${cached} (${response.headers.get("cf-cache-status")}, asked with no Origin): no Access-Control-Allow-Origin: *; the bucket's CORS must allow any origin (scripts/catalog/cors.json), and the hostname's cache be purged after a change`);
   }
-  const missing = dataPath("qwen3-8b", `neurons/L08/missing-${crypto.randomUUID().slice(0, 8)}.json`);
+  const missing = `/o/missing-${crypto.randomUUID().slice(0, 8)}.json`;
   const gone = await getData(site, missing);
   await gone.body?.cancel();
   assert.equal(gone.status, 404, `${missing}: HTTP ${gone.status}, expected 404`);
   // A browser that doesn't count a single range as a simple header asks first.
-  const preflight = await fetch(new URL(dataPath("qwen3-8b", "heads/graph.bin"), catalog.origin), {
+  const preflight = await fetch(new URL(cached, catalog.origin), {
     method: "OPTIONS", headers: { Origin: site, "Access-Control-Request-Method": "GET", "Access-Control-Request-Headers": "range" }, signal: AbortSignal.timeout(30_000),
   });
   await preflight.body?.cancel();
@@ -276,15 +294,17 @@ export async function checkMediaRanges(site) {
     ["audio", (bytes) => startsWith(bytes, "ID3") || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)],
   ]) {
     // hosted.json (scripts/neurons/media.py) maps each shown document to [pack, offset, length].
-    const map = await getData(site, dataPath("gemma-4-12b", `media/${modality}/hosted.json`));
+    const hosted = (await manifestOf(site, "gemma-4-12b"))[`media/${modality}/hosted.json`];
     let range = [0, 0, 1024];
     let checkBytes = false;
-    if (map.ok) {
+    if (hosted) {
+      const map = await getData(site, `/o/${hosted}`);
+      assert.equal(map.status, 200, `/o/${hosted} (media/${modality}/hosted.json): HTTP ${map.status}`);
       const first = Object.values(await map.json()).find(([pack]) => pack === 0);
       if (first) [range, checkBytes] = [first, true];
-    } else await map.body?.cancel();
+    }
     const [pack, offset, length] = range;
-    const path = dataPath("gemma-4-12b", `media/${modality}/p${String(pack).padStart(3, "0")}.bin`);
+    const path = await dataPath(site, "gemma-4-12b", `media/${modality}/p${String(pack).padStart(3, "0")}.bin`);
     const response = await getData(site, path, { Range: `bytes=${offset}-${offset + length - 1}` });
     assert.equal(response.status, 206, `${path}: HTTP ${response.status} to a Range request, expected 206`);
     assert.match(response.headers.get("content-range") ?? "", new RegExp(`^bytes ${offset}-${offset + length - 1}/\\d+$`), `${path}: Content-Range`);
@@ -307,14 +327,14 @@ export async function checkGraphRanges(site) {
     return bytes;
   };
   for (const [model, layer, neuron, head] of [["qwen3-8b", 8, 344, 8 * 32 + 3], ["gemma-4-12b", 33, 12225, 33 * 16 + 5]]) {
-    const { wire, headWire } = await (await getData(site, dataPath(model, "index.json"))).json();
+    const { wire, headWire } = await (await getData(site, await dataPath(site, model, "index.json"))).json();
     const folder = `neurons/L${String(layer).padStart(2, "0")}`;
-    const record = await read(dataPath(model, `${folder}/graph.bin`), neuron * wire, wire);
+    const record = await read(await dataPath(site, model, `${folder}/graph.bin`), neuron * wire, wire);
     const [pack, offset, length] = [record[2], record.readUInt32LE(4), record.readUInt32LE(8)];
     assert.ok(length > 0, `${model} L${layer} n${neuron}: its record names no detail`);
-    const detail = JSON.parse(inflateSync(await read(dataPath(model, `${folder}/units-${String(pack).padStart(2, "0")}.bin`), offset, length)).toString("utf8"));
+    const detail = JSON.parse(inflateSync(await read(await dataPath(site, model, `${folder}/units-${String(pack).padStart(2, "0")}.bin`), offset, length)).toString("utf8"));
     assert.equal(detail.n, neuron, `${model} L${layer} n${neuron}: its record leads to neuron ${detail.n}`);
-    const firstSource = (await read(dataPath(model, "heads/graph.bin"), head * headWire, headWire)).readUInt32LE(128);
+    const firstSource = (await read(await dataPath(site, model, "heads/graph.bin"), head * headWire, headWire)).readUInt32LE(128);
     assert.notEqual(firstSource, 0xffffffff, `${model} head ${head}: its record names no source`);
   }
 }

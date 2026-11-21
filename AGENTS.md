@@ -20,8 +20,9 @@ files. It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now
   (and `search/`), `media/`.
 - `src/pages/`: About, Credits, the missing page.
 - `src/lib/`: `data.ts` (the catalog's types and loaders), `models.ts` (each model's shape, its depth
-  ramp and the words for its depth bands; the models listed are those with a build in `catalog.json`), `ladder.json`
-  (the other Qwen3 sizes' profiles, written by `bands.py --ladder`, below), `router.svelte.ts` (every view is a path), `site.ts` (the
+  ramp and the words for its depth bands; the models listed are those with a build in `catalog.json`), `depth.json`
+  (every model's reading plan and bands, with the numbers their words cite) and `ladder.json` (the other Qwen3 sizes'
+  profiles), both written by `bands.py` (below), `router.svelte.ts` (every view is a path), `site.ts` (the
   name and origin), `translate.svelte.ts` (the translations, and the site's `Translator` for Ledger),
   `theme.ts` (the theme, from Ledger's `createTheme`), `media.ts`.
 - `src/styles/site.css`: the site's own rules over Ledger's (the no-script summary).
@@ -75,10 +76,13 @@ A head's QK diagonal, a token at the query seeking an earlier copy of itself, is
 Each model trusts the first up to a layer and the second from the next (`self` in the builder's profile, from neuron-lens findings §11 and §13).
 Each read shows its normal list, or with the Distinctive switch beside English its layer-contrastive (z) list; a
 normal list left with nothing once hub tokens are gone shows its distinctive list instead (most of Stream's early reads).
-Every model has the same three depth bands, in order, set by which lens works on each side of a neuron (`scripts/neurons/bands.py`), except that the smaller Qwen3 models read their writes through the R-lens from L0 and so have no early band:
-early layers read what drives it and what it writes through the S-lens, middle layers what drives it through the S-lens
-and its write through the R-lens, late layers both through the R-lens. A read through the other lens is quiet until
-pointed at, and comes last; so is a read the findings say fails on that model. The catalog keeps no per-unit test of a read
+Every model's depth bands are neuron-lens's, cut from its reading plan (`arch.PLANS`, findings §8: which read a label card
+shows at each depth, set by blind ratings of each read's coherence), in order: sensory layers, whose cards read what drives
+a neuron through the S-lens; association layers, through the R-lens, which there often names a concept associated with
+what it fires on; workspace layers; and motor layers, from where a write often reads as the next word. A plan may skip one
+(Gemma 4 has no sensory band, Qwen3-1.7B no workspace band). The same plan says which read is lit on each side: the
+card's input read, the R-lens write read at every depth, and a head's OV read by the plan's head line. Any other read is
+quiet until pointed at, and comes last; so is a read the findings say fails on that model. The catalog keeps no per-unit test of a read
 (neuron-lens: a read that misses a unit's firings isn't wrong for it), so the site shows none and nothing lifts a read out of quiet.
 Left is always what comes in and right what goes out. Beside them the rail holds its connections: a
 directed graph at true depth, and its strongest links in words. The graph opens at Near (only the units most
@@ -168,18 +172,21 @@ script's docstring has the full invocation):
    sounds of the collections whose licences allow showing them (its `ALLOWED` table), matched to the
    catalog by SHA-1, and their credits. The synthetic images come from the catalog folder's `media/image_synth.parquet`,
    which the Hub release leaves out. Others are linked, never hosted. `hosted.json` is keyed by document number,
-   so rerun this whenever a catalog's `media/*_docs.parquet` change.
+   so rerun this whenever a catalog's `media/*_docs.parquet` change. The builder (3) reads it from its output
+   folder, so a build into a fresh folder needs `media.py`'s output (`media/credits.json`, `media/<modality>/hosted.json`
+   and the packs) there first, or its media documents list nothing as shown.
 3. `scripts/neurons/build-neuron-catalog.py <catalog> <tokenizer.json> catalog
    <translations.jsonl,...>` writes every neuron and head into `catalog/<model>/`, given every
    translation run under `.neuron-lens/` (a term means the same whichever model's run translated it; the runs
    added since only reach `terms.json` and the word index, so an earlier build's other files rebuild the same). The
-   model's profile (geometry, depth bands, the reads that fail on it) sits at the top of the builder;
-   the bands come from `scripts/neurons/bands.py <neuron-lens data/summary> <model>`, which reads
-   them off neuron-lens's per-layer census and steering checks, and `src/lib/models.ts` holds the same
-   layers with the site's words for them. A new model's bands come from rerunning it. A Qwen3 size beside the 8B
-   takes its whole profile from `bands.py <summary> <model> --ladder src/lib/ladder.json` instead (its
-   numbers make its band words in `models.ts`; its write-shape layer and QK switch are the 8B's at the same
-   relative depth), after neuron-lens's catalog queue has run its reads-at-firings and steering checks. It is
+   model's profile (geometry, the reads that fail on it, its QK switch) sits at the top of the builder, and
+   its reading plan and bands in `src/lib/depth.json`, which `scripts/neurons/bands.py <neuron-lens data/summary>
+   [<model>]` copies from neuron-lens's `depth.json` (rerun `python -m neuron_lens.arch` there first if its plans
+   changed) for every model with a build, with the spans of the census's and steering's numbers each band's words
+   cite in `models.ts`. A Qwen3 size beside the 8B takes the rest of its profile from `ladder.json`, which the same
+   run writes (its QK switch is the 8B's at the same relative depth), after neuron-lens's catalog queue has run its
+   reads-at-firings and steering checks. A change to a plan changes which reads are lit, so every build it covers
+   needs rebuilding. It is
    labelled once its release record lists labels of both sides (`labelled` in `ladder.json`); its labels' terms
    get a translation run of their own (`.neuron-lens/<model>-lean-labels`), and Qwen3-8B's runs serve the rest (one
    tokenizer; contexts the 8B never showed stay untranslated). `NEURON_LAYERS=8,21`
@@ -190,7 +197,7 @@ script's docstring has the full invocation):
    ~/Work/neuron-lens/data/catalog catalog/lineage` turns the neuron-lens catalogs' `lineage` tables (Qwen3-4B, 0.6B,
    8B, 1.7B) into `catalog/lineage/<model>.bin`, a 4-byte record per neuron (the other model's neuron and how it is
    known), read by range (`loadLineage` in `data.ts`); a base reads its post-trained model's file (`models.ts`:
-   `prunedFrom`, `prunedInto`, `traced`). `scripts/catalog/upload.sh lineage` puts it on R2 under `lineage/<build>/` and
+   `prunedFrom`, `prunedInto`, `traced`). `scripts/catalog/upload.sh lineage` puts it on R2 as a build of its own (`lineage/<build>.json`) and
    names it in `catalog.json`'s `lineage`, so no model's build changes with it; `deploy.sh` and the deployment check
    cover it.
 
@@ -225,13 +232,17 @@ Ledger's `stem()`, so the two must stay the same.
 ### On R2
 
 The site reads each model's catalog from the R2 bucket `neuron-lens-data` in a9's account, served at
-`https://data.neuron-lens.com` (a custom domain on the zone), under the build that `src/lib/catalog.json`
-names: `/<model>/<build>/…`, the build being the first 12 hex digits of a hash over the build's files.
-A build never changes once up, so its files are cached for good (`immutable`), a page reads one build
-throughout (a graph record and the units pack it points into always agree), and a new build goes live
-with the deploy that names it. `scripts/catalog/upload.sh` sends a build (8 files at a time, resuming
-from its log in `catalog/.uploads/` if interrupted, `index.json` last), checks it answers, and names it;
-`deploy.sh` refuses to deploy a `catalog.json` whose builds aren't up. Older builds stay in the bucket
+`https://data.neuron-lens.com` (a custom domain on the zone), through the build that `src/lib/catalog.json`
+names. Every file is an object named by its contents, `/o/<the first 20 hex digits of its SHA-256><its
+extension>`, and a build is a manifest from each of its files' paths to its object, `/<model>/<build>.json`,
+the build being the first 12 hex digits of the manifest's hash (`dataUrl` in `src/lib/data.ts` reads it first,
+then the objects it names). Neither ever changes once up, so both are cached for good (`immutable`), a page
+reads one build throughout (a graph record and the units pack it points into always agree), and a new build
+goes live with the deploy that names it. A file a new build shares with any earlier build (most layers of a
+rebuild, and the Qwen3 builds' vocabularies) is the same object, so `scripts/catalog/upload.sh` sends only
+the objects not up yet (8 at a time, logged in `catalog/.uploads/objects.log`, so an interrupted upload
+resumes), then the manifest, checks it answers, and names it; `deploy.sh` refuses to deploy a
+`catalog.json` whose manifests aren't up. Older builds, and the objects only they name, stay in the bucket
 until deleted, at R2's storage price (10 GB free, then $0.015/GB-month; reads past 10 million a month
 $0.36 a million; no egress fees). The catalog is public, so any page may read it: the bucket's CORS
 rules (`scripts/catalog/cors.json`) allow any origin, with ranges. They must stay `*`. The edge caches a

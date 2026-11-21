@@ -9,51 +9,6 @@
   "mlp": 3072,
   "heads": 16,
   "labelled": true,
-  "bands": [
-   {
-    "key": "middle",
-    "first": 0,
-    "last": 6,
-    "write_r": [
-     0.5,
-     0.72
-    ],
-    "read_s": [
-     0.38,
-     0.87
-    ],
-    "read_r": [
-     0.21,
-     0.45
-    ],
-    "write_s": [
-     0.09,
-     0.26
-    ]
-   },
-   {
-    "key": "late",
-    "first": 7,
-    "last": 27,
-    "write_r": [
-     0.71,
-     1.0
-    ],
-    "read_s": [
-     0.11,
-     0.37
-    ],
-    "read_r": [
-     0.2,
-     0.49
-    ],
-    "write_s": [
-     0.0,
-     0.14
-    ]
-   }
-  ],
-  "late": 16,
   "self": 15
  },
  "qwen3-1.7b": {
@@ -66,51 +21,6 @@
   "mlp": 6144,
   "heads": 16,
   "labelled": true,
-  "bands": [
-   {
-    "key": "middle",
-    "first": 0,
-    "last": 9,
-    "write_r": [
-     0.39,
-     0.73
-    ],
-    "read_s": [
-     0.3,
-     0.84
-    ],
-    "read_r": [
-     0.06,
-     0.33
-    ],
-    "write_s": [
-     0.12,
-     0.32
-    ]
-   },
-   {
-    "key": "late",
-    "first": 10,
-    "last": 27,
-    "write_r": [
-     0.74,
-     1.0
-    ],
-    "read_s": [
-     0.07,
-     0.25
-    ],
-    "read_r": [
-     0.08,
-     0.34
-    ],
-    "write_s": [
-     0.0,
-     0.12
-    ]
-   }
-  ],
-  "late": 16,
   "self": 15
  },
  "qwen3-4b": {
@@ -123,72 +33,6 @@
   "mlp": 9728,
   "heads": 32,
   "labelled": true,
-  "bands": [
-   {
-    "key": "early",
-    "first": 0,
-    "last": 2,
-    "write_r": [
-     0.16,
-     0.38
-    ],
-    "read_s": [
-     0.27,
-     0.79
-    ],
-    "read_r": [
-     0.07,
-     0.21
-    ],
-    "write_s": [
-     0.17,
-     0.31
-    ]
-   },
-   {
-    "key": "middle",
-    "first": 3,
-    "last": 9,
-    "write_r": [
-     0.36,
-     0.53
-    ],
-    "read_s": [
-     0.22,
-     0.46
-    ],
-    "read_r": [
-     0.07,
-     0.28
-    ],
-    "write_s": [
-     0.09,
-     0.23
-    ]
-   },
-   {
-    "key": "late",
-    "first": 10,
-    "last": 35,
-    "write_r": [
-     0.61,
-     1.0
-    ],
-    "read_s": [
-     0.02,
-     0.18
-    ],
-    "read_r": [
-     0.06,
-     0.4
-    ],
-    "write_s": [
-     0.01,
-     0.12
-    ]
-   }
-  ],
-  "late": 21,
   "self": 20
  },
  "qwen3-14b": {
@@ -201,72 +45,6 @@
   "mlp": 17408,
   "heads": 40,
   "labelled": true,
-  "bands": [
-   {
-    "key": "early",
-    "first": 0,
-    "last": 6,
-    "write_r": [
-     0.03,
-     0.37
-    ],
-    "read_s": [
-     0.23,
-     0.71
-    ],
-    "read_r": [
-     0.03,
-     0.11
-    ],
-    "write_s": [
-     0.1,
-     0.31
-    ]
-   },
-   {
-    "key": "middle",
-    "first": 7,
-    "last": 9,
-    "write_r": [
-     0.4,
-     0.52
-    ],
-    "read_s": [
-     0.26,
-     0.27
-    ],
-    "read_r": [
-     0.12,
-     0.22
-    ],
-    "write_s": [
-     0.06,
-     0.15
-    ]
-   },
-   {
-    "key": "late",
-    "first": 10,
-    "last": 39,
-    "write_r": [
-     0.52,
-     1.0
-    ],
-    "read_s": [
-     0.01,
-     0.12
-    ],
-    "read_r": [
-     0.09,
-     0.37
-    ],
-    "write_s": [
-     0.0,
-     0.06
-    ]
-   }
-  ],
-  "late": 23,
   "self": 22
  },
  "qwen3-0.6b-base": {
@@ -279,51 +57,6 @@
   "mlp": 3072,
   "heads": 16,
   "labelled": false,
-  "bands": [
-   {
-    "key": "middle",
-    "first": 0,
-    "last": 9,
-    "write_r": [
-     0.52,
-     0.83
-    ],
-    "read_s": [
-     0.28,
-     0.85
-    ],
-    "read_r": [
-     0.1,
-     0.36
-    ],
-    "write_s": [
-     0.09,
-     0.26
-    ]
-   },
-   {
-    "key": "late",
-    "first": 10,
-    "last": 27,
-    "write_r": [
-     0.78,
-     1.0
-    ],
-    "read_s": [
-     0.12,
-     0.27
-    ],
-    "read_r": [
-     0.13,
-     0.36
-    ],
-    "write_s": [
-     0.0,
-     0.1
-    ]
-   }
-  ],
-  "late": 16,
   "self": 15
  },
  "qwen3-1.7b-base": {
@@ -336,30 +69,6 @@
   "mlp": 6144,
   "heads": 16,
   "labelled": false,
-  "bands": [
-   {
-    "key": "middle",
-    "first": 0,
-    "last": 27,
-    "write_r": [
-     0.43,
-     1.0
-    ],
-    "read_s": [
-     0.07,
-     0.83
-    ],
-    "read_r": [
-     0.01,
-     0.29
-    ],
-    "write_s": [
-     0.0,
-     0.33
-    ]
-   }
-  ],
-  "late": 16,
   "self": 15
  },
  "qwen3-4b-base": {
@@ -372,72 +81,6 @@
   "mlp": 9728,
   "heads": 32,
   "labelled": false,
-  "bands": [
-   {
-    "key": "early",
-    "first": 0,
-    "last": 2,
-    "write_r": [
-     0.13,
-     0.33
-    ],
-    "read_s": [
-     0.28,
-     0.78
-    ],
-    "read_r": [
-     0.05,
-     0.31
-    ],
-    "write_s": [
-     0.17,
-     0.32
-    ]
-   },
-   {
-    "key": "middle",
-    "first": 3,
-    "last": 10,
-    "write_r": [
-     0.35,
-     0.64
-    ],
-    "read_s": [
-     0.2,
-     0.48
-    ],
-    "read_r": [
-     0.04,
-     0.13
-    ],
-    "write_s": [
-     0.1,
-     0.23
-    ]
-   },
-   {
-    "key": "late",
-    "first": 11,
-    "last": 35,
-    "write_r": [
-     0.68,
-     1.0
-    ],
-    "read_s": [
-     0.03,
-     0.15
-    ],
-    "read_r": [
-     0.06,
-     0.23
-    ],
-    "write_s": [
-     0.0,
-     0.1
-    ]
-   }
-  ],
-  "late": 21,
   "self": 20
  },
  "qwen3-8b-base": {
@@ -450,72 +93,6 @@
   "mlp": 12288,
   "heads": 32,
   "labelled": false,
-  "bands": [
-   {
-    "key": "early",
-    "first": 0,
-    "last": 3,
-    "write_r": [
-     0.02,
-     0.21
-    ],
-    "read_s": [
-     0.22,
-     0.72
-    ],
-    "read_r": [
-     0.01,
-     0.18
-    ],
-    "write_s": [
-     0.17,
-     0.37
-    ]
-   },
-   {
-    "key": "middle",
-    "first": 4,
-    "last": 10,
-    "write_r": [
-     0.46,
-     0.58
-    ],
-    "read_s": [
-     0.1,
-     0.28
-    ],
-    "read_r": [
-     0.02,
-     0.05
-    ],
-    "write_s": [
-     0.06,
-     0.18
-    ]
-   },
-   {
-    "key": "late",
-    "first": 11,
-    "last": 35,
-    "write_r": [
-     0.59,
-     1.0
-    ],
-    "read_s": [
-     0.01,
-     0.08
-    ],
-    "read_r": [
-     0.04,
-     0.19
-    ],
-    "write_s": [
-     0.0,
-     0.08
-    ]
-   }
-  ],
-  "late": 21,
   "self": 20
  },
  "qwen3-14b-base": {
@@ -528,72 +105,6 @@
   "mlp": 17408,
   "heads": 40,
   "labelled": false,
-  "bands": [
-   {
-    "key": "early",
-    "first": 0,
-    "last": 5,
-    "write_r": [
-     0.04,
-     0.37
-    ],
-    "read_s": [
-     0.33,
-     0.71
-    ],
-    "read_r": [
-     0.02,
-     0.11
-    ],
-    "write_s": [
-     0.11,
-     0.32
-    ]
-   },
-   {
-    "key": "middle",
-    "first": 6,
-    "last": 9,
-    "write_r": [
-     0.41,
-     0.5
-    ],
-    "read_s": [
-     0.22,
-     0.27
-    ],
-    "read_r": [
-     0.05,
-     0.21
-    ],
-    "write_s": [
-     0.06,
-     0.15
-    ]
-   },
-   {
-    "key": "late",
-    "first": 10,
-    "last": 39,
-    "write_r": [
-     0.54,
-     1.0
-    ],
-    "read_s": [
-     0.01,
-     0.12
-    ],
-    "read_r": [
-     0.08,
-     0.31
-    ],
-    "write_s": [
-     0.01,
-     0.06
-    ]
-   }
-  ],
-  "late": 23,
   "self": 22
  }
 }

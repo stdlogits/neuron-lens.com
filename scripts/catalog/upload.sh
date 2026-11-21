@@ -7,12 +7,15 @@
 #   scripts/catalog/upload.sh lineage                 the pruned pairs' neuron links (scripts/neurons/lineage.py),
 #                                                     named in catalog.json's lineage rather than its builds
 #
-# Each build goes under a prefix of its own, <model>/<build>/, where the build is the first 12 hex digits
-# of a hash over every file's path and contents. A build's files never change, so they are cached for
-# good, and the site moves to a new build only with the deploy that names it: a graph record and the
-# units pack it points into always come from the same build. An interrupted upload picks up where it
-# stopped (each file sent is logged in catalog/.uploads/<model>-<build>.log), and index.json, which the
-# explorer reads first, goes last. Older builds stay in the bucket until deleted.
+# Every file is an object named by its contents, o/<the first 20 hex digits of its SHA-256><its extension>,
+# and a build is a manifest from each of its files' paths to its object, <model>/<build>.json, the build
+# being the first 12 hex digits of the manifest's own hash. Neither ever changes, so both are cached for
+# good, and the site moves to a new build only with the deploy that names it: a graph record and the units
+# pack it points into always come from the same build. A file a new build shares with any build sent
+# before, its own model's or another's, is the same object and isn't sent again: objects already up are
+# logged in catalog/.uploads/objects.log, so an interrupted upload picks up where it stopped. The manifest,
+# which the explorer reads first, goes last. Older builds and the objects only they name stay in the
+# bucket until deleted.
 #
 # The bucket, neuron-lens-data in a9's account, is served at https://data.neuron-lens.com (a custom domain
 # on the zone), with the CORS rules in scripts/catalog/cors.json (`wrangler r2 bucket cors set
@@ -28,6 +31,7 @@ source scripts/wrangler.sh
 BUCKET=neuron-lens-data
 CACHE="public, max-age=31536000, immutable"
 JOBS=${UPLOAD_JOBS:-8}
+SENT=catalog/.uploads/objects.log
 
 dry_run=0
 models=()
@@ -42,20 +46,26 @@ done
 ((${#models[@]})) || { echo "usage: scripts/catalog/upload.sh [--dry-run] <model>..." >&2; exit 2; }
 [[ "$dry_run" == 1 ]] || require_account upload
 origin=$(node -p 'require("./src/lib/catalog.json").origin')
+mkdir -p catalog/.uploads
+touch "$SENT"
 
-# One file of a build, its type from its name, cached for good; logged once it is up, so a rerun skips it.
+# One object, its type from its name, cached for good; logged once it is up, so a rerun skips it. A put that
+# fails (a slow link times one out) is tried twice more, a minute apart.
 put() {
-  local rel=$1 type=application/octet-stream out
-  [[ "$rel" == *.json ]] && type="application/json; charset=utf-8"
-  if out=$(wrangler r2 object put "$BUCKET/$MODEL/$BUILD/$rel" --file "catalog/$MODEL/$rel" --content-type "$type" --cache-control "$CACHE" --remote 2>&1); then
-    echo "$rel" >> "catalog/.uploads/$MODEL-$BUILD.log"
-  else
-    printf 'upload: %s/%s failed (rerun to resume):\n%s\n' "$MODEL" "$rel" "$(tail -5 <<< "$out")" >&2
-    return 1
-  fi
+  local object=$1 file=$2 type=application/octet-stream out try
+  [[ "$object" == *.json ]] && type="application/json; charset=utf-8"
+  for try in 1 2 3; do
+    if out=$(wrangler r2 object put "$BUCKET/$object" --file "$file" --content-type "$type" --cache-control "$CACHE" --remote 2>&1); then
+      if [[ "$object" == o/* ]]; then echo "${object#o/}" >> "$SENT"; fi
+      return 0
+    fi
+    [[ $try == 3 ]] || sleep 60
+  done
+  printf 'upload: %s (%s) failed three times (rerun to resume):\n%s\n' "$object" "$file" "$(tail -5 <<< "$out")" >&2
+  return 1
 }
 export -f put
-export BUCKET CACHE
+export BUCKET CACHE SENT
 
 if [[ "$dry_run" == 0 ]]; then
   wrangler r2 object put "$BUCKET/robots.txt" --file scripts/catalog/robots.txt --content-type "text/plain; charset=utf-8" \
@@ -65,27 +75,38 @@ fi
 for model in "${models[@]}"; do
   dir=catalog/$model
   [[ -f "$dir/index.json" ]] || { echo "upload: $dir is missing; build it first (AGENTS.md, The catalog)" >&2; exit 1; }
-  echo "upload: naming $model's build (hashing $(du -sh "$dir" | cut -f1))"
-  build=$(cd "$dir" && find . -type f ! -name '.*' -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 | cut -c1-12)
-  mkdir -p catalog/.uploads
-  log=catalog/.uploads/$model-$build.log
-  touch "$log"
-  (cd "$dir" && find . -type f ! -name '.*' | sed 's#^\./##' | LC_ALL=C sort) > "$WRANGLER_SCRATCH/all"
-  grep -vxF -f "$log" "$WRANGLER_SCRATCH/all" > "$WRANGLER_SCRATCH/left" || true
-  total=$(wc -l < "$WRANGLER_SCRATCH/all" | tr -d ' ')
+  echo "upload: hashing $model's build ($(du -sh "$dir" | cut -f1))"
+  # path → object, as the manifest; and the objects not up yet, as "object<TAB>file", one per object.
+  (cd "$dir" && find . -type f ! -name '.*' | sed 's#^\./##' | LC_ALL=C sort | tr '\n' '\0' | xargs -0 shasum -a 256) > "$WRANGLER_SCRATCH/sums"
+  node -e '
+    const fs = require("fs"), path = require("path"), [sums, sent, dir, manifestOut, leftOut] = process.argv.slice(1);
+    const up = new Set(fs.readFileSync(sent, "utf8").split("\n").filter(Boolean));
+    const manifest = {}, left = new Map();
+    for (const line of fs.readFileSync(sums, "utf8").split("\n").filter(Boolean)) {
+      const [hash, file] = [line.slice(0, 64), line.slice(66)];
+      const object = hash.slice(0, 20) + path.extname(file);
+      manifest[file] = object;
+      if (!up.has(object) && !left.has(object)) left.set(object, path.join(dir, file));
+    }
+    fs.writeFileSync(manifestOut, JSON.stringify(manifest));
+    fs.writeFileSync(leftOut, [...left].map(([o, f]) => `o/${o}\t${f}`).join("\n") + (left.size ? "\n" : ""));
+  ' "$WRANGLER_SCRATCH/sums" "$SENT" "$dir" "$WRANGLER_SCRATCH/manifest.json" "$WRANGLER_SCRATCH/left"
+  build=$(shasum -a 256 < "$WRANGLER_SCRATCH/manifest.json" | cut -c1-12)
+  total=$(wc -l < "$WRANGLER_SCRATCH/sums" | tr -d ' ')
   left=$(wc -l < "$WRANGLER_SCRATCH/left" | tr -d ' ')
-  bytes=$( (cd "$dir" && tr '\n' '\0' < "$WRANGLER_SCRATCH/left" | xargs -0 stat -f %z 2>/dev/null) | awk '{ s += $1 } END { printf "%.2f GB", s / 1e9 }')
-  echo "upload: $model build $build: $left of $total files to send, $bytes"
+  bytes=$(cut -f2 "$WRANGLER_SCRATCH/left" | tr '\n' '\0' | xargs -0 stat -f %z 2>/dev/null | awk '{ s += $1 } END { printf "%.2f GB", s / 1e9 }')
+  echo "upload: $model build $build: $total files, $left objects to send ($bytes); the rest are up already"
   [[ "$dry_run" == 1 ]] && continue
 
-  export MODEL=$model BUILD=$build
-  grep -vx index.json "$WRANGLER_SCRATCH/left" | tr '\n' '\0' | xargs -0 -n 1 -P "$JOBS" bash -c 'put "$1"' _
-  if grep -qx index.json "$WRANGLER_SCRATCH/left"; then put index.json; fi
+  tr '\t\n' '\0\0' < "$WRANGLER_SCRATCH/left" | xargs -0 -n 2 -P "$JOBS" bash -c 'put "$1" "$2"' _
+  put "$model/$build.json" "$WRANGLER_SCRATCH/manifest.json"
 
-  code=$(curl -s -o /dev/null -w '%{http_code}' "$origin/$model/$build/index.json")
-  [[ "$code" == 200 ]] || { echo "upload: $origin/$model/$build/index.json answers $code" >&2; exit 1; }
+  for path in "$model/$build.json" "o/$(node -p 'require(process.argv[1])["index.json"]' "$WRANGLER_SCRATCH/manifest.json")"; do
+    code=$(curl -s -o /dev/null -w '%{http_code}' "$origin/$path")
+    [[ "$code" == 200 ]] || { echo "upload: $origin/$path answers $code" >&2; exit 1; }
+  done
   node -e 'const fs = require("fs"), p = "src/lib/catalog.json", c = JSON.parse(fs.readFileSync(p, "utf8"));
     if (process.argv[1] === "lineage") c.lineage = process.argv[2]; else c.builds[process.argv[1]] = process.argv[2];
     fs.writeFileSync(p, JSON.stringify(c, null, 2) + "\n");' "$model" "$build"
-  echo "upload: $model is up at $origin/$model/$build/; src/lib/catalog.json names it: commit, push and deploy"
+  echo "upload: $model is up at $origin/$model/$build.json; src/lib/catalog.json names it: commit, push and deploy"
 done

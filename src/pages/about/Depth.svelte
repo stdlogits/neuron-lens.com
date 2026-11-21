@@ -17,7 +17,7 @@
   const sizes = $derived(labelled.filter((m) => m.family === model.family).map((m) => ({ value: m.id, label: m.size })));
   const setFamily = (family: string) => { const first = labelled.find((m) => m.family === family); if (first) modelId = first.id; };
 
-  let chosen = $state<Record<ModelId, string>>({ "qwen3-8b": "middle", "gemma-4-12b": "middle" });
+  let chosen = $state<Record<ModelId, string>>({ "qwen3-8b": "association", "gemma-4-12b": "association" });
   const band = $derived(model.bands.find((b) => b.key === chosen[modelId]) ?? model.bands[0]);
   const choose = (key: string) => { chosen[modelId] = key; };
 
@@ -36,10 +36,11 @@
 
 <Part id="depth" title="Depth" onnear={() => (wanted = true)}>
   {#snippet caption()}
-    <p>No one kind of evidence works everywhere. Each model's layers fall into three bands, by which lens works on each side of a neuron.</p>
-    <p>In early layers, the stream is mostly the input token, so the S-lens reads both what drives a neuron and what it writes.</p>
-    <p>In middle layers, a neuron still responds to the input token, but what it writes already moves the output, so the R-lens reads its write.</p>
-    <p>In late layers, the stream is mostly about the output, so the R-lens reads both sides. Many neurons there respond to wider context, and no single token says much about them: read the lenses alongside the firings.</p>
+    <p>No one kind of evidence works everywhere. Each model's layers fall into bands by which read its labels rest on: at each depth, the read two raters found most coherent, blind to the lens.</p>
+    <p>In sensory layers, the stream is mostly the input token, so the S-lens reads what drives a neuron: the literal token.</p>
+    <p>In association layers, the R-lens reads what drives it, but often as a concept associated with what it fires on, a style or a script, rather than those tokens: read it beside the firings.</p>
+    <p>In workspace layers, the R-lens reads both sides as concepts. Many neurons there respond to wider context, and no single token says much about them: read the lenses alongside the firings.</p>
+    <p>In motor layers, what a neuron writes often reads as the next word. At every depth the R-lens reads its write: what pushing the neuron makes the model say.</p>
   {/snippet}
   <div class="spec">
     <div class="pick">

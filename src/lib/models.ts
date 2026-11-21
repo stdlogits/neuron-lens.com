@@ -1,13 +1,13 @@
-// The models the explorer covers: their shape, and their depth bands. Every model has the same three (the
-// smaller Qwen3 models no early one: their writes read through the R-lens from L0),
-// set by which lens works on each side of its neurons (scripts/neurons/bands.py, from the neuron-lens
-// findings §3, §7 and §13): early layers read through the S-lens on both sides, middle layers still
-// read what drives a neuron through the S-lens but its write through the R-lens, and late layers read
-// both through the R-lens. The builder's profile holds the same layers and lights each read by them;
-// the words for each band live here: written out for Qwen3-8B and Gemma 4 12B, and for the other Qwen3
-// sizes made from their numbers in ladder.json (bands.py --ladder, which also says whether one is labelled). The explorer lists the
-// models with a build on R2 (catalog.json).
+// The models the explorer covers: their shape, and their depth bands. Every model's bands are neuron-lens's (its
+// reading plans, arch.PLANS; findings §8), which scripts/neurons/bands.py copies into depth.json with the numbers each
+// band's words cite: sensory layers, whose label cards read what drives a neuron through the S-lens (the literal token);
+// association layers, through the R-lens, which there often names a concept associated with what it fires on; workspace
+// layers; and motor layers, from where what a neuron writes often reads as the next word. A model's plan cuts all of
+// them or skips one (Gemma 4 has no sensory band, Qwen3-1.7B no workspace band). The builder lights each read by the same
+// plan. The other Qwen3 sizes' shapes are in ladder.json (bands.py, which also says whether one is labelled). The
+// explorer lists the models with a build on R2 (catalog.json).
 import catalog from "./catalog.json" with { type: "json" };
+import depth from "./depth.json" with { type: "json" };
 import ladder from "./ladder.json" with { type: "json" };
 
 export type ModelId = string;
@@ -17,7 +17,7 @@ export type Modality = "image" | "audio";
 export type BandRead = [read: string, shows: string];
 
 export interface BandInfo {
-  key: "early" | "middle" | "late";
+  key: "sensory" | "association" | "workspace" | "motor";
   first: number;
   last: number;
   name: string;
@@ -49,8 +49,6 @@ export interface ModelInfo {
   mlp: number;
   heads: number;
   bands: BandInfo[];
-  /** By depth: (last layer, the heading over a neuron's output read). */
-  writeVerbs: [number, string][];
   /** Every sixth layer of Gemma 4 attends globally; the others within a window. */
   globalLayers: number[];
   media: Modality[];
@@ -65,6 +63,44 @@ export interface ModelInfo {
   prunedInto?: ModelId;
 }
 
+/** A band in depth.json: its layers, and the spans of the numbers its words cite (bands.py). */
+interface DepthBand { key: BandInfo["key"]; first: number; last: number; read_s: number[]; read_r: number[]; next_r: number[]; write_r: number[] }
+
+const share = ([a, b]: number[]) => `${Math.max(0, Math.round(a * 100))}–${Math.max(0, Math.round(b * 100))}%`;
+const corr = ([a, b]: number[]) => `${a.toFixed(2)}–${b.toFixed(2)}`;
+/** What each band's label cards read, in words, with its numbers: in·S names the firing token, in·R an exact driver,
+ * out·R the next token, each for a share of the poles that fire, net of chance; and how closely out·R predicts what
+ * pushing a neuron does (median r). */
+const BAND_WORDS: Record<BandInfo["key"], (b: DepthBand) => Omit<BandInfo, "key" | "first" | "last">> = {
+  sensory: (b) => ({
+    name: "Sensory layers", short: "Sensory",
+    summary: "Neurons respond to the literal input token.",
+    reading: `in·S names the firing token for ${share(b.read_s)} of the poles that fire, and out·R predicts what pushing a neuron does (median r ${corr(b.write_r)}).`,
+    drives: ["S-lens", "the literal token"], writes: ["R-lens", "what steering does"],
+  }),
+  association: (b) => ({
+    name: "Association layers", short: "Association",
+    summary: "What drives a neuron reads as a concept near the tokens it fires on, more than as those tokens.",
+    reading: `in·R often names an associated concept, a style or a script rather than what a neuron fires on: it names an exact driver for ${share(b.read_r)} of the poles that fire, where in·S names the firing token for ${share(b.read_s)}. out·R predicts what pushing a neuron does (median r ${corr(b.write_r)}).`,
+    drives: ["R-lens", "an associated concept"], writes: ["R-lens", "what steering does"],
+  }),
+  workspace: (b) => ({
+    name: "Workspace layers", short: "Workspace",
+    summary: "What drives a neuron and what it writes both read as concepts.",
+    reading: `The R-lens reads both sides: in·R names an exact driver for ${share(b.read_r)} of the poles that fire, and out·R predicts what pushing a neuron does (median r ${corr(b.write_r)}).`,
+    drives: ["R-lens", "and the exact drivers"], writes: ["R-lens", "what steering does"],
+  }),
+  motor: (b) => ({
+    name: "Motor layers", short: "Motor",
+    summary: "What a neuron writes often reads as the next word.",
+    reading: `out·R names the next word for ${share(b.next_r)} of the poles that fire and predicts what pushing a neuron does (median r ${corr(b.write_r)}); in·R names an exact driver for ${share(b.read_r)}.`,
+    drives: ["R-lens", "and the exact drivers"], writes: ["R-lens", "the next word"],
+  }),
+};
+const DEPTH = depth as Record<ModelId, { bands: DepthBand[] }>;
+/** A model's bands, from neuron-lens's reading plan, in words. */
+const bandsOf = (id: ModelId): BandInfo[] => DEPTH[id].bands.map((b) => ({ key: b.key, first: b.first, last: b.last, ...BAND_WORDS[b.key](b) }));
+
 export const MODELS: Record<ModelId, ModelInfo> = {
   "qwen3-8b": {
     id: "qwen3-8b",
@@ -73,27 +109,7 @@ export const MODELS: Record<ModelId, ModelInfo> = {
     layers: 36,
     mlp: 12288,
     heads: 32,
-    bands: [
-      {
-        key: "early", first: 0, last: 3, name: "Early layers", short: "Early",
-        summary: "Neurons respond to the input token, and write back what they detect.",
-        reading: "The S-lens works on both sides: in·S names the firing token for 22–73% of the poles that fire, and out·S what the neuron writes back for 18–35%.",
-        drives: ["S-lens", "the literal token"], writes: ["S-lens", "what it detects, written back"],
-      },
-      {
-        key: "middle", first: 4, last: 8, name: "Middle layers", short: "Middle",
-        summary: "Neurons still respond to the input token, but what they write already moves the output.",
-        reading: "in·S names the firing token for 16–28% of poles, while out·R predicts what pushing the neuron does (median r 0.45–0.50).",
-        drives: ["S-lens", "the literal token"], writes: ["R-lens", "what steering does"],
-      },
-      {
-        key: "late", first: 9, last: 35, name: "Late layers", short: "Late",
-        summary: "Both what drives a neuron and what it writes read as output words.",
-        reading: "The R-lens works on both sides: in·R names what drives a neuron for 5–42% of poles, and out·R predicts what pushing it does (median r 0.57–1.00). From L23 out·R also names the next word, for 10–31% of poles; from L32 some neurons hold it back.",
-        drives: ["R-lens", "and the exact drivers"], writes: ["R-lens", "what steering does; the next word from L23"],
-      },
-    ],
-    writeVerbs: [[3, "Writes (weak this early)"], [20, "When pushed, it promotes"], [31, "It predicts the next word"], [35, "It predicts or holds back the next word"]],
+    bands: bandsOf("qwen3-8b"),
     globalLayers: [],
     media: [],
     examples: ["owl", "Bible", "she", "money", "圣经", "L20h17"],
@@ -107,27 +123,7 @@ export const MODELS: Record<ModelId, ModelInfo> = {
     layers: 48,
     mlp: 15360,
     heads: 16,
-    bands: [
-      {
-        key: "early", first: 0, last: 10, name: "Early layers", short: "Early",
-        summary: "Neurons respond to the input token. What they write is too small to read yet.",
-        reading: "in·S names the firing token for 5–86% of poles: most at L0–L1, fading by L9 and back at L10. Neither lens predicts what a push of natural size does (median r under 0.1).",
-        drives: ["S-lens", "the literal token, fading by L9"], writes: ["Nothing", "too weak to read"],
-      },
-      {
-        key: "middle", first: 11, last: 12, name: "Middle layers", short: "Middle",
-        summary: "Neurons still respond to the input token, but what they write already moves the output.",
-        reading: "in·S names the firing token for 29–44% of poles and out·S what they write back for 18–24%, while out·R predicts what pushing a neuron does (median r 0.39–0.40).",
-        drives: ["S-lens", "the literal token"], writes: ["R-lens", "what steering does"],
-      },
-      {
-        key: "late", first: 13, last: 47, name: "Late layers", short: "Late",
-        summary: "Both what drives a neuron and what it writes read as output words.",
-        reading: "The R-lens works on both sides: in·R names what drives a neuron for 11–54% of poles, and out·R predicts what pushing it does (median r 0.43–1.00). out·R also names the next word for 21–32% of poles at L33–L40.",
-        drives: ["R-lens", "and the exact drivers"], writes: ["R-lens", "what steering does; the next word at L33–40"],
-      },
-    ],
-    writeVerbs: [[10, "Writes (weak this early)"], [32, "When pushed, it promotes"], [47, "It predicts the next word"]],
+    bands: bandsOf("gemma-4-12b"),
     globalLayers: [5, 11, 17, 23, 29, 35, 41, 47],
     media: ["image", "audio"],
     examples: ["panda", "mosque", "Arabic", "rain", "熊猫", "L28h6"],
@@ -136,41 +132,14 @@ export const MODELS: Record<ModelId, ModelInfo> = {
   },
 };
 
-/** A Qwen3 size's profile in ladder.json, from its numbers (bands.py --ladder). */
-interface LadderBand { key: BandInfo["key"]; first: number; last: number; write_r: number[]; read_s: number[]; read_r: number[]; write_s: number[] }
-interface Ladder { name: string; hub: string; size: string; base: boolean; labelled: boolean; layers: number; mlp: number; heads: number; bands: LadderBand[]; late: number; self: number }
-
-const share = ([a, b]: number[]) => `${Math.round(a * 100)}–${Math.round(b * 100)}%`;
-const corr = ([a, b]: number[]) => `${a.toFixed(2)}–${b.toFixed(2)}`;
-const LADDER_BANDS: Record<BandInfo["key"], (b: LadderBand) => Omit<BandInfo, "key" | "first" | "last">> = {
-  early: (b) => ({
-    name: "Early layers", short: "Early",
-    summary: "Neurons respond to the input token, and write back what they detect.",
-    reading: `The S-lens works on both sides: in·S names the firing token for ${share(b.read_s)} of the poles that fire, and out·S what the neuron writes back for ${share(b.write_s)}.`,
-    drives: ["S-lens", "the literal token"], writes: ["S-lens", "what it detects, written back"],
-  }),
-  middle: (b) => ({
-    name: "Middle layers", short: "Middle",
-    summary: "Neurons still respond to the input token, but what they write already moves the output.",
-    reading: `in·S names the firing token for ${share(b.read_s)} of poles, while out·R predicts what pushing the neuron does (median r ${corr(b.write_r)}).`,
-    drives: ["S-lens", "the literal token"], writes: ["R-lens", "what steering does"],
-  }),
-  late: (b) => ({
-    name: "Late layers", short: "Late",
-    summary: "Both what drives a neuron and what it writes read as output words.",
-    reading: `The R-lens works on both sides: in·R names what drives a neuron for ${share(b.read_r)} of poles, and out·R predicts what pushing it does (median r ${corr(b.write_r)}).`,
-    drives: ["R-lens", "and the exact drivers"], writes: ["R-lens", "what steering does"],
-  }),
-};
+/** A Qwen3 size's profile in ladder.json (bands.py). */
+interface Ladder { name: string; hub: string; size: string; base: boolean; labelled: boolean; layers: number; mlp: number; heads: number; self: number }
 
 function fromLadder(id: ModelId, m: Ladder): ModelInfo {
-  const bands = m.bands.filter((b) => b.last >= b.first).map((b) => ({ key: b.key, first: b.first, last: b.last, ...LADDER_BANDS[b.key](b) }));
-  const early = bands.find((b) => b.key === "early");
   const at = (share: number) => Math.round(share * (m.layers - 1));
   return {
     id, name: m.name, family: "Qwen3", size: m.size, base: m.base, hub: m.hub, labelled: m.labelled,
-    layers: m.layers, mlp: m.mlp, heads: m.heads, bands,
-    writeVerbs: [...(early ? [[early.last, "Writes (weak this early)"] as [number, string]] : []), [m.late - 1, "When pushed, it promotes"], [m.layers - 1, "It predicts the next word"]],
+    layers: m.layers, mlp: m.mlp, heads: m.heads, bands: bandsOf(id),
     globalLayers: [], media: [], examples: [],
     start: { neurons: at(8 / 35), heads: at(20 / 35) },
     headCard: ["attends", "writes"],
@@ -222,9 +191,6 @@ export const COVERAGE = (() => {
 export const isModelId = (value: string | null): value is ModelId => value !== null && MODEL_ORDER.includes(value);
 
 export const bandOf = (model: ModelInfo, layer: number): BandInfo => model.bands.find((band) => layer <= band.last) ?? model.bands[model.bands.length - 1];
-const byDepth = (steps: [number, string][], layer: number) => (steps.find(([last]) => layer <= last) ?? steps[steps.length - 1])[1];
-/** How to phrase a neuron's output side at this depth: steering early, prediction late. */
-export const writeVerb = (model: ModelInfo, layer: number) => byDepth(model.writeVerbs, layer);
 export const bandRange = (band: BandInfo) => (band.first === band.last ? `L${band.first}` : `L${band.first}–${band.last}`);
 
 /** A layer's share of the deep end of the ramp, 0–100. */
