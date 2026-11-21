@@ -73,7 +73,7 @@ how often and how hard).
 A head has the same three: Weights holds its QK and OV reads with how it attends and copies, Stream what its own output says where it fires, and Firings also what it attends to and its attention pattern.
 A head's QK diagonal, a token at the query seeking an earlier copy of itself, is read twice: with the query through the S-lens
 (the token it holds: duplicate-token heads) and through the R-lens (the token it is about to say: copy suppression's lookup).
-Each model trusts the first up to a layer and the second from the next (`self` in the builder's profile, from neuron-lens findings §11 and §13).
+Each model trusts the first up to a layer and the second from the next (`self` in the builder's profile, from neuron-lens findings §10 and §15).
 Each read shows its normal list, or with the Distinctive switch beside English its layer-contrastive (z) list; a
 normal list left with nothing once hub tokens are gone shows its distinctive list instead (most of Stream's early reads).
 Every model's depth bands are neuron-lens's, cut from its reading plan (`arch.PLANS`, findings §8: which read a label card
@@ -87,7 +87,7 @@ quiet until pointed at, and comes last; so is a read the findings say fails on t
 Left is always what comes in and right what goes out. Beside them the rail holds its connections: a
 directed graph at true depth, and its strongest links in words. The graph opens at Near (only the units most
 of its flow passes through); Far and All follow it further. Wired to, driven by and fires with are
-three relations and stay three views (findings §17). A head has no wired to, because two heads meet through a matrix and not a dot product;
+three relations and stay three views (findings §12). A head has no wired to, because two heads meet through a matrix and not a dot product;
 what drives it is split over its three inputs, so its views are Value, Query, Key and Fires with.
 Each view but Fires with also shows the unit's siblings, beside it in its own row (a9's idea, 2026-11-17): units of its layer (heads for
 a head) that share both what feeds it and what it feeds in that view's relation. They are a kind of node, like what is above and below it,

@@ -2,7 +2,7 @@
   import type { HeadDetail, HeadMedia } from "../../lib/data";
   import { MODALITY_NAMES, type Modality } from "../../lib/models";
 
-  // A Gemma 4 head in image and sound contexts (findings §16), from 64 images and 64 sounds each
+  // A Gemma 4 head in image and sound contexts (findings §18), from 64 images and 64 sounds each
   // followed by its label: how much it reads the image or sound, whether zeroing it costs the model
   // the label, and whether what it writes names the label. Notable values stand in ink.
   let { head }: { head: HeadDetail } = $props();

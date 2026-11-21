@@ -18,7 +18,7 @@ does (``causal_lens_<model>.json``). It also rewrites the profiles in ``src/lib/
 Qwen3-8B, with any named), whose words are made from their numbers: geometry and whether it is labelled
 (``release_<model>.json``: labels of both sides among its released configs), and the one depth no check of its own
 measures yet, which takes Qwen3-8B's at the same relative depth: the last layer whose QK diagonal reads the query
-through the S-lens (§11, the 8B's L20).
+through the S-lens (§10, the 8B's L20).
 """
 import json
 import sys

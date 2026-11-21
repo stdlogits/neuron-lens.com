@@ -4,7 +4,7 @@
   import { MODALITY_NAMES, type Modality } from "../../lib/models";
   import { framePath, frameWav, play } from "./sound";
 
-  // The patch or 40 ms frame optimised to drive the side (findings §14), as the model met it: the patch
+  // The patch or 40 ms frame optimised to drive the side (findings §16), as the model met it: the patch
   // in every slot of an image, the frame in every slot of a sound. Its caption says whether it still
   // works on images or sounds it wasn't optimised on.
   let { modality, opt, i = 0 }: { modality: Modality; opt: Optimised; i?: number } = $props();

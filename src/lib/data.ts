@@ -43,7 +43,7 @@ export type NeuronColumn =
 export type HeadColumn =
   | "ov_R" | "ov_R_z" | "ov_R_neg" | "ov_R_neg_z" | "ov_S" | "ov_S_z" | "ov_S_neg" | "ov_S_neg_z"
   | "qk_S" | "qk_S_z" | "qk_S_neg" | "qk_S_neg_z" | "qk_self_S" | "qk_self_S_z" | "qk_self_R" | "qk_self_R_z";
-/** What a pole adds beyond what it reads: the write's reads with its gate and up rows removed (findings §18). */
+/** What a pole adds beyond what it reads: the write's reads with its gate and up rows removed (findings §6). */
 export type OrthColumn = "write_orth_R" | "write_orth_R_z" | "write_orth_S" | "write_orth_S_z";
 /** What the stream holds at a pole's firings: entering its MLP, written by its layer, and the model's next word. */
 export type StreamColumn =
@@ -96,7 +96,7 @@ export interface Pole {
   /** Gemma 4: what the pole responds to in images and sound. */
   media?: Partial<Record<Modality, PoleMedia>>;
 }
-/** Optimised read (findings §14): a patch or 40 ms frame that raises the pole, and its held-out gain over the base activation. */
+/** Optimised read (findings §16): a patch or 40 ms frame that raises the pole, and its held-out gain over the base activation. */
 export interface Optimised { gain: number | null; lens: number | null; base: number | null; png?: string; wave?: string }
 export interface PoleMedia {
   /** The label whose documents it fires on most, its z over all documents, and its held-out AUROC. */
@@ -111,7 +111,7 @@ export interface PoleMedia {
   /** The media R-lens read of its write: what it makes the model say in image or audio contexts. */
   write: LensToken[];
   writeZ: LensToken[];
-  /** The label's rank on the text side (findings §15): its words fire it, the text S-lens reads it, the text R-lens writes it. */
+  /** The label's rank on the text side (findings §17): its words fire it, the text S-lens reads it, the text R-lens writes it. */
   ranks: [number | null, number | null, number | null] | null;
   opt?: Optimised;
 }
@@ -142,7 +142,7 @@ export interface HeadDetail {
   /** Share of top firings on one query token, and on one attended token. */
   modes: [number, number];
   score: number;
-  /** Gemma 4: the head in image and audio contexts (findings §16). */
+  /** Gemma 4: the head in image and audio contexts (findings §18). */
   media?: Record<Modality, HeadMedia>;
 }
 /** Reading the media against an even spread; attention within it and to its neighbours; zeroing it, the z of what it costs the right label; the right class's mean percentile in its output, and that score's q. */

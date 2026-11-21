@@ -6,7 +6,7 @@
   import { sourceName } from "../../lib/media";
   import { MODALITY_NAMES, type Modality, type ModelId } from "../../lib/models";
 
-  // What one side of a Gemma 4 neuron responds to in images or in sound (findings §14): the label it
+  // What one side of a Gemma 4 neuron responds to in images or in sound (findings §16): the label it
   // fires on most, its top images or sounds (shown where their licence allows, linked otherwise), the
   // patch or frame optimised to drive it, and what it makes the model say after one.
   let { model, modality, media }: { model: ModelId; modality: Modality; media: PoleMedia } = $props();

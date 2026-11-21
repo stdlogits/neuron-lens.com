@@ -1,4 +1,4 @@
-// Gemma 4's image and sound collections (neuron-lens media_sets.py; findings §14), by the source name
+// Gemma 4's image and sound collections (neuron-lens media_sets.py; findings §16), by the source name
 // the catalog's documents carry.
 
 export const SOURCE_NAMES: Record<string, string> = {

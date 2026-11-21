@@ -65,7 +65,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 # Per model: its geometry; the reads the findings say fail on it at every depth; and
 # which lens a head's QK diagonal reads its query through (last layer, lens): the S-lens, a position
 # holding a token seeking an earlier copy (duplicate-token heads), then the R-lens, a position about
-# to say a token seeking an earlier copy (copy suppression's lookup; neuron-lens findings §11, §13:
+# to say a token seeking an earlier copy (copy suppression's lookup; neuron-lens findings §10, §15:
 # Qwen3-8B's is mixed at L21-L27 and clear from L28, Gemma 4's from L24).
 PROFILES = {
     "qwen3-8b": {
@@ -93,13 +93,13 @@ DEPTH = json.load(open(f"{LIB}/depth.json", encoding="utf-8"))
 
 KEEP_PER_LAYER = 40
 DOC_BLOCK = 2048
-K = 16  # connections a unit keeps per relation (the catalog keeps 64, findings §17)
+K = 16  # connections a unit keeps per relation (the catalog keeps 64, findings §12)
 PACK = 20 * 2**20  # a units pack's size at most: the edge fetches a pack whole for its first range, then cuts from its copy
 SEARCH_PACK = 4 * 2**20  # a postings pack's size, unless one word's postings are larger: small, so a cold first read is quick
-HUB = 0.03  # a raw read's token in this share of the layer's top 64s is a hub (neuron-lens §6)
+HUB = 0.03  # a raw read's token in this share of the layer's top 64s is a hub (neuron-lens §7)
 Q = 0.05  # a media test passes at this q-value
 SILENT = 0.05  # a pole whose typical peak is under this is silent
-CROSS = 0.95  # a cross-modal rank past this passes (findings §15)
+CROSS = 0.95  # a cross-modal rank past this passes (findings §17)
 NEURON_READS = ["read_S", "read_S_z", "read_R", "read_R_z", "write_S", "write_S_z", "write_R", "write_R_z"]
 HEAD_READS = ["ov_R", "ov_R_z", "ov_R_neg", "ov_R_neg_z", "ov_S", "ov_S_z", "ov_S_neg", "ov_S_neg_z",
               "qk_S", "qk_S_z", "qk_S_neg", "qk_S_neg_z", "qk_self_S", "qk_self_S_z", "qk_self_R", "qk_self_R_z"]
@@ -108,8 +108,8 @@ ORTH_READS = ["write_orth_R", "write_orth_R_z", "write_orth_S", "write_orth_S_z"
 STREAM_READS = ["before_R_z", "before_R", "before_S_z", "before_S", "mlp_R_z", "mlp_R", "mlp_S_z", "mlp_S", "pred_z", "pred"]
 WEIGHT_READ_OF = {"before_R": "read_R", "before_S": "read_S", "mlp_R": "write_R", "mlp_S": "write_S",
                   "write_orth_R": "write_R", "write_orth_S": "write_S"}
-# Head roles, at the thresholds of neuron-lens's attention patterns (findings §11), and Gemma 4's in
-# images (checks/head_media.py, findings §16).
+# Head roles, at the thresholds of neuron-lens's attention patterns (findings §10), and Gemma 4's in
+# images (checks/head_media.py, findings §18).
 (ROLE_INDUCTION, ROLE_DUPLICATE, ROLE_PREVIOUS, ROLE_SELF, ROLE_SINK, ROLE_CARRIES, ROLE_NAMES) = (1 << k for k in range(7))
 # Neuron flags.
 (FLAG_DETECTOR, FLAG_PREDICTS, FLAG_SUPPRESSES, FLAG_PLUS_WRITES, FLAG_MINUS_WRITES,
@@ -471,7 +471,7 @@ def optimised(modality):
 
 
 def media_layer(L, modality, opt):
-    """Per row of the layer: the pole's media evidence (findings §14, §15), or None."""
+    """Per row of the layer: the pole's media evidence (findings §16, §17), or None."""
     t = table_or_none(f"{catalog}/neurons/{modality}/L{L:02d}.parquet", ["neuron", "pole", *MEDIA_COLS])
     if t is None:
         return None
