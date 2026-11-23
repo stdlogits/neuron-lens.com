@@ -32,11 +32,15 @@ const EMBED = true;                   // every unit's page carries Discord's emb
 const LINKS = 128, PER = 16, ENTRY = 6, DRIVEN = 2, DRIVES = 3;   // a pole's record: where its links start, and which lists (src/lib/data.ts, wireOf)
 const SILENT = "near-silent neuron";
 const PICTURE = /^\/card(\/circuit)?(\/[a-z0-9.-]+\/L\d{1,2}\/[nh]\d{1,5})\.webp$/;
-const DRAWN = 2;                      // the card's look or encoding: raise it when either changes, and every card is drawn again
+const DRAWN = 3;                      // the card's look or encoding: raise it when either changes, and every card is drawn again
 const DRAW = 7500;                    // ms a picture's request waits to be drawn; past it the site's card goes out, this once
 const TAKES = 3000;                   // ms a drawing usually takes, for judging whether a busy browser's turn comes in time
+const LAST = 27000;                   // ms a drawing may take from its request, every try and wait and keeping it: waitUntil holds on 30 s past the response, which goes out no sooner
+const FAILED = 10 * 60 * 1000;        // ms a failed drawing is remembered, the site's card going out meanwhile, so a unit that can't be drawn isn't tried on every request
 const KEEP = 60 * 24 * 3600;          // s a picture is kept: a unit shared again after that is drawn again, and old builds' pictures go by themselves
 const BLANK = 16000;                  // bytes: a drawn card is four times this or more; a page photographed before it drew is a tenth
+const VERSION = /^\d+(-[0-9a-f]{12}){1,2}$/;   // a picture's version (versionOf): its look, then one build or two
+const BOTS = /bot|crawl|spider|slurp|preview|facebookexternalhit|facebot|embedly|whatsapp|telegram|slack|discord|twitter|linkedin|skype|iframely|vkshare|pinterest|reddit|applebot|google|bing|duckduck|yandex|baidu|petal|mastodon|bluesky|bsky|headless|lighthouse|ia_archiver|semrush|ahrefs/i;
 
 export default {
   async fetch(request, env, context) {
@@ -48,11 +52,26 @@ export default {
     if (!unit || page.status !== 200 || !(page.headers.get("content-type") ?? "").includes("text/html")) return page;
     // With ?card the address is the card itself, which the hosted browser opens: it needs no words, only to draw soon.
     if (url.searchParams.has("card")) return ahead(page, unit, context, url.searchParams.get("card") === "circuit");
+    // A person's browser opening the page needs none of the words (the explorer sets its own title), and would wait
+    // for the catalog to get them, so it gets the page at once. Link previews and crawlers send no Sec-Fetch-Dest or
+    // say what they are (iMessage's says facebookexternalhit and Twitterbot).
+    if (request.headers.get("sec-fetch-dest") === "document" && !BOTS.test(request.headers.get("user-agent") ?? "")) return first(page, unit, context);
     try {
       // Discord shows nothing at all for an embed it won't take, so a change to it can be tried on an address of its own first.
       const embedded = EMBED || url.searchParams.has("discord");
-      const has = (circuit) => (draws(env) ? keptCard(env, unit, circuit).then((body) => (void body?.cancel(), body !== null), () => false) : false);
-      const [words, kept, wired] = await Promise.all([describe(unit, AbortSignal.timeout(WAIT)), has(false), embedded && has(true)]);
+      const has = async (circuit) => {
+        if (!draws(env)) return false;
+        const key = keyOf(unit, circuit);
+        if (known.has(key)) return true;
+        const body = await keptCard(env, unit, circuit).catch(() => null);
+        if (!body) return false;
+        void body.cancel();
+        known.add(key);
+        return true;
+      };
+      const [words, kept] = await Promise.all([describe(unit, AbortSignal.timeout(WAIT)), has(false)]);
+      // The card of its connections is asked about after, and only for a unit that has some to draw.
+      const wired = embedded && words.embed.circuit && (await has(true));
       // A picture not kept yet is named at an address of its own: whoever asks may get the site's card in its place
       // (below) and keep that under the address, which the unit's own card then never has to get past.
       const named = (circuit, there) => `${url.origin}/card${circuit ? "/circuit" : ""}${pathOf(unit)}.webp?v=${versionOf(unit)}${there ? "" : "-new"}`;
@@ -67,7 +86,8 @@ export default {
 /** The unit an address names, as the explorer's router reads it (src/lib/router.svelte.ts), or null. */
 function unitAt(pathname) {
   const match = pathname.match(UNIT);
-  const model = match && SITE.models[match[1]];
+  // (Its own models only: /constructor/L0/n0 would find Object's.)
+  const model = match && Object.hasOwn(SITE.models, match[1]) ? SITE.models[match[1]] : null;
   if (!model) return null;
   const layer = Number(match[2]), index = Number(match[4]), kind = match[3];
   if (layer >= model.layers || index >= (kind === "h" ? model.heads : model.mlp)) return null;
@@ -113,12 +133,17 @@ const pad = (value) => String(value).padStart(2, "0");
 // ---------- the words
 
 const bytes = (text) => new TextEncoder().encode(text).length;
-/** Cut to a number of bytes at a word's end. */
+/** Cut to a number of bytes at a word's end, by whole characters: within a word only where going back to the last
+ *  word's end would leave too little (a long token, or a language written without spaces). */
 function cut(text, most) {
   if (bytes(text) <= most) return text;
-  let out = text;
-  while (bytes(`${out}…`) > most) out = out.slice(0, -1);
-  return `${out.replace(/\s+\S*$/, "").replace(/[;:,.(]+$/, "")}…`;
+  let out = "", room = most - bytes("…");
+  for (const character of text) {
+    if ((room -= bytes(character)) < 0) break;
+    out += character;
+  }
+  const words = /^\s/.test(text.slice(out.length)) ? out : out.replace(/\s+\S*$/, "");
+  return `${(bytes(words) >= 0.7 * most ? words : out).replace(/[\s;:,.(]+$/, "")}…`;
 }
 const lower = (text) => text.charAt(0).toLowerCase() + text.slice(1);
 const tidy = (text) => text.replace(/⏎/g, " ").replace(/<\|[^|]*\|>/g, " ").replace(/�/g, "").replace(/\s+/g, " ");
@@ -200,13 +225,9 @@ async function describe({ id, model, layer, kind, index }, signal) {
     if (got[0].size !== WIRE * 2 * model.mlp) throw new Error("graph.bin: another record size");
     const poles = got.map((pole) => record(pole.bytes));
     const [{ pack, offset, length }] = poles;
-    // Its own connections, not its lender's: the strongest two that drive each side and that each drives, by name.
+    // The names of its connections wait no longer than this from here, the detail that says which side is shown and all.
     const soon = AbortSignal.any([signal, AbortSignal.timeout(WIRED)]);
-    const wired = lent ? [[], []] : got.map((pole) => [DRIVEN, DRIVES].map((list) => links(pole.bytes, list, model).slice(0, 2).map((link) => named(link, id, source, model, soon))));
-    const [detail] = await Promise.all([
-      length ? range(await objectUrl(source, `neurons/L${pad(layer)}/units-${pad(pack)}.bin`, signal), offset, length, signal).then((packed) => inflate(packed.bytes)).then(JSON.parse) : null,
-      Promise.allSettled(wired.flat(2)),
-    ]);
+    const detail = length ? await range(await objectUrl(source, `neurons/L${pad(layer)}/units-${pad(pack)}.bin`, signal), offset, length, signal).then((packed) => inflate(packed.bytes)).then(JSON.parse) : null;
     // The explorer opens a neuron on its clearer side.
     const at = detail && detail.poles[1].score > detail.poles[0].score && !detail.poles[1].silent ? 1 : 0;
     const pole = detail?.poles[at], label = pole?.label ?? {}, shown = poles[at], other = poles[1 - at];
@@ -227,7 +248,8 @@ async function describe({ id, model, layer, kind, index }, signal) {
       const context = lent ? null : pole?.contexts?.[0], example = firing(context);
       if (example) lines.push([`e.g. ${example}`, true]), body.push([`> ${firing(context, MARKS)}`, true]);
       if (label.writes) lines.push([`Makes the model say: ${label.writes}`]), body.push([`**Makes the model say** ${md(label.writes)}`]);
-      const lists = await Promise.all((wired[at] ?? []).map(async (list) => (await Promise.allSettled(list)).filter((row) => row.status === "fulfilled" && row.value).map((row) => row.value)));
+      // Its own connections on the side shown, not its lender's: the strongest two that drive it and that it drives, by name.
+      const lists = lent ? [] : await Promise.all([DRIVEN, DRIVES].map(async (list) => (await Promise.allSettled(links(got[at].bytes, list, model).slice(0, 2).map((link) => named(link, id, source, model, soon)))).filter((row) => row.status === "fulfilled" && row.value).map((row) => row.value)));
       wiring = [["Driven by", lists[0]], ["Drives", lists[1]]].filter(([, rows]) => rows?.length).map(([title, rows]) => `**${title}**\n${rows.join("\n")}`).join("\n");
     }
     if (other.title && !other.silent) lines.push([`${at ? "+" : "−"} side: ${other.title}`, true]), foot = `${at ? "＋" : "−"} side: ${md(other.title)} · `;
@@ -333,90 +355,149 @@ const pathOf = ({ id, layer, kind, index }) => `/${id}/L${layer}/${kind}${index}
 /** What a unit's card was drawn from: the card's look and the builds it reads (its own and, for a base model, the
  *  one its labels come from). Another of either is another picture, at another address and under another key. */
 const versionOf = ({ id, model }) => [DRAWN, SITE.builds[id], model.labels && model.labels !== id ? SITE.builds[model.labels] : ""].filter(Boolean).join("-");
-const keyOf = (unit, circuit = false) => `${versionOf(unit)}${circuit ? "/circuit" : ""}${pathOf(unit)}.webp`;
+const keyOf = (unit, circuit = false, version = versionOf(unit)) => `${version}${circuit ? "/circuit" : ""}${pathOf(unit)}.webp`;
 /** A unit's kept picture as a stream (to send, or to cancel when only asking whether there is one: KV has no other
  *  way to ask), or null. */
 const keptCard = (env, unit, circuit = false) => env.CARDS.get(keyOf(unit, circuit), "stream");
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+
+// What this isolate knows, by key: the pictures known to be kept (one stays kept for KEEP, longer than any isolate
+// lives, so a page asks KV about each once here), the drawings under way (every request for one waits on the same
+// drawing) and when a drawing last failed.
+const known = new Set(), drawings = new Map(), failed = new Map();
 
 async function picture(request, env, context, url) {
   const [, wired, path] = url.pathname.match(PICTURE) ?? [], circuit = Boolean(wired);
   const unit = path && (request.method === "GET" || request.method === "HEAD") ? unitAt(path) : null;
   if (!unit) return new Response("No such card.\n", { status: 404, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
   const drawn = (body, keep = "public, max-age=31536000, immutable") => new Response(body, { headers: { "content-type": "image/webp", "cache-control": keep, "x-content-type-options": "nosniff" } });
+  const site = async (keep) => {
+    const card = await env.ASSETS.fetch(new URL("/card.webp", url));
+    const headers = new Headers(card.headers);
+    headers.set("cache-control", keep);
+    return new Response(card.body, { status: card.status, headers });
+  };
   // Another card under this address, for now, kept by no one, so the unit's own takes its place once drawn: for its
   // circuit, the card of what it is, if that is already kept; else the site's card.
   const instead = async () => {
     const other = circuit && draws(env) ? await keptCard(env, unit).catch(() => null) : null;
-    if (other) return drawn(other, "no-store");
-    const card = await env.ASSETS.fetch(new URL("/card.webp", url));
-    const headers = new Headers(card.headers);
-    headers.set("cache-control", "no-store");
-    return new Response(card.body, { status: card.status, headers });
+    return other ? drawn(other, "no-store") : site("no-store");
   };
   try {
     if (!draws(env)) return await instead();
+    // The address names the version it shows (versionOf; with -new while not kept). Only this build's and look's is
+    // ever drawn; an older one is its picture while KV still keeps it, and else the site's card, for good. (Four
+    // hours, as the site's images ask: the zone's browser cache raises less to that.)
+    const version = versionOf(unit), asked = (url.searchParams.get("v") ?? "").replace(/-new$/, "");
+    if (asked !== version) {
+      const old = VERSION.test(asked) ? await env.CARDS.get(keyOf(unit, circuit, asked), "stream") : null;
+      return old ? drawn(old) : await site("public, max-age=14400");
+    }
     const key = keyOf(unit, circuit), kept = await keptCard(env, unit, circuit);
-    if (kept) return drawn(kept);
-    // Drawn here, and kept whether or not this request waits for it (it goes out as soon as it is drawn, and is put
-    // away after). A busy browser (it takes one request every ten seconds on the free plan, so two new units shared
-    // together collide) is asked again when it says its turn comes, twice at most: within this request if that still
-    // leaves time to draw, and otherwise behind it, `late` letting the site's card go out at once.
-    let late;
-    const turned = new Promise((resolve) => { late = resolve; });
-    const page = `${url.origin}${pathOf(unit)}?${circuit ? "card=circuit" : unit.kind === "n" ? "all&card" : "card"}`, asked = Date.now();
-    const drawing = (async () => {
-      for (let tries = 0; ; tries += 1) {
-        const shot = await photograph(env, page);
-        if (shot.bytes) return shot.bytes;
-        if (!shot.again || tries === 2) throw new Error(shot.error ?? "the hosted browser stayed busy");
-        if (Date.now() - asked + shot.again + TAKES > DRAW) late();
-        await sleep(shot.again);
-      }
-    })();
-    context.waitUntil(drawing.then((bytes) => env.CARDS.put(key, bytes, { expirationTtl: KEEP })).catch((error) => console.log(`card ${key}: ${error.message}`)));
-    const bytes = await Promise.race([drawing.catch(() => null), turned.then(() => null), sleep(DRAW).then(() => null)]);
+    if (kept) {
+      known.add(key);
+      return drawn(kept);
+    }
+    // A HEAD only asks what there is, and a unit whose drawing failed lately isn't tried again yet.
+    if (request.method === "HEAD" || Date.now() - (failed.get(key) ?? 0) < FAILED) return await instead();
+    let drawing = drawings.get(key);
+    if (!drawing) {
+      drawing = draw(env, `${url.origin}${pathOf(unit)}?${circuit ? "card=circuit" : unit.kind === "n" ? "all&card" : "card"}`);
+      drawings.set(key, drawing);
+      // Kept whether or not any request waits for it (it goes out as soon as it is drawn, and is put away after).
+      context.waitUntil(drawing.bytes
+        .then(async (bytes) => {
+          await env.CARDS.put(key, bytes, { expirationTtl: KEEP });
+          known.add(key);
+        })
+        .catch((error) => {
+          failed.set(key, Date.now());
+          console.log(`card ${key}: ${error.message}`);
+        })
+        .finally(() => drawings.delete(key)));
+    }
+    const bytes = await Promise.race([drawing.bytes.catch(() => null), drawing.turned.then(() => null), sleep(DRAW).then(() => null)]);
     return bytes ? drawn(bytes) : await instead();
   } catch {
     return instead();
   }
 }
 
+/** A drawing of the card page: its bytes, once drawn; and `turned`, settled when a busy browser's turn comes too
+ *  late for a request to wait on it. A busy browser (it takes one request every ten seconds on the free plan, so two
+ *  new units shared together collide) is asked again when it says its turn comes, twice at most, and only while that
+ *  leaves time to draw before LAST. */
+function draw(env, page) {
+  const asked = Date.now(), until = asked + LAST;
+  let late;
+  const turned = new Promise((resolve) => { late = resolve; });
+  const bytes = (async () => {
+    for (let tries = 0; ; tries += 1) {
+      const shot = await photograph(env, page, AbortSignal.timeout(until - Date.now()));
+      if (shot.bytes) return shot.bytes;
+      if (!shot.again || tries === 2) throw new Error(shot.error ?? "the hosted browser stayed busy");
+      if (Date.now() + shot.again + TAKES > until) throw new Error("the hosted browser's turn comes too late to draw and keep the card");
+      if (Date.now() - asked + shot.again + TAKES > DRAW) late();
+      await sleep(shot.again);
+    }
+  })();
+  return { bytes, turned };
+}
+
 /** The card page with its needs named ahead of it, so the browser fetches them while the page's script is still on
  *  its way: the card's own chunk and style (behind a dynamic import), the build's manifest, and the catalog files a
  *  card reads first, which the page could only ask for once the script, the chunk and the manifest were all in,
  *  one after another. (The files by name only where this worker already holds the build's manifest; else it fetches
- *  it for the next card.) Measured on a neuron's card, it is drawn in about half the time. */
+ *  it for the next card.) Measured on a neuron's card, it is drawn in about half the time. They are named in the
+ *  page's head, first thing after its charset, and not in a Link header: Cloudflare keeps a page's Link header and
+ *  sends it as an Early Hint to everyone who opens that unit, who would then fetch the card's files for nothing. */
 function ahead(page, unit, context, circuit) {
-  const { id, kind, layer } = unit, fetched = (url) => `<${url}>; rel=preload; as=fetch; crossorigin`;
+  const { id, kind, layer } = unit, fetched = (url) => `<link rel="preload" as="fetch" crossorigin href="${url}">`;
   // (The style as Vite's loader will ask for it, without credentials, or the browser fetches it a second time.)
-  const links = SITE.card.map((path) => (path.endsWith(".js") ? `<${path}>; rel=modulepreload` : `<${path}>; rel=preload; as=style; crossorigin`));
+  const links = SITE.card.map((path) => (path.endsWith(".js") ? `<link rel="modulepreload" href="${path}">` : `<link rel="preload" as="style" crossorigin href="${path}">`));
   links.push(fetched(`${SITE.catalog}/${id}/${SITE.builds[id]}.json`));
   const manifest = manifests.get(id);
   // (A neuron's circuit has no atlas, so neither every neuron's score nor its layer's list; its links are read by range.)
   const files = kind === "h" ? ["index.json", "vocab.json", "heads/index.json", `heads/L${pad(layer)}.json`] : circuit ? ["index.json", "vocab.json"] : ["index.json", "vocab.json", "scores.json", `neurons/L${pad(layer)}/index.json`];
   if (manifest) links.push(...files.filter((path) => manifest[path]).map((path) => fetched(`${SITE.catalog}/o/${manifest[path]}`)));
   else context.waitUntil(objectUrl(id, files[0], AbortSignal.timeout(WAIT)).catch(() => {}));
-  const headers = new Headers(page.headers);
-  headers.append("link", links.join(", "));
-  return new Response(page.body, { status: page.status, headers });
+  return new HTMLRewriter().on("meta[charset]", { element(element) { element.after(links.join(""), { html: true }); } }).transform(page);
+}
+
+/** A person's page with the catalog files the explorer reads first named in its head, so the browser fetches them while
+ *  the script loads rather than after it runs (the vocabulary is the most of a first visit). Only what this isolate
+ *  already knows is named, so the page never waits: a manifest not known yet is named itself, and read for the next. */
+function first(page, unit, context) {
+  const { id, model } = unit, fetched = (url) => `<link rel="preload" as="fetch" crossorigin href="${url}">`;
+  const builds = [[id, ["index.json", "vocab.json", "heads/index.json"]]];
+  if (model.labels && model.labels !== id && SITE.builds[model.labels]) builds.push([model.labels, ["index.json"]]);
+  const links = [];
+  for (const [build, files] of builds) {
+    links.push(fetched(`${SITE.catalog}/${build}/${SITE.builds[build]}.json`));
+    const manifest = manifests.get(build);
+    if (manifest) links.push(...files.filter((path) => manifest[path]).map((path) => fetched(`${SITE.catalog}/o/${manifest[path]}`)));
+    else context.waitUntil(objectUrl(build, files[0], AbortSignal.timeout(WAIT)).catch(() => {}));
+  }
+  return new HTMLRewriter().on("meta[charset]", { element(element) { element.after(links.join(""), { html: true }); } }).transform(page);
 }
 
 /** The hosted browser's photograph of a page, taken once the page says it is drawn (LinkCard.svelte's data-card):
  *  its bytes; or how long to wait before asking again, when the browser takes no request yet; or why there is none.
  *  The photograph must be more than an empty page's: a browser that didn't wait for the page's word (Cloudflare's
  *  own playground doesn't) would photograph a blank page, and that is never kept as a unit's card. */
-async function photograph(env, page) {
-  const response = await fetch(`${env.BROWSER_API ?? "https://api.cloudflare.com/client/v4"}/accounts/${env.BROWSER_ACCOUNT}/browser-run/screenshot`, {
+async function photograph(env, page, signal) {
+  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.BROWSER_ACCOUNT}/browser-run/screenshot`, {
     method: "POST",
     headers: { authorization: `Bearer ${env.BROWSER_TOKEN}`, "content-type": "application/json" },
     body: JSON.stringify({
       url: page,
       viewport: { width: 1200, height: 630, deviceScaleFactor: 2 },
-      waitForSelector: { selector: '[data-card="drawn"]', timeout: 15000 },
+      // Or until it says it can't draw (LinkCard.svelte): the photograph then tells nothing of which it was, so a page
+      // that failed is known by its size, as a blank one is (BLANK).
+      waitForSelector: { selector: '[data-card="drawn"], [data-card="failed"]', timeout: 15000 },
       screenshotOptions: { type: "webp", quality: 75 },
     }),
-    signal: AbortSignal.timeout(25000),
+    signal,
   });
   if (response.ok && (response.headers.get("content-type") ?? "").startsWith("image/")) {
     const bytes = await response.arrayBuffer();

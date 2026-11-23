@@ -99,6 +99,17 @@ for model in "${models[@]}"; do
   [[ "$dry_run" == 1 ]] && continue
 
   tr '\t\n' '\0\0' < "$WRANGLER_SCRATCH/left" | xargs -0 -n 2 -P "$JOBS" bash -c 'put "$1" "$2"' _
+  # The log says what was sent, not what is still there (old builds' objects may have been deleted since): every
+  # object the manifest names must answer before the manifest goes up. One that doesn't leaves the log, to be sent
+  # on the next run.
+  node -p 'Object.values(require(process.argv[1])).filter((o, i, all) => all.indexOf(o) === i).join("\n")' "$WRANGLER_SCRATCH/manifest.json" \
+    | xargs -P 16 -I{} sh -c 'code=$(curl -s -o /dev/null -I -w "%{http_code}" "$0/o/{}"); [ "$code" = 200 ] || echo "{}"' "$origin" > "$WRANGLER_SCRATCH/gone"
+  if [[ -s "$WRANGLER_SCRATCH/gone" ]]; then
+    grep -vxF -f "$WRANGLER_SCRATCH/gone" "$SENT" > "$WRANGLER_SCRATCH/sent" || true
+    mv "$WRANGLER_SCRATCH/sent" "$SENT"
+    echo "upload: $(wc -l < "$WRANGLER_SCRATCH/gone" | tr -d ' ') objects $model names aren't on R2 (deleted since they were sent); rerun to send them" >&2
+    exit 1
+  fi
   put "$model/$build.json" "$WRANGLER_SCRATCH/manifest.json"
 
   for path in "$model/$build.json" "o/$(node -p 'require(process.argv[1])["index.json"]' "$WRANGLER_SCRATCH/manifest.json")"; do

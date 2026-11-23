@@ -239,7 +239,8 @@ function unfurlWorker(card: string[]): string {
   const builds = Object.fromEntries(MODEL_ORDER.map((id) => [id, (catalog.builds as Record<string, string>)[id]]));
   const source = readFileSync(new URL("./unfurl.js", import.meta.url), "utf8"), slot = "/*SITE*/null";
   if (source.split(slot).length !== 2) throw new Error(`scripts/site/unfurl.js: expected one ${slot}`);
-  return source.replace(slot, JSON.stringify({ name: SITE_NAME, origin: ORIGIN, picture: CARD.url, catalog: catalog.origin, builds, models, card }));
+  // (A function, so a $& or $' in the JSON stays as it is.)
+  return source.replace(slot, () => JSON.stringify({ name: SITE_NAME, origin: ORIGIN, picture: CARD.url, catalog: catalog.origin, builds, models, card }));
 }
 
 /** Which addresses reach unfurl.js: a neuron's or a head's, in each model, and a unit's picture (/card/…). Every
@@ -267,8 +268,10 @@ export function siteMeta(): Plugin {
     },
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        const file = FILES[(req.url ?? "").split("?")[0].slice(1)];
-        if (!file) return next();
+        const name = (req.url ?? "").split("?")[0].slice(1);
+        // (Its own files only: /constructor would find Object's.)
+        if (!Object.hasOwn(FILES, name)) return next();
+        const file = FILES[name];
         res.setHeader("Content-Type", file.type);
         res.end(file.make());
       });

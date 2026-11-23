@@ -30,9 +30,11 @@ while (($#)); do
   shift
 done
 
+# Wrangler's account and sign-in (scripts/wrangler.sh) come in only once the site is built, so no install script or
+# Vite plugin runs with the token in its environment. A missing account is still refused first, from a subshell
+# that keeps them to itself.
 # shellcheck source=wrangler.sh
-source scripts/wrangler.sh
-[[ "$dry_run" == 1 ]] || require_account deploy
+[[ "$dry_run" == 1 ]] || (source scripts/wrangler.sh && require_account deploy)
 
 # The upload records HEAD as its commit, so HEAD must be committed and on origin/main. A dry run
 # only warns.
@@ -76,6 +78,9 @@ echo "deploy: dist has $files files, $(du -sh dist | cut -f1), none over 25 MiB"
 
 [[ "$dry_run" == 1 ]] && exit 0
 
+# shellcheck source=wrangler.sh
+source scripts/wrangler.sh
+require_account deploy
 echo "deploy: signing in with $WRANGLER_SIGNIN"
 wrangler pages deploy dist --project-name neuron-lens --branch main \
   --commit-hash "$rev" --commit-message "$(git log -1 --format=%s)" --commit-dirty=false
