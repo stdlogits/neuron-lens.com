@@ -449,6 +449,40 @@ test("the baskets sort a head's evidence the same way", async ({ page }) => {
   await expect(page.locator("#firings")).toBeInViewport();
 });
 
+// The unit and its connections by the width there is (Explorer.svelte's panes): narrow, the unit first and its
+// connections after it, a tap away from the basket bar; from 736 px of explorer, the connections on the left beside it,
+// following the page as it scrolls.
+for (const [width, beside] of [[390, false], [768, false], [1024, true], [1280, true]] as const) {
+  test(`at ${width} px the unit and its connections stand ${beside ? "side by side" : "one above the other, the unit first"}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/qwen3-8b/L8/n344");
+    const baskets = page.getByRole("navigation", { name: "Baskets" }).getByRole("button");
+    await expect(baskets).toHaveText(beside ? ["Weights", "Stream", "Firings"] : ["Weights", "Stream", "Firings", "Connections"]);
+    const unit = (await page.locator("#unit").boundingBox())!;
+    const rail = (await page.getByRole("complementary", { name: "Connections" }).boundingBox())!;
+    if (beside) {
+      expect(rail.x + rail.width).toBeLessThan(unit.x);
+      expect(Math.abs(rail.y - unit.y)).toBeLessThan(2);
+    } else expect(rail.y).toBeGreaterThan(unit.y + unit.height - 1);
+  });
+}
+
+test("on a phone the basket bar's last stop is the unit's connections", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/qwen3-8b/L8/n344");
+  await page.getByRole("navigation", { name: "Baskets" }).getByRole("button", { name: "Connections" }).click();
+  await expect(page.getByRole("complementary", { name: "Connections" })).toBeInViewport();
+});
+
+test("beside the unit its connections keep in view as the page scrolls down to the unit's last basket", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await page.goto("/qwen3-8b/L8/n344");
+  await settle(page);
+  await page.locator("#firings").scrollIntoViewIfNeeded();
+  await page.mouse.wheel(0, 400);
+  await expect(page.getByRole("complementary", { name: "Connections" })).toBeInViewport();
+});
+
 test("Distinctive swaps each read for its version against the layer, and is remembered", async ({ page }) => {
   await page.goto("/qwen3-8b/L8/n344");
   const distinctive = page.getByRole("switch", { name: "Distinctive" });

@@ -118,9 +118,18 @@
   .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s4); min-width: 0; }
   .left { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s5); }
   .filters { min-width: 0; max-width: 100%; }
-  .panes { display: flex; flex-wrap: wrap; align-items: start; gap: var(--s7); scroll-margin-top: var(--s5); }
-  /* On a phone the chosen unit comes first, under the atlas; its connections follow it. */
-  @media (max-width: 720px) { .panes > :global(aside.rail) { order: 2; } }
+  /* The chosen unit and its connections, by the width the explorer has. Narrow (a phone, a small window), one column:
+     the unit first, under the atlas, its connections after it. From 736 px, two: the connections at the width they
+     have on a desktop (340 px, which their controls need) on the left, the unit on the right with all it has; from
+     1028 px the unit has its full width and the gap grows. Beside the unit the connections follow the page as it
+     scrolls (follow.ts), so neither column runs out into blank space. */
+  .panes { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: var(--s7); scroll-margin-top: var(--s5); }
+  .panes > :global(aside.rail) { order: 2; }
+  @container explorer (min-width: 736px) {
+    .panes { grid-template-columns: 340px minmax(0, 1fr); column-gap: var(--s6); }
+    .panes > :global(aside.rail) { order: 0; }
+  }
+  @container explorer (min-width: 1028px) { .panes { column-gap: var(--s7); } }
   .notice { color: var(--ink2); }
   .foot { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); }
   kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 var(--s1); border-radius: var(--r-chip); background: var(--wash); color: var(--ink2); font: var(--type-meta); }

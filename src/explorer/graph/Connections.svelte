@@ -2,6 +2,7 @@
   import { onDestroy, onMount, untrack } from "svelte";
   import { IconButton, LabelText, Meter, MorphText, Segmented, Swap, Tabs, expand, fadeIn } from "@stdlogits/ledger";
   import Card, { type Picked } from "./Card.svelte";
+  import { follow } from "../follow";
   import Graph from "./Graph.svelte";
   import Navigator from "./Navigator.svelte";
   import { focusOf, headInput, nodeKey, siblingTip, trace, type Graph as GraphData, type Mode, type Reach, type Take } from "./trace";
@@ -226,7 +227,7 @@
   const showsAgainst = $derived(graph?.edges.some((edge) => edge.value < 0) ?? false);
 </script>
 
-<aside class="rail" aria-label="Connections">
+<aside class="rail" id="connections" aria-label="Connections" use:follow>
   <div class="figure" bind:this={figure}>
     <div class="tools">
       {#if modes.length > 1}<Segmented options={modes} value={shownMode} onchange={(value: Mode) => (mode = value)} label="Which connections" />{/if}
@@ -282,13 +283,14 @@
 </aside>
 
 <style>
-  .rail { flex: 1 1 340px; max-width: 420px; display: grid; align-content: start; gap: var(--s5); min-width: 0; }
+  .rail { display: grid; align-content: start; gap: var(--s5); min-width: 0; scroll-margin-top: var(--s5); }
   .figure, .lists { display: grid; align-content: start; gap: var(--s5); min-width: 0; }
-  /* Beside the unit (Explorer.svelte's panes: 340 + 48 + 640 px) it is a column. Narrower, the unit takes
-     the whole width under it, so the rail takes a row of its own, and from 680 px its lists stand beside the
-     graph rather than under it, where the column would otherwise leave half the row empty. */
-  @container explorer (max-width: 1027.98px) { .rail { flex-basis: 100%; max-width: none; } }
-  @container explorer (min-width: 680px) and (max-width: 1027.98px) {
+  /* Beside the unit (from 736 px, Explorer.svelte's panes) it is a column that follows the page as it scrolls
+     (follow.ts sets --follow), above the unit's basket bar so its full-screen graph and cards open over it. Under the
+     unit (narrower) it takes the row's width, and from 600 px its lists stand beside the graph rather than under it,
+     where a column would leave half the row empty. */
+  @container explorer (min-width: 736px) { .rail { position: sticky; top: var(--follow, var(--s5)); z-index: 3; } }
+  @container explorer (min-width: 600px) and (max-width: 735.98px) {
     .rail { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--s7); }
   }
   .tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s4); }

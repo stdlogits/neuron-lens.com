@@ -120,6 +120,14 @@ knows, and a base unit's graph reads two records a node. Its Easiest filters use
 An unlabelled model (a size whose labels aren't released yet, and its base) has no Easiest: its layers list every neuron, and its
 search finds heads and addresses only (a9's calls). Five sizes fill a 320 px row; a sixth needs another layout.
 Phone widths down to 320 px must not scroll sideways.
+The unit and its rail are laid out by the width the explorer has (container queries in `Explorer.svelte`'s panes, not
+the screen's width). Under 736 px (a phone, a narrow window, a tablet upright) the unit comes first, its number and
+labels in the first screen under the atlas, then its baskets, then the rail, and the basket bar then ends with a fourth
+entry, Connections, that goes to the rail (`unit/BasketBar.svelte`). From 736 px the rail stands on the left beside
+the unit at 340 px, graph above lists, and follows the page as it scrolls (`src/explorer/follow.ts`: it scrolls with
+the page until its foot reaches the screen's and stays, and moves with the page again as soon as it scrolls back up),
+so neither column leaves blank space beside the other; it sits above the basket bar so the full-screen graph opens
+over it.
 
 `main.ts` loads `@stdlogits/ledger/ledger.css`, then `site.css`, and installs `translator` with
 `setTranslator` before mounting. The dev server serves Ledger as source rather than pre-bundling it

@@ -70,14 +70,12 @@
 <style>
   .view {
     container: unit / inline-size;
-    flex: 999 1 640px;
     display: grid;
     align-content: start;
     gap: var(--s6);
     min-width: 0;
     scroll-margin-top: var(--s5);
   }
-  @media (max-width: 720px) { .view { flex-basis: 100%; } }
   .failed { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); padding: var(--s5) 0; color: var(--ink2); font: var(--type-body); }
   .retry {
     height: 36px;

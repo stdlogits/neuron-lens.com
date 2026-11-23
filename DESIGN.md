@@ -55,6 +55,17 @@ What the site draws for itself, in Ledger:
   a change of what is lit (a search, a filter) spreads out from the best match's layer, 10 ms a layer, at most 300 ms;
   a bar pointed at or looked at never waits, and moving into another model's units never sweeps. A result looked at for 180 ms starts loading its unit, so it opens ready.
   Reduced motion keeps the fades and drops the glides.
+- The unit and its connections by the width the explorer has (`Explorer.svelte`'s panes, container queries on the
+  explorer, not the screen). Under 736 px (a phone, a narrow window, a tablet upright) one column: the unit first, its
+  number, band and labels in the first screen under the atlas, then its baskets, then its connections, which the
+  basket bar then ends with ("Connections", `unit/BasketBar.svelte`), so they are a tap away; from 600 px their lists
+  stand beside their graph. From 736 px two columns: the connections on the left at the 340 px they have on a desktop
+  (their controls need it), graph above lists, and the unit on the right with all it has, its own two columns from
+  600 px of its width; from 1028 px the gap widens to a desktop's. Beside the unit the connections follow the page
+  (`src/explorer/follow.ts`): they scroll with it until their foot reaches the screen's and stay there, and scrolling
+  back up they move with the page again until their head reaches the screen's top, so neither column runs out into
+  blank space beside the other and the graph is back after a short scroll however long the lists are. The following
+  column sits above the basket bar, so the full-screen graph and a tapped unit's card open over everything.
 - The connections graph (`src/explorer/graph/`): a band per layer down the page, a dot per neuron side
   and a bar per head, both in the depth colour of their layer. A link is as heavy as its
   flow, in the depth colour of its source, or grey and dashed where it pushes against: the one hue is depth.
