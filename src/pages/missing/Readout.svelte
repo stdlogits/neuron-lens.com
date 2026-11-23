@@ -2,15 +2,16 @@
   import { MorphText, fadeOut, rise } from "@stdlogits/ledger";
 
   // A unit, named under what the missing page draws: its ID in the display face, then its label (a lent label, a base
-  // model's, in the text face's italic). The label changes as Ledger's Swap changes content, except while a run moves
-  // through units faster than that, when it changes in place.
+  // model's, in the text face's italic). The ID morphs and the label changes as Ledger's Swap changes content, except
+  // while a run moves through units faster than either can (`quiet`), when both change in place, so neither starts only
+  // to be cut off.
   let { id, label, href, lent = false, quiet = false }: { id: string; label: string; href: string; lent?: boolean; quiet?: boolean } = $props();
 </script>
 
 <a class="readout" class:lent {href}>
-  <b><MorphText text={id} numbers={false} /></b>
+  <b>{#if quiet}{id}{:else}<MorphText text={id} numbers={false} />{/if}</b>
   <span class="label">
-    {#key label}<span class="line" in:rise={{ duration: quiet ? 0 : 200 }} out:fadeOut={{ duration: quiet ? 0 : 120 }}>{label}</span>{/key}
+    {#if quiet}<span class="line">{label}</span>{:else}{#key label}<span class="line" in:rise out:fadeOut>{label}</span>{/key}{/if}
   </span>
 </a>
 

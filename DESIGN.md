@@ -114,7 +114,11 @@ What the site draws for itself, in Ledger:
   number asked. Layers are the atlas's columns (each layer's neurons at fourteen ranks, shaded as the atlas shades
   them); a layer's neurons are a cell each, as the All field draws them, crossed by an ink playhead; a layer's heads are
   a column each of where it attends. What the ride passes lights up from dim; what isn't there arrives in the wash. The
-  number holds still a moment before it lands, so Ledger's `MorphText` morphs the landing.
+  number counts plainly while it rides, holds still a moment, then rolls into place (`roll.ts`): each digit that
+  changes slides up out of its line as the new one rises in, 24 ms apart, started in the frame of the change, since
+  Ledger's `MorphText` paints a change made in an animation frame one frame late. The names under the drawings change
+  in place while a run passes them, and morph again once it rests; the depth tint is set on the headline alone, so a
+  layer's change restyles only it and not the atlas's bars.
 
 The explorer's one credit is "Labels by Claude Haiku 5.5"; a base model's adds ", written for" its post-trained model,
 and its labels are italic wherever they show, as lent (Ledger's `lent`): the unit's faces and the labeller's note, the

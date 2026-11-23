@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
-  import { MorphText, reducedMotion } from "@stdlogits/ledger";
+  import { reducedMotion } from "@stdlogits/ledger";
   import { MODELS, depthColor, type ModelId } from "../../lib/models";
   import { loadIndex, loadScores, type IndexRow } from "../../lib/data";
   import { byteStrengths, FAINT } from "../../explorer/atlas/levels";
   import { STILL, ride, tween } from "./motion";
+  import { roll, type RollMode } from "./roll";
   import { dropDigit } from "./place";
   import { palette, surface } from "./paint";
   import Readout from "./Readout.svelte";
@@ -28,6 +29,7 @@
   let at = $state(untrack(() => (reducedMotion() ? asked : 0)));
   let label = $state.raw<IndexRow | undefined>(undefined);
   let quiet = $state(false);
+  let mode = $state<RollMode>("auto");
   let ticks = $state({ end: 0, last: 0, middle: true });
   const side = $derived(label && label[7] > label[6] ? 1 : 0);
 
@@ -63,7 +65,7 @@
     return best ?? named[0];
   }
 
-  function halt() { stop(); stop = () => {}; head = null; lit = 1; empty = 1; quiet = false; paint(); }
+  function halt() { stop(); stop = () => {}; head = null; lit = 1; empty = 1; quiet = false; mode = "auto"; paint(); }
   function pointed(event: PointerEvent) {
     const box = canvas.getBoundingClientRect(), x = event.clientX - box.left, y = event.clientY - box.top;
     halt();
@@ -92,7 +94,7 @@
     halt();
     if (reducedMotion() || !cells || !R) { at = asked; paint(); return; }
     hit.hidden = true;
-    lit = 0; empty = 0; quiet = true;
+    lit = 0; empty = 0; quiet = true; mode = "plain";
     head = { x: PAD, alpha: 1 };
     let counted = 0;
     const from = () => PAD + R + 4, to = () => PAD + span - 12;
@@ -109,7 +111,7 @@
         paint();
       },
       done() {
-        empty = 1; lit = 1; quiet = false; at = asked;
+        empty = 1; lit = 1; quiet = false; mode = "land"; at = asked;
         const fading = head!;
         stop = tween(260, (t) => { fading.alpha = 1 - t; paint(); }, () => { head = null; paint(); });
       },
@@ -186,7 +188,8 @@
       label = named[named.length - 1];
       if (surf.at.w) measure(surf.at.w, surf.at.h);
       paint();
-      requestAnimationFrame(play);
+      // Two frames on, so the ride doesn't start in the frame its data was parsed in.
+      requestAnimationFrame(() => requestAnimationFrame(() => { if (live) play(); }));
     }).catch(() => { if (live) at = asked; });
     return () => { live = false; stop(); surf.destroy(); colors.destroy(); };
   });
@@ -208,7 +211,7 @@
     <Readout id="L{layer}·n{label[1]} {side ? '−' : '+'}" label={side ? label[3] : label[2]} href="/{id}/L{layer}/n{label[1]}" lent={!!model.labelsFrom} {quiet} />
   {/if}
   <div class="ms-text">
-    <h1>There is no neuron <span class="ms-slot" class:none={at >= width}><MorphText text={count(at)} /></span></h1>
+    <h1>There is no neuron <span class="ms-slot" class:none={at >= width}><span use:roll={{ text: count(at), mode }}></span></span></h1>
     <p class="ms-say">Layer {layer} of {model.name} has {count(width)}, numbered 0 to {count(width - 1)}.</p>
     <nav class="ms-ways" aria-label="Ways back">
       <a class="pg-go" href="/{id}/L{layer}/n{width - 1}">Open L{layer}·n{width - 1}</a>

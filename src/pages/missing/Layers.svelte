@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
-  import { MorphText, reducedMotion } from "@stdlogits/ledger";
+  import { reducedMotion } from "@stdlogits/ledger";
   import { MODELS, depthColor, type ModelId } from "../../lib/models";
   import { loadIndex, loadScores, type IndexRow } from "../../lib/data";
   import { byteStrengths } from "../../explorer/atlas/levels";
   import { STILL, ride } from "./motion";
+  import { roll, type RollMode } from "./roll";
   import { clip } from "./place";
   import Readout from "./Readout.svelte";
 
@@ -38,13 +39,14 @@
   let at = $state(start);
   let riding = $state(false);
   let quiet = $state(false);
+  let mode = $state<RollMode>("auto");
   const layer = $derived(layerOf(at));
   const floor = $derived(Math.min(layer, real - 1));
   const row = $derived(surest[floor]);
   const side = $derived(row && row[7] > row[6] ? 1 : 0);
 
   let stop = () => {};
-  function halt() { stop(); stop = () => {}; riding = false; quiet = false; pos = at; }
+  function halt() { stop(); stop = () => {}; riding = false; quiet = false; mode = "auto"; pos = at; }
   function show(k: number) { if (!("gap" in spots[k])) { at = k; pos = k; } }
   function pointed(event: PointerEvent) {
     const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
@@ -69,6 +71,7 @@
     halt();
     riding = true;
     quiet = true;
+    mode = "plain";
     stop = ride({
       edge: real - 1, end: last, t1: 1500 + 12 * real, hold: 420, t2: 650 + 22 * Math.min(last - real + 1, EMPTIES),
       step(p, left) {
@@ -77,7 +80,7 @@
         if ("gap" in spots[k]) k = p < k ? k - 1 : k + 1;
         if (left > STILL && k < last) at = k;
       },
-      done() { riding = false; quiet = false; at = last; pos = last; },
+      done() { riding = false; quiet = false; mode = "land"; at = last; pos = last; },
     });
   }
 
@@ -102,13 +105,14 @@
         }
         return out;
       });
-      requestAnimationFrame(play);
+      // Two frames on, so the ride doesn't start in the frame its data was parsed in.
+      requestAnimationFrame(() => requestAnimationFrame(() => { if (live) play(); }));
     }).catch(() => { if (live) { at = last; pos = last; } });
     return () => { live = false; stop(); };
   });
 </script>
 
-<section class="ms" style:--tint={depthColor(model, floor)}>
+<section class="ms">
   <div class="lift" class:riding style:--n={spots.length} role="slider" tabindex="0" aria-label="Layer" aria-valuemin={0} aria-valuemax={asked} aria-valuenow={layer} aria-valuetext={layer < real ? `Layer ${layer}` : `Layer ${layer}, which ${model.name} doesn’t have`} onpointermove={pointed} onpointerdown={pointed} onpointerleave={(event) => { if (event.pointerType !== "touch") show(last); }} onkeydown={key}>
     <span class="ms-thumb" style:transform="translateX({pos * 100}%)"></span>
     {#each spots as spot, i}
@@ -126,8 +130,9 @@
   {:else}
     <Readout id="L{floor}" label="" href="/{id}/L{floor}" {quiet} />
   {/if}
-  <div class="ms-text">
-    <h1>There is no layer <span class="ms-slot" class:none={layer >= real}><MorphText text={String(layer)} /></span></h1>
+  <!-- The tint only here, where the slot uses it: set on the section, each layer's change would restyle every bar. -->
+  <div class="ms-text" style:--tint={depthColor(model, floor)}>
+    <h1>There is no layer <span class="ms-slot" class:none={layer >= real}><span use:roll={{ text: String(layer), mode }}></span></span></h1>
     <p class="ms-say">{model.name} has {real}, numbered 0 to {real - 1}.</p>
     <nav class="ms-ways" aria-label="Ways back">
       <a class="pg-go" href={place.path}>Open {place.label}</a>

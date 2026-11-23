@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
-  import { MorphText, reducedMotion } from "@stdlogits/ledger";
+  import { reducedMotion } from "@stdlogits/ledger";
   import { MODELS, depthColor, type ModelId } from "../../lib/models";
   import { loadHeadIndex, type HeadRow } from "../../lib/data";
   import { headTitle } from "../../explorer/search/engine";
   import { STILL, ride } from "./motion";
+  import { roll, type RollMode } from "./roll";
   import Readout from "./Readout.svelte";
 
   // Head: a head at or past the layer's heads. The layer's heads, a column each of where it attends (its share on the
@@ -35,12 +36,13 @@
   let at = $state(start);
   let riding = $state(false);
   let quiet = $state(false);
+  let mode = $state<RollMode>("auto");
   const head = $derived(headOf(at));
   const named = $derived(Math.min(head, real - 1));
   const row = $derived(heads[named]);
 
   let stop = () => {};
-  function halt() { stop(); stop = () => {}; riding = false; quiet = false; pos = at; }
+  function halt() { stop(); stop = () => {}; riding = false; quiet = false; mode = "auto"; pos = at; }
   function show(k: number) { if (!("gap" in spots[k])) { at = k; pos = k; } }
   function pointed(event: PointerEvent) {
     const grid = (event.currentTarget as HTMLElement).querySelector(".grid")!.getBoundingClientRect();
@@ -64,6 +66,7 @@
     halt();
     riding = true;
     quiet = true;
+    mode = "plain";
     stop = ride({
       edge: real - 1, end: last, t1: 1100 + 25 * real, hold: 420, t2: 650 + 22 * Math.min(last - real + 1, EMPTIES),
       step(p, left) {
@@ -72,7 +75,7 @@
         if ("gap" in spots[k]) k = p < k ? k - 1 : k + 1;
         if (left > STILL && k < last) at = k;
       },
-      done() { riding = false; quiet = false; at = last; pos = last; },
+      done() { riding = false; quiet = false; mode = "land"; at = last; pos = last; },
     });
   }
 
@@ -83,7 +86,8 @@
       const out: (HeadRow | undefined)[] = [];
       for (const r of rows) if (r[0] === layer) out[r[1]] = r;
       heads = out;
-      requestAnimationFrame(play);
+      // Two frames on, so the ride doesn't start in the frame its data was parsed in.
+      requestAnimationFrame(() => requestAnimationFrame(() => { if (live) play(); }));
     }).catch(() => { if (live) { at = last; pos = last; } });
     return () => { live = false; stop(); };
   });
@@ -111,7 +115,7 @@
     <Readout id="L{layer}·h{named}" label="" href="/{id}/L{layer}/h{named}" {quiet} />
   {/if}
   <div class="ms-text">
-    <h1>There is no head <span class="ms-slot" class:none={head >= real}><MorphText text={String(head)} /></span></h1>
+    <h1>There is no head <span class="ms-slot" class:none={head >= real}><span use:roll={{ text: String(head), mode }}></span></span></h1>
     <p class="ms-say">Layer {layer} of {model.name} has {real}, numbered 0 to {real - 1}.</p>
     <nav class="ms-ways" aria-label="Ways back">
       <a class="pg-go" href="/{id}/L{layer}/h{real - 1}">Open L{layer}·h{real - 1}</a>

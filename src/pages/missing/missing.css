@@ -75,3 +75,15 @@
 .riding > .ms-thumb {
   transition: none;
 }
+
+/* A digit rolling into place where a ride lands (roll.ts): the old one and the new one share its cell, which shows only
+ * its own line, as an odometer's window does. clip-path rather than overflow, which would move an inline box's
+ * baseline to its bottom edge. */
+.ms-roll {
+  display: inline-grid;
+  clip-path: inset(0 -0.2em);
+}
+
+.ms-roll > span {
+  grid-area: 1 / 1;
+}

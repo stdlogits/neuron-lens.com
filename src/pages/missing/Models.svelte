@@ -31,12 +31,16 @@
 
   let chosen = $state(0);
   let pointed = $state<number | null>(null);
+  // While the run passes the far models faster than a morph, the words change in place, so no morph starts only to be
+  // cut off; from the first step held long enough, they morph again.
+  let quick = $state(false);
   const shown = $derived(ranked[pointed ?? chosen]);
   const place = $derived(clip(shown.model, rest));
+  const skipped = $derived(chosen >= TOP ? `${ranked[chosen].model.name}, rank ${chosen + 1} of ${ranked.length}` : `${ranked.length - TOP} more`);
   const percent = (p: number) => { const v = p * 100; return `${v >= 1 ? v.toFixed(1) : Number(v.toPrecision(2))}%`; };
 
   let stop = () => {};
-  const halt = () => stop();
+  const halt = () => { stop(); quick = false; };
   function leave(event: FocusEvent) {
     const into = event.relatedTarget;
     if (!(into instanceof Node) || !(event.currentTarget as HTMLElement).contains(into)) pointed = null;
@@ -46,7 +50,9 @@
     const n = ranked.length;
     const steps: [number, number][] = [];
     for (let k = n - 1; k >= 1; k -= 1) steps.push([k, 60 + 360 * (1 - k / (n - 1)) ** 2]);
-    const begin = window.setTimeout(() => { stop = sequence(steps, (k) => { chosen = k; }, () => { chosen = 0; }); }, 500);
+    const begin = window.setTimeout(() => {
+      stop = sequence(steps, (k, i) => { quick = steps[i][1] < 240; chosen = k; }, () => { quick = false; chosen = 0; });
+    }, 500);
     return () => { clearTimeout(begin); stop(); };
   });
 </script>
@@ -61,17 +67,17 @@
 
 <section class="ms">
 <div class="ms-text">
-  <h1>Did you mean <span class="ms-slot"><MorphText text={shown.model.name} numbers={false} /></span>?</h1>
+  <h1>Did you mean <span class="ms-slot">{#if quick}{shown.model.name}{:else}<MorphText text={shown.model.name} numbers={false} />{/if}</span>?</h1>
   <p class="ms-say">{say}</p>
 </div>
 <div class="dist" role="group" aria-label="The models the site has, closest to what was typed first. Choose one to put it in the headline." use:glide={"[aria-pressed='true'], .skip.on"} onpointerleave={() => (pointed = null)} onfocusout={leave}>
   {#each ranked.slice(0, TOP) as r, i (r.model.id)}{@render row(r, i)}{/each}
   {#if ranked.length > TOP}
-    <p class="skip" class:on={chosen >= TOP} aria-hidden="true">⋮ <MorphText text={chosen >= TOP ? `${ranked[chosen].model.name}, rank ${chosen + 1} of ${ranked.length}` : `${ranked.length - TOP} more`} numbers={false} /></p>
+    <p class="skip" class:on={chosen >= TOP} aria-hidden="true">⋮ {#if quick}{skipped}{:else}<MorphText text={skipped} numbers={false} />{/if}</p>
   {/if}
 </div>
 <nav class="ms-ways" aria-label="Ways back">
-  <a class="pg-go" href={place.path}><MorphText text="Open {place.label}" numbers={false} /></a>
+  <a class="pg-go" href={place.path}>{#if quick}Open {place.label}{:else}<MorphText text="Open {place.label}" numbers={false} />{/if}</a>
   <a class="prose-link" href="/">Open the explorer</a>
 </nav>
 </section>
