@@ -13,6 +13,7 @@
 // the explorer's markup; its selectors are the constants under "Browser smoke" below.
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -135,6 +136,15 @@ export async function checkHtml(origin, rules, buildDir) {
   assert.ok(html.includes('<script type="application/ld+json">'), "/ has no JSON-LD");
   const card = html.match(/<meta property="og:image" content="([^"]+)"/)?.[1];
   assert.ok(card && SITE_FILES.some(([path]) => new URL(card).pathname === path), `/'s og:image (${card}) is none of the site's files`);
+  // The image a link preview fetches, at the address the page names (with its version, scripts/site/meta.ts),
+  // through the edge as a preview would get it: it must be the card that version names, and the build's card.
+  const named = new URL(card), image = await get(origin, named.pathname + named.search);
+  assert.equal(image.status, 200, `/'s og:image (${named.pathname + named.search}): HTTP ${image.status}`);
+  const bytes = Buffer.from(await image.arrayBuffer());
+  const version = createHash("sha256").update(bytes).digest("hex").slice(0, 10), named_v = named.searchParams.get("v");
+  assert.ok(named_v, `/'s og:image (${named.pathname + named.search}) carries no version (?v=), so a link preview can go on showing an old card under it`);
+  assert.equal(named_v, version, `/'s og:image (${named.pathname + named.search}) serves a card whose version is ${version} (cf-cache-status ${image.headers.get("cf-cache-status")}): the edge has an old copy, or the page names another card`);
+  if (buildDir) assert.ok(bytes.equals(await readFile(resolve(buildDir, named.pathname.slice(1)))), `/'s og:image differs from ${buildDir}'s card`);
   const refs = assetRefs(html);
   assert.ok(refs.some((ref) => ref.endsWith(".js")), "/ references no /assets/*.js");
 

@@ -5,6 +5,7 @@
 // none of it can drift from the explorer. Every view is drawn in the browser; no unit's data is
 // written here.
 /// <reference types="node" />
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { HtmlTagDescriptor, Plugin } from "vite";
 import { COVERAGE, DEFAULT_MODEL, MODELS, MODEL_ORDER, bandRange, type ModelId } from "../../src/lib/models.ts";
@@ -15,9 +16,12 @@ const CATALOG = "https://huggingface.co/datasets/stdlogits/neuron-lens";
 const RESEARCH = "https://github.com/stdlogits/neuron-lens";
 const LENSES = "https://huggingface.co/stdlogits/rs-lenses";
 const SOURCE = "https://github.com/stdlogits/neuron-lens.com";
-// public/card.webp, drawn by scripts/site/render.mjs.
+// public/card.webp, drawn by scripts/site/render.mjs. Its address carries a version made from its bytes, so a new
+// card has a new address: link previews (Discord's, Slack's, X's) keep a copy of the image they fetched under its
+// address, out of reach of any purge on our side, and a new address is the only way past those copies.
+const CARD_VERSION = createHash("sha256").update(readFileSync(new URL("../../public/card.webp", import.meta.url))).digest("hex").slice(0, 10);
 const CARD = {
-  url: `${ORIGIN}/card.webp`,
+  url: `${ORIGIN}/card.webp?v=${CARD_VERSION}`,
   width: 2400,
   height: 1260,
   alt: "Neuron Lens: six of Qwen3-8B's neurons, each drawn in dots as what it fires on (a cup of coffee, an owl, a tree, a bell, a crescent moon and a cat), with the tokens it fires on and its ID beneath, and a thread from each down to its own layer, lit in the model's atlas.",
