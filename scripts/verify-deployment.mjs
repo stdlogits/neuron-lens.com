@@ -115,8 +115,10 @@ const assetRefs = (html) => [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/
 
 const startsWith = (bytes, text, at = 0) => [...text].every((char, i) => bytes[at + i] === char.charCodeAt(0));
 
+const UNIT = "/qwen3-8b/L8/n344";
+
 export async function checkHtml(origin, rules, buildDir) {
-  const paths = ["/", "/qwen3-8b/L8/n344", "/gemma-4-12b/L33/heads", "/about", `/no-such-page-${crypto.randomUUID().slice(0, 8)}`];
+  const paths = ["/", UNIT, "/gemma-4-12b/L33/heads", "/about", `/no-such-page-${crypto.randomUUID().slice(0, 8)}`];
   const bodies = [];
   for (const path of paths) {
     const response = await get(origin, path);
@@ -127,7 +129,17 @@ export async function checkHtml(origin, rules, buildDir) {
   }
   const [html] = bodies;
   assert.ok(html.includes('id="app"'), "/ is not the app's index.html");
-  for (const [i, body] of bodies.entries()) assert.equal(body, html, `${paths[i]} serves another page than /`);
+  for (const [i, body] of bodies.entries()) if (paths[i] !== UNIT) assert.equal(body, html, `${paths[i]} serves another page than /`);
+  // A unit's address is the same page with that unit's words in its head, for link previews (scripts/site/unfurl.js,
+  // which runs at Cloudflare and reads the catalog): its title as the explorer sets it, the preview's heading and
+  // lines, and its layer's colour. Its headers were checked above, like any page's.
+  const unit = bodies[paths.indexOf(UNIT)];
+  const besides = (page) => page.replace(/<title>[^<]*<\/title>/, "").replace(/<meta (?:name="description"|property="og:title"|property="og:description"|name="theme-color") content="[^"]*"[^>]*>/g, "");
+  assert.equal(besides(unit), besides(html), `${UNIT} differs from / beyond its title, description, link preview and theme colour`);
+  assert.ok(unit.includes("<title>L8·n344 · Qwen3-8B · Neuron Lens</title>"), `${UNIT} isn't titled with its unit: scripts/site/unfurl.js isn't running there, or couldn't read the catalog`);
+  assert.match(unit, /<meta property="og:title" content="L8·n344 · [^"]+"/, `${UNIT}: its link preview isn't headed with its unit`);
+  assert.match(unit, /<meta property="og:description" content="Qwen3-8B · layer 8 of 35 · association layers · [^"]+Labels by Claude Haiku 5\.5"/, `${UNIT}: its link preview doesn't describe its unit`);
+  assert.notEqual(unit.match(/<meta name="theme-color" content="([^"]+)">/)?.[1], html.match(/<meta name="theme-color" content="([^"]+)">/)?.[1], `${UNIT}: its link preview has the site's colour, not its layer's`);
   // The CSP allows no inline script: anything injected into the page (Cloudflare's analytics beacon,
   // Rocket Loader, email obfuscation) would be blocked, so the zone must leave HTML alone. The JSON-LD
   // is a data block, which never runs.
