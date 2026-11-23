@@ -28,7 +28,7 @@
   interface Held { key: string; neuron: typeof lens.neuronDetail; head: typeof lens.headDetail; layer: number; model: typeof lens.model; labelled: boolean; groupSize: number }
   let lastHeld: Held | null = null;
   const held = $derived.by<Held | null>(() => {
-    if (phase === "ready") lastHeld = { key: unitKey, neuron: lens.neuronDetail, head: lens.headDetail, layer: lens.layer, model: lens.model, labelled: lens.index?.labelled ?? true, groupSize: lens.groupSize };
+    if (phase === "ready") lastHeld = { key: unitKey, neuron: lens.neuronDetail, head: lens.headDetail, layer: lens.layer, model: lens.model, labelled: lens.model.labelled, groupSize: lens.groupSize };
     return lastHeld;
   });
   let slow = $state(false);
@@ -66,9 +66,9 @@
         <button type="button" class="retry" onclick={() => lens.retry()}>Try again</button>
       </div>
     {:else if showing === "unit" && held?.head}
-      <HeadUnit head={held.head} labelled={held.labelled} groupSize={held.groupSize} />
+      <HeadUnit head={held.head} model={held.model} labelled={held.labelled} groupSize={held.groupSize} />
     {:else if showing === "unit" && held?.neuron}
-      <NeuronUnit detail={held.neuron} layer={held.layer} labelled={held.labelled} />
+      <NeuronUnit detail={held.neuron} model={held.model} layer={held.layer} labelled={held.labelled} />
     {:else}
       <Pending columns={lens.unit === "heads" ? 3 : 2} wait={!held} />
     {/if}

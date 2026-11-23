@@ -12,16 +12,18 @@
   import { LabelText, Swap, glide } from "@stdlogits/ledger";
   import LabelCell from "./LabelCell.svelte";
   import { useLens } from "../lens.svelte";
-  import { MODELS } from "../../lib/models";
+  import { MODELS, type ModelInfo } from "../../lib/models";
 
   // The faces table: a sign column, then one column per label ("Fires on", "Writes"; heads add
   // "Attends to"). A neuron's two sides are tabs, the chosen one on a wash that glides between them;
   // a head's single row simply sits on the wash. Labels are Haiku's: its note on the chosen row
   // beneath, crossfading as the row changes, then the credit.
-  let { columns, rows, selected = $bindable(0), labelled = true, note = "", panel }: {
+  let { columns, rows, selected = $bindable(0), model, labelled = true, note = "", panel }: {
     columns: string[];
     rows: FaceRow[];
     selected?: number;
+    /** The model the rows were read from, when it may no longer be the explorer's. */
+    model?: ModelInfo;
     labelled?: boolean;
     /** The labeller's note on the chosen row. */
     note?: string;
@@ -33,7 +35,8 @@
   // A base model's labels are its post-trained model's, written for that model's unit at this address. (The
   // About page's specimens draw faces outside the explorer, with no lens.)
   const lens = useLens();
-  const from = $derived(lens?.model.labelsFrom ? MODELS[lens.model.labelsFrom].name : null);
+  const lender = $derived((model ?? lens?.model)?.labelsFrom);
+  const from = $derived(lender ? MODELS[lender].name : null);
   const id = $props.id();
 
   // Arrow keys move between the sides (the APG tabs pattern, selection following focus).

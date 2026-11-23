@@ -232,10 +232,36 @@ function memo<T>(key: string, make: () => Promise<T>): Promise<T> {
   return pending;
 }
 
-const load = <T>(model: ModelId, name: string) => memo(`${model}/${name}`, async () => fetch(await dataUrl(model, name)).then((response) => {
+/** A memo for what a visit reads by the thousand (records, details, a layer's rows): it keeps only the `most`
+ * recently used, so a long visit doesn't hold every unit it passed. What it lets go is read again if asked for,
+ * mostly from the browser's cache (the catalog's files never change). */
+function recent(most: number) {
+  const kept = new Map<string, Promise<unknown>>();
+  const use = <T>(key: string, make: () => Promise<T>): Promise<T> => {
+    let pending = kept.get(key) as Promise<T> | undefined;
+    if (pending) kept.delete(key);
+    else {
+      pending = make();
+      const made = pending;
+      made.catch(() => { if (kept.get(key) === made) kept.delete(key); });
+    }
+    kept.set(key, pending);
+    if (kept.size > most) kept.delete(kept.keys().next().value!);
+    return pending;
+  };
+  return Object.assign(use, { forget: (key: string) => kept.delete(key) });
+}
+// A record is a few kB parsed; a neuron's detail or a layer's heads tens to hundreds; a layer's rows a few MB.
+const records = recent(4000);
+const details = recent(48);
+const layers = recent(6);
+const docs = recent(64);
+
+const fetchJson = async <T>(model: ModelId, name: string) => fetch(await dataUrl(model, name)).then((response) => {
   if (!response.ok) throw new Error(`${name}: ${response.status}`);
   return response.json() as Promise<T>;
-}));
+});
+const load = <T>(model: ModelId, name: string) => memo(`${model}/${name}`, () => fetchJson<T>(model, name));
 
 const pad = (value: number, width = 2) => String(value).padStart(width, "0");
 
@@ -284,11 +310,11 @@ export const loadIndex = (model: ModelId): Promise<CatalogIndex> => {
 /** A borrower's terms are its lender's: they translate the labels as well as the tokens (one tokenizer). */
 export const loadTerms = (model: ModelId) => load<Terms>(labelled(model), "terms.json");
 type RawRow = [number, string, string, number, number, number, number];
-const ownRows = (model: ModelId, layer: number) => load<{ layer: number; neurons: RawRow[] }>(model, `neurons/L${pad(layer)}/index.json`);
+const ownRows = (model: ModelId, layer: number) => fetchJson<{ layer: number; neurons: RawRow[] }>(model, `neurons/L${pad(layer)}/index.json`);
 const WRITES_FLAGS = 8 | 16; // FLAG_PLUS_WRITES | FLAG_MINUS_WRITES: which label is each pole's title
 /** Every neuron of a layer: [neuron, title +, title −, score, flags, confidence +, confidence −]; a borrower's
  * with the lender's titles, score and confidences, and its own flags but for which label each title is. */
-export const loadLayerIndex = (model: ModelId, layer: number) => memo(`${model}/rows:${layer}`, async () => {
+export const loadLayerIndex = (model: ModelId, layer: number) => layers(`${model}/rows:${layer}`, async () => {
   const from = lender(model);
   const [own, lent] = await Promise.all([ownRows(model, layer), from ? ownRows(from, layer) : null]);
   const theirs = new Map(lent?.neurons.map((row) => [row[0], row]));
@@ -382,31 +408,51 @@ const MAX_RANGES = 16;
 const RESERVE = 4;
 let active = 0;
 const waiting: (() => void)[] = [];
-const later = new Map<string, () => void>();
+const later = new Map<string, { go: () => void; stop: (reason: Error) => void }>();
+/** Reads asked for ahead that haven't started: one needed before it is parked in `later` is read as needed now. */
+const ahead = new Set<string>();
 
 function promote(key: string) {
-  const go = later.get(key);
-  if (!go) return;
+  if (!ahead.delete(key)) return;
+  const read = later.get(key);
+  if (!read) return;
   later.delete(key);
-  if (active < MAX_RANGES) { active += 1; go(); }
-  else waiting.push(go);
+  if (active < MAX_RANGES) { active += 1; read.go(); }
+  else waiting.push(read.go);
 }
 
-async function range(url: string, offset: number, length: number, ahead?: string): Promise<ArrayBuffer> {
-  const room = ahead === undefined ? MAX_RANGES : MAX_RANGES - RESERVE;
-  if (active >= room || (ahead !== undefined && waiting.length)) await new Promise<void>((go) => (ahead === undefined ? waiting.push(go) : later.set(ahead, go)));
+/** Let go of every read asked for ahead that hasn't started: the walk that wanted them has moved on. Each is
+ * forgotten and fails, so a later ask reads it afresh; a walk still going asks again for what it still wants. */
+export function dropAhead() {
+  for (const [key, read] of later) {
+    ahead.delete(key);
+    records.forget(key);
+    read.stop(new Error("No longer wanted"));
+  }
+  later.clear();
+}
+
+async function range(url: string, offset: number, length: number, key?: string): Promise<ArrayBuffer> {
+  // Asked for ahead, unless something needed it before it got here.
+  const early = key !== undefined && ahead.has(key);
+  const room = early ? MAX_RANGES - RESERVE : MAX_RANGES;
+  if (active >= room || (early && waiting.length)) await new Promise<void>((go, stop) => (early ? later.set(key, { go, stop }) : waiting.push(go)));
   else active += 1;
+  if (key !== undefined) ahead.delete(key);
   try {
+    // A server that ignores the range sends the whole file: kept (as media packs are), so the next record is cut from it.
+    const whole = wholePacks.get(url);
+    if (whole) return (await whole).slice(offset, offset + length);
     const response = await fetch(url, { headers: { Range: `bytes=${offset}-${offset + length - 1}` } });
     if (!response.ok) throw new Error(`${url}: ${response.status}`);
-    const buffer = await response.arrayBuffer();
-    return response.status === 206 ? buffer : buffer.slice(offset, offset + length);
+    if (response.status === 206) return await response.arrayBuffer();
+    return (await wholePack(url, response)).slice(offset, offset + length);
   } finally {
     // Hand the slot straight on: to a read needed now, else to one asked for ahead while the reserve holds.
     const now = waiting.shift();
     const first = now ? undefined : later.entries().next().value;
     if (now) now();
-    else if (first && active <= MAX_RANGES - RESERVE) { later.delete(first[0]); first[1](); }
+    else if (first && active <= MAX_RANGES - RESERVE) { later.delete(first[0]); first[1].go(); }
     else active -= 1;
   }
 }
@@ -528,21 +574,23 @@ export const poleOf = (mlp: number, id: number) => {
 export const headKey = (heads: number, layer: number, head: number) => layer * heads + head;
 export const headOf = (heads: number, id: number) => ({ layer: Math.floor(id / heads), head: id % heads });
 
-function ownPoleWire(model: ModelId, id: number, ahead: boolean) {
+function ownPoleWire(model: ModelId, id: number, early: boolean) {
   const key = `${model}/wire:${id}`;
-  if (!ahead) promote(key);
-  return memo(key, async () => {
+  if (!early) promote(key);
+  return records(key, async () => {
+    if (early) ahead.add(key);
     const { wire, neuronsPerLayer: mlp, connections } = await ownIndex(model);
     const { layer, neuron, pole } = poleOf(mlp, id);
-    return wireOf(await range(await dataUrl(model, `neurons/L${pad(layer)}/graph.bin`), (neuron + (pole < 0 ? mlp : 0)) * wire, wire, ahead ? key : undefined), connections, POLE_RELATIONS);
+    return wireOf(await range(await dataUrl(model, `neurons/L${pad(layer)}/graph.bin`), (neuron + (pole < 0 ? mlp : 0)) * wire, wire, early ? key : undefined), connections, POLE_RELATIONS);
   });
 }
-function ownHeadWire(model: ModelId, id: number, ahead: boolean) {
+function ownHeadWire(model: ModelId, id: number, early: boolean) {
   const key = `${model}/head-wire:${id}`;
-  if (!ahead) promote(key);
-  return memo(key, async () => {
+  if (!early) promote(key);
+  return records(key, async () => {
+    if (early) ahead.add(key);
     const { headWire, connections } = await ownIndex(model);
-    return wireOf(await range(await dataUrl(model, "heads/graph.bin"), id * headWire, headWire, ahead ? key : undefined), connections, HEAD_RELATIONS);
+    return wireOf(await range(await dataUrl(model, "heads/graph.bin"), id * headWire, headWire, early ? key : undefined), connections, HEAD_RELATIONS);
   });
 }
 /** A borrower's record: its own, with the lender's title. */
@@ -550,7 +598,7 @@ function withLenderTitle(model: ModelId, id: number, kind: string, own: (model: 
   const from = lender(model);
   if (!from) return own(model, id, ahead);
   const [mine, theirs] = [own(model, id, ahead), own(from, id, ahead)];
-  return memo(`${model}/${kind}+:${id}`, async () => {
+  return records(`${model}/${kind}+:${id}`, async () => {
     const [m, t] = await Promise.all([mine, theirs]);
     return { ...m, title: t.title, conf: t.conf, writes: t.writes };
   });
@@ -560,9 +608,11 @@ export const loadPoleWire = (model: ModelId, id: number, ahead = false) => withL
 export const loadHeadWire = (model: ModelId, id: number, ahead = false) => withLenderTitle(model, id, "head-wire", ownHeadWire, ahead);
 
 /** One neuron's detail, from where its record says it is; a borrower's with its lender's labels and scores. */
-export const loadNeuron = (model: ModelId, layer: number, neuron: number): Promise<NeuronDetail | null> => memo(`${model}/neuron:${layer}:${neuron}`, async () => {
+// A lender's read that fails fails the whole detail (and so is asked again), rather than leave the unit with its own
+// labels drawn as lent.
+export const loadNeuron = (model: ModelId, layer: number, neuron: number): Promise<NeuronDetail | null> => details(`${model}/neuron:${layer}:${neuron}`, async () => {
   const from = lender(model);
-  const [own, theirs] = await Promise.all([ownNeuron(model, layer, neuron), from ? rawNeuron(from, layer, neuron).catch(() => null) : null]);
+  const [own, theirs] = await Promise.all([ownNeuron(model, layer, neuron), from ? rawNeuron(from, layer, neuron) : null]);
   if (!own || !theirs) return own;
   return { ...own, poles: own.poles.map((pole, i) => ({ ...pole, label: theirs.poles[i].label, score: theirs.poles[i].score })) as [Pole, Pole] };
 });
@@ -592,9 +642,9 @@ const ownNeuron = async (model: ModelId, layer: number, neuron: number): Promise
 };
 type HeadFile = { layer: number; reads: ReadInfo[]; heads: RawHead[] };
 /** A layer's heads in detail; a borrower's with its lender's labels and scores. */
-export const loadHeadLayer = (model: ModelId, layer: number) => memo(`${model}/heads:${layer}`, async () => {
+export const loadHeadLayer = (model: ModelId, layer: number) => details(`${model}/heads:${layer}`, async () => {
   const from = lender(model);
-  const [file, vocab, lent] = await Promise.all([load<HeadFile>(model, `heads/L${pad(layer)}.json`), loadVocab(model), from ? load<HeadFile>(from, `heads/L${pad(layer)}.json`).catch(() => null) : null]);
+  const [file, vocab, lent] = await Promise.all([fetchJson<HeadFile>(model, `heads/L${pad(layer)}.json`), loadVocab(model), from ? fetchJson<HeadFile>(from, `heads/L${pad(layer)}.json`) : null]);
   const theirs = new Map(lent?.heads.map((head) => [head.h, head]));
   return file.heads.map((head): HeadDetail => ({
     ...head,
@@ -607,7 +657,8 @@ export const loadHeadLayer = (model: ModelId, layer: number) => memo(`${model}/h
 });
 /** An image or sound by number, from its block of the media document files. */
 export async function loadMediaDoc(model: ModelId, modality: Modality, doc: number, block: number): Promise<MediaDoc | null> {
-  const file = await load<{ first: number; docs: MediaDoc[] }>(model, `media/${modality}/d${pad(Math.floor(doc / block), 3)}.json`);
+  const name = `media/${modality}/d${pad(Math.floor(doc / block), 3)}.json`;
+  const file = await docs(`${model}/${name}`, () => fetchJson<{ first: number; docs: MediaDoc[] }>(model, name));
   return file.docs[doc - file.first] ?? null;
 }
 export const loadMediaCredits = (model: ModelId) => load<MediaCredits>(model, "media/credits.json");
@@ -770,26 +821,36 @@ export const PATTERN_THRESHOLDS = [0.9, 0.5, 0.5, 0.3, 0.3] as const;
 export const neuronId = (layer: number, neuron: number) => `L${layer}·n${neuron}`;
 export const headId = (layer: number, head: number) => `L${layer}·h${head}`;
 
-export type UnitRef = { unit: "neurons"; layer: number; index: number } | { unit: "heads"; layer: number; index: number };
+export type UnitRef = ({ unit: "neurons"; layer: number; index: number } | { unit: "heads"; layer: number; index: number }) & {
+  /** A pasted address of another model's unit names that model. */
+  model?: ModelId;
+};
 
-/** "L8 344", "l8/n344", "8.344", "L8·n344" -> a neuron; "L20h17", "L20 h17", "20.h17" -> a head. */
+/** "L8 344", "l8/n344", "8n344", "L8·n344" -> a neuron; "L20h17", "L20 h17", "20.h17" -> a head; a unit's address
+ * pasted whole -> its unit, in its own model. Bare numbers ("3.14", "9/11", "1,000") are words, not IDs: an ID needs
+ * its L or its n. */
 export function parseRef(query: string, model: ModelInfo): UnitRef | null {
   let text = query.trim();
-  // A unit's address pasted whole (this site's, or any path ending /L8/n344 or /L8/h3).
-  const path = text.match(/\/L(\d{1,2})\/([nh]\d{1,5})(?:[?#].*)?$/i);
-  if (path) text = `L${path[1]} ${path[2]}`;
+  // A unit's address pasted whole (this site's, or any path ending /L8/n344 or /L8/h3), in the model it names.
+  const path = text.match(/(?:^|\/)([^/?#\s]+)\/L(\d{1,2})\/([nh]\d{1,5})(?:[?#].*)?$/i);
+  let named: ModelId | undefined;
+  if (path) {
+    text = `L${path[2]} ${path[3]}`;
+    const id = path[1].toLowerCase();
+    if (id !== model.id && Object.hasOwn(MODELS, id)) { named = id as ModelId; model = MODELS[named]; }
+  }
   const head = text.match(/^l?\s*(\d{1,2})\s*[\s./·:,_-]?\s*h\s*(\d{1,2})$/i);
   if (head) {
     const layer = Number(head[1]);
     const index = Number(head[2]);
-    return layer < model.layers && index < model.heads ? { unit: "heads", layer, index } : null;
+    return layer < model.layers && index < model.heads ? { unit: "heads", layer, index, ...(named ? { model: named } : {}) } : null;
   }
-  // "L8 344", "L8·n344", and "L8n344" (with the n, no separator is needed).
-  const neuron = text.match(/^l?\s*(\d{1,2})\s*(?:[\s./·:,_-]\s*n?|n)\s*(\d{1,5})$/i);
+  // "L8 344", "L8·n344", "L8n344", and without the L only with the n ("8n344", "8.n344").
+  const neuron = text.match(/^l\s*(\d{1,2})\s*(?:[\s./·:,_-]\s*n?|n)\s*(\d{1,5})$/i) ?? text.match(/^(\d{1,2})\s*[\s./·:,_-]?\s*n\s*(\d{1,5})$/i);
   if (!neuron) return null;
   const layer = Number(neuron[1]);
   const index = Number(neuron[2]);
-  return layer < model.layers && index < model.mlp ? { unit: "neurons", layer, index } : null;
+  return layer < model.layers && index < model.mlp ? { unit: "neurons", layer, index, ...(named ? { model: named } : {}) } : null;
 }
 
 // ---------- tokens and text

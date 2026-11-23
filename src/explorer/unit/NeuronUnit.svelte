@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { ModelInfo } from "../../lib/models";
   import { Context, Swap } from "@stdlogits/ledger";
   import NeuronMedia from "../media/NeuronMedia.svelte";
   import Basket from "./Basket.svelte";
@@ -18,7 +19,8 @@
   // baskets. Weights: what the lenses read of its wiring. Stream: what the residual holds where it
   // fires. Firings: where and how it fires. The side is the lens's, so the graph beside it follows;
   // while the next unit loads and this one is still on screen, it keeps the side it has.
-  let { detail, layer, labelled }: { detail: NeuronDetail; layer: number; labelled: boolean } = $props();
+  // `model` is the one the unit was read from, which stays on screen while another model's unit loads.
+  let { detail, model, layer, labelled }: { detail: NeuronDetail; model: ModelInfo; layer: number; labelled: boolean } = $props();
   const lens = useLens();
   let held: 0 | 1 = 0;
   const side = $derived.by<0 | 1>(() => {
@@ -47,7 +49,7 @@
 </script>
 
 <div class="unit" data-link-scope>
-  <Faces columns={["Fires on", "Writes"]} {rows} bind:selected={() => side, (next) => lens.setSide(next as 0 | 1)} {labelled} note={pole.label.note} {panel} />
+  <Faces columns={["Fires on", "Writes"]} {rows} bind:selected={() => side, (next) => lens.setSide(next as 0 | 1)} {model} {labelled} note={pole.label.note} {panel} />
   <BasketBar {baskets} />
 
   <div class="side" id={panel} role="tabpanel" aria-label={rows[side].name}>
@@ -64,7 +66,7 @@
         {/if}
 
         <Basket id="firings" title="Firings" tip={FIRINGS}>
-          <NeuronMedia {pole} {layer} neuron={detail.n} />
+          <NeuronMedia {pole} model={model.id} />
           <div class="fires">
             {#each pole.contexts as context, i (i)}<Context {context} {i} />{:else}<p class="meta none">No firings recorded</p>{/each}
           </div>

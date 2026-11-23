@@ -4,6 +4,7 @@
   import { flip } from "svelte/animate";
   import { FOREIGN, GLIDE, Icon, LabelText, MorphText, ease, expand, fadeOut, glide, reducedMotion, swell } from "@stdlogits/ledger";
   import { useLens } from "./lens.svelte";
+  import { go } from "../lib/router.svelte";
   import { findId, findLayer, findWords, type Found, type Result } from "./search/engine";
   import { headId, loadHeadLayer, loadLayerIndex, loadNeuron, loadPoleWire, loadWords, neuronId, parseRef, poleId, type Words } from "../lib/data";
   import { bandOf, depthColor } from "../lib/models";
@@ -33,7 +34,13 @@
   let active = $state(-1);
   let data = $state.raw<{ model: string; words: Words } | null>(null);
   let loading = $state(false);
+  /** The word index didn't load. */
   let failed = $state(false);
+  /** The query whose words' units didn't load, and how many times the viewer has asked to try again. */
+  let missed = $state<string | null>(null);
+  let attempt = $state(0);
+  /** Enter pressed before the query's results were in: chosen once they are. */
+  let enterFor = $state<string | null>(null);
   /** Focus arrived from the keyboard (Tab or /): the ring shows. */
   let keyboard = $state(false);
   let input: HTMLInputElement | undefined = $state();
@@ -89,15 +96,18 @@
     const layer = findLayer(text, model);
     if (layer !== null) { answer = { text, found: { results: [], matches: { neurons: new Set(), heads: new Set() }, byId: false, terms: [], layer } }; return; }
     if (data?.model !== lens.modelId) return;
+    void attempt;
     let live = true;
     findWords(text, model, index, lens.heads, data.words, foreign ? translation.terms : null).then(
-      (found) => { if (live) answer = { text, found }; },
-      () => { if (live) failed = true; },
+      (found) => { if (live) { answer = { text, found }; if (missed === text) missed = null; } },
+      () => { if (live) missed = text; },
     );
     return () => { live = false; };
   });
+  /** This query's reads failed: it shows that, not the last query's results. */
+  const lost = $derived(failed || (missed !== null && missed === asked.trim()));
   /** Null while what the query needs is still loading. */
-  const found = $derived(answer && asked.trim() ? answer.found : null);
+  const found = $derived(answer && asked.trim() && !(missed !== null && missed === asked.trim()) ? answer.found : null);
   const results = $derived(found?.results ?? []);
   /** Titles read for results outside the easiest, by model, unit and side. */
   let titles = $state.raw<Record<string, string>>({});
@@ -105,7 +115,7 @@
   const titleOf = (r: Result) => r.title || titles[titleKey(r)] || "";
   const counts = $derived({ neurons: results.filter((r) => r.unit === "neurons").length, heads: results.filter((r) => r.unit === "heads").length });
   const kept = $derived(kind === "all" ? results : results.filter((r) => r.unit === kind));
-  const settled = $derived((answer !== null && answer.text === asked.trim()) || failed);
+  const settled = $derived((answer !== null && answer.text === asked.trim()) || lost);
   // A new query starts at the top, with every kind and the first ten.
   $effect(() => { void asked; untrack(() => { limit = SHOWN; kind = "all"; }); });
 
@@ -127,9 +137,10 @@
       if (row.kind !== "unit" || row.r.unit !== "neurons" || row.r.title || titleKey(row.r) in titles) continue;
       const r = row.r;
       const key = titleKey(r);
+      // A record that doesn't load leaves the row's title empty ("Open"), not asked for again with every other title.
       loadPoleWire(model, poleId(mlp, r.layer, r.index, r.side === 0 ? 1 : -1)).then(
         (wire) => { titles = { ...titles, [key]: wire.title }; },
-        () => undefined,
+        () => { titles = { ...titles, [key]: "" }; },
       );
     }
   });
@@ -148,7 +159,8 @@
 
   const recentShown = $derived(open && !query.trim() && recent.length > 0);
   const waiting = $derived(asked.trim() !== "" && !settled && loading);
-  const panel = $derived(recentShown || (open && query.trim() !== "" && asked.trim() !== "" && (settled || waiting)));
+  // While the next query's units are read, the last query's results stay up rather than the panel closing between them.
+  const panel = $derived(recentShown || (open && query.trim() !== "" && asked.trim() !== "" && (settled || waiting || answer !== null)));
   // The result looked at, picked out on the atlas; nothing once the panel closes.
   $effect(() => {
     const row = panel && active >= 0 ? rows[active] : undefined;
@@ -186,7 +198,7 @@
 
   const status = $derived(
     !asked.trim() || !settled ? ""
-    : failed && !found ? "Search didn't load."
+    : lost && !found ? "Search didn't load."
     : found?.layer !== undefined ? `Layer ${found.layer}.`
     : !results.length ? `No match for “${asked.trim()}”.${found?.suggestion ? ` Did you mean ${found.suggestion}?` : ""}`
     : results.length === 1 && !found?.more ? "1 match." : `${results.length.toLocaleString("en-US")}${found?.more ? "+" : ""} matches.`,
@@ -194,6 +206,7 @@
 
   function changed() {
     open = true;
+    enterFor = null;
     clearTimeout(timer);
     if (!query.trim()) { asked = ""; return; }
     warm();
@@ -270,6 +283,8 @@
   }
 
   function key(event: KeyboardEvent) {
+    // A key that composes text (pinyin, kana) belongs to the input method, Enter included.
+    if (event.isComposing || event.keyCode === 229) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       if (!open) { open = true; return; }
@@ -286,7 +301,16 @@
     } else if (event.key === "Enter") {
       // An ID opens at once, without waiting for the list.
       const ref = parseRef(query, lens.model);
+      if (ref?.model) { event.preventDefault(); remember(query); go(lens.hrefFor({ model: ref.model, unit: ref.unit, layer: ref.layer, index: ref.index, all: false })); reveal(); return; }
       if (ref) { event.preventDefault(); choose({ ...ref, side: ref.unit === "heads" ? 2 : 0, title: "", matched: "", score: 1 }); return; }
+      // Results still the last query's: run this one now, and choose once its results are in.
+      if (query.trim() && answer?.text !== query.trim() && !lost) {
+        event.preventDefault();
+        clearTimeout(timer);
+        asked = query;
+        enterFor = query.trim();
+        return;
+      }
       if (panel && rows[active]) {
         event.preventDefault();
         const row = rows[active];
@@ -298,6 +322,15 @@
       else if (query) { event.preventDefault(); clear(); }
     }
   }
+
+  $effect(() => {
+    if (enterFor === null || !settled || answer?.text !== enterFor) return;
+    untrack(() => {
+      enterFor = null;
+      const row = rows[active] ?? rows[0];
+      if (row && panel) pick(row);
+    });
+  });
 
   /** Somewhere new: a unit at random, among the curated neurons and every head alike, never the one open now. */
   function random() {
@@ -439,7 +472,7 @@
         aria-label="Search neurons and heads"
         aria-autocomplete="list"
         aria-expanded={panel}
-        aria-controls={listId}
+        aria-controls={panel && rows.length && !waiting ? listId : undefined}
         aria-activedescendant={panel && active >= 0 && rows[active] ? optionId(active) : undefined}
         placeholder="Search a word, an ID like L33 12225, or a layer like L8"
         autocomplete="off"
@@ -469,7 +502,7 @@
             <div class="kinds-wrap" transition:expand>
               <div class="kinds" role="group" aria-label="Show" use:glide>
                 {#each [["all", "All", results.length], ["neurons", "Neurons", counts.neurons], ["heads", "Heads", counts.heads]] as const as [value, label, n] (value)}
-                  <button type="button" class="kind" aria-pressed={kind === value} onmousedown={(event) => event.preventDefault()} onclick={() => { kind = value; limit = SHOWN; }}>{label} <span class="n"><MorphText text={n.toLocaleString("en-US")} /></span></button>
+                  <button type="button" class="kind" aria-pressed={kind === value} onmousedown={(event) => event.preventDefault()} onclick={() => { kind = value; limit = SHOWN; active = 0; }}>{label} <span class="n"><MorphText text={n.toLocaleString("en-US")} /></span></button>
                 {/each}
               </div>
             </div>
@@ -485,6 +518,8 @@
           {:else if rows.length}
             <div class="list" role="listbox" id={listId} aria-label={recentShown ? "Recent searches" : "Matches"} bind:this={list} use:glide>
               {#each rows as row, i (row.kind === "unit" ? `${row.r.unit}:${row.r.layer}:${row.r.index}` : row.kind === "layer" ? `layer:${row.layer}` : `recent:${row.text}`)}
+                <!-- Keys reach an option through the field (aria-activedescendant), never by focusing it. -->
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
                 <div
                   class="option rise"
                   animate:move
@@ -500,7 +535,6 @@
                   onpointermove={() => (active = i)}
                   onclick={(event) => pick(row, event)}
                   onauxclick={(event) => { if (event.button === 1 && row.kind === "unit") window.open(hrefOf(row.r), "_blank", "noopener"); }}
-                  onkeydown={(event) => { if (event.key === "Enter") pick(row); }}
                 >
                   {#if row.kind === "recent"}
                     <span class="id"><Icon name="search" size={14} /></span>
@@ -530,7 +564,7 @@
             {/if}
           {:else}
             <p class="none">
-              {#if failed && !found}Search didn't load. <button type="button" class="prose-link" onclick={() => { failed = false; warm(); }}>Try again</button>
+              {#if lost && !found}Search didn't load. <button type="button" class="prose-link" onclick={() => { failed = false; missed = null; attempt += 1; warm(); }}>Try again</button>
               {:else if found?.suggestion}No match for “{asked.trim()}”. Did you mean <button type="button" class="prose-link" onmousedown={(event) => event.preventDefault()} onclick={() => run(found!.suggestion!)}>{found.suggestion}</button>?
               {:else}No match. Try another word, an ID like L33 12225, or a layer like L8.{/if}
             </p>

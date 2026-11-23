@@ -35,7 +35,9 @@
             <ul>
               {#each ROLES as role (role.bit)}
                 {@const own = (head.roles & role.bit) !== 0}
-                <li><button type="button" class="role" class:own data-tip-title={role.name} data-tip={role.describe}>{role.short}{#if own}<span class="sr-only"> (this head)</span>{/if}</button></li>
+                <!-- Focusable only so the keyboard reaches its tip: it does nothing, so it isn't a button. -->
+                <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+                <li><span class="role" class:own tabindex="0" data-tip-title={role.name} data-tip={role.describe}>{role.short}{#if own}<span class="sr-only"> (this head)</span>{/if}</span></li>
               {/each}
             </ul>
           </div>
@@ -52,7 +54,7 @@
   .body { display: grid; gap: var(--s6); min-width: 0; }
   .roles { display: grid; align-content: start; gap: var(--s3); min-width: 0; }
   ul { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); }
-  .role { display: inline-block; margin: 0; padding: 0; border: 0; background: transparent; color: var(--ink3); font: var(--type-small); cursor: help; transition: color var(--fast) var(--ease); }
+  .role { display: inline-block; color: var(--ink3); font: var(--type-small); cursor: help; transition: color var(--fast) var(--ease); }
   .role.own { padding: 0 var(--s2); border-radius: var(--r-chip); background: color-mix(in oklch, var(--tint) 14%, var(--paper)); color: var(--ink); font-weight: 500; }
   @media (hover: hover) { .role:hover { color: var(--ink); } }
   .ghost { display: block; height: 200px; border-radius: var(--r-row); background: var(--wash); }

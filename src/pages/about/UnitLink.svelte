@@ -29,9 +29,8 @@
   }
   .id { font: 600 20px/28px var(--display); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
   .where { color: var(--ink3); font: var(--type-meta); transition: color var(--fast) var(--ease); }
-  .go { display: inline-grid; align-self: center; color: var(--ink3); transition: color var(--fast) var(--ease), translate var(--fast) var(--ease); }
+  .go { display: inline-grid; align-self: center; color: var(--ink3); transition: color var(--fast) var(--ease); }
   @media (hover: hover) {
     .unit:hover .where, .unit:hover .go { color: var(--ink); }
-    .unit:hover .go { translate: 2px 0; }
   }
 </style>

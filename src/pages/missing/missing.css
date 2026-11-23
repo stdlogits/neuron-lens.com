@@ -22,10 +22,12 @@
   text-wrap: balance;
 }
 
+/* It quotes what the address typed, which may be one long word. */
 .ms-say {
   max-width: 52ch;
   color: var(--ink2);
   font: var(--type-lead);
+  overflow-wrap: anywhere;
 }
 
 .ms-ways {

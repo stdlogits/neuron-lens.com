@@ -29,7 +29,7 @@
     <Swap key={pole !== null}>
       {#if pole}
         <div class="body" data-link-scope>
-          <p class="title"><span class="head">Writes</span><span class="sign" aria-label="Minus side">−</span><LabelText text={pole.label.writes} interactive /></p>
+          <p class="title"><span class="head">Writes</span><span class="sign" aria-hidden="true">−</span><span class="sr-only">Minus side. </span><LabelText text={pole.label.writes} interactive /></p>
           {#if context}<Context {context} />{/if}
           <div class="toks">{#each tokens as [token, count, flags], i (i)}<Token {token} {count} {flags} {i} />{/each}</div>
         </div>

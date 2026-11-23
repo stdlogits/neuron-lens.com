@@ -8,7 +8,14 @@ import { DEFAULT_MODEL, type ModelId } from "./models";
 
 const KEY = "neuron-lens.english";
 
-export const translation = $state<{ on: boolean; terms: Terms | null; failed: boolean; ready: ModelId[] }>({ on: false, terms: null, failed: false, ready: [] });
+// The terms are a plain object of some hundred thousand entries, held raw: a deep $state would wrap every entry it touched.
+class Translation {
+  on = $state(false);
+  terms = $state.raw<Terms | null>(null);
+  failed = $state(false);
+  ready = $state.raw<ModelId[]>([]);
+}
+export const translation = new Translation();
 
 // Each model has its own terms file. A term means the same whichever model's run translated it, so
 // every file loaded is merged into one: a page showing both models' tokens (About) reads them all.

@@ -18,7 +18,7 @@
 <dl class="pat">
   {#each rows as row (row.name)}
     <div class:on={row.on}>
-      <dt data-tip={row.tip}>{row.name}</dt>
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex --><dt data-tip={row.tip} tabindex={row.tip ? 0 : undefined}>{row.name}</dt>
       <dd><span class="tr" aria-hidden="true"><i style:transform="scaleX({Math.max(0.03, Math.min(1, row.value))})"></i></span><span class="v">{row.value.toFixed(2)}</span></dd>
     </div>
   {/each}

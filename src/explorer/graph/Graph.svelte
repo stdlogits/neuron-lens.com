@@ -98,6 +98,8 @@
   const titled = (el: HTMLElement, place: [string, Spot]) => stage.attachTitle(el, place);
 
   const top = $derived(graph.edges.reduce((max, e) => Math.max(max, e.flow), 1e-9));
+  /** The unit at the centre. */
+  const focus = $derived(graph.nodes.find((n) => n.side === "focus") ?? null);
 
   // What connects the pointed-at unit to the centre: every link on a path through it.
   const lit = $derived.by(() => {
@@ -113,16 +115,16 @@
     // A sibling: what it shares with the unit, and the unit's own links to that.
     const siblings = new Set(graph.nodes.filter((n) => n.side === "sibling").map((n) => n.key));
     if (start.side === "sibling") {
-      const focus = graph.nodes.find((n) => n.side === "focus")?.key;
       const shared = new Set<string>();
       for (const e of graph.edges) if (e.from === hovered || e.to === hovered) { edges.add(e.key); shared.add(e.from === hovered ? e.to : e.from); }
       for (const e of graph.edges) {
-        if ((e.from === focus && shared.has(e.to)) || (e.to === focus && shared.has(e.from))) { edges.add(e.key); nodes.add(e.from); nodes.add(e.to); }
+        if ((e.from === focus?.key && shared.has(e.to)) || (e.to === focus?.key && shared.has(e.from))) { edges.add(e.key); nodes.add(e.from); nodes.add(e.to); }
       }
       for (const key of shared) nodes.add(key);
       return { edges, nodes };
     }
-    // Toward the unit: forward along links from above it, backward from below it, never through a sibling.
+    // Toward the unit: forward along links from above it, backward from below it, never through a sibling, and
+    // ending at the unit: its link in lights, but what lies on its other side has nothing to do with this one.
     const onward = new Map<string, GraphEdge[]>();
     for (const e of graph.edges) {
       if (siblings.has(e.from) || siblings.has(e.to)) continue;
@@ -136,7 +138,7 @@
       for (const e of onward.get(stack.pop()!) ?? []) {
         const next = start.side === "up" ? e.to : e.from;
         edges.add(e.key);
-        if (!nodes.has(next)) { nodes.add(next); stack.push(next); }
+        if (!nodes.has(next)) { nodes.add(next); if (next !== focus?.key) stack.push(next); }
       }
     }
     return { edges, nodes };
@@ -149,18 +151,17 @@
     if (n.side === "sibling") return siblingTip(n.shares ?? [0, 0], mode, n.kind);
     if (mode === "with") return `Active at ${Math.round(n.flow * 5)} of its first 5 top firings`;
     if (mode !== "weights") {
-      const share = percent(Math.min(1, n.flow), n.flow < 0.1 ? 1 : 0);
-      if (n.side === "up") {
-        const head = graph.nodes.some((other) => other.side === "focus" && other.kind === "head");
-        return `${share} of ${head ? headInput("it", mode === "query" ? 1 : mode === "key" ? 2 : 0) : "its activation"}`;
-      }
-      const what = n.kind === "neuron" ? "this neuron's activation" : n.onward > 0 ? "what this head writes" : "where this head looks";
-      return `${share} of ${what}`;
+      const shareOf = (part: number) => percent(Math.min(1, part), part < 0.1 ? 1 : 0);
+      if (n.side === "up") return `${shareOf(n.flow)} of ${focus?.kind === "head" ? headInput("it", mode === "query" ? 1 : mode === "key" ? 2 : 0) : "its activation"}`;
+      // A head reached through its value and its query or key has both in its flow; what it writes is the value's share alone.
+      if (n.kind === "head") return n.onward > 0 ? `${shareOf(n.onward)} of what this head writes` : `${shareOf(n.flow)} of where this head looks`;
+      return `${shareOf(n.flow)} of this neuron's activation`;
     }
     return `${n.hop === 1 ? "1 link" : `${n.hop} links`} ${n.side === "up" ? "up" : "down"}, by weight`;
   }
   // A tap shows the unit's card rather than its tip, which Ledger shows on a touch's pointerover (on the page's
-  // root, which a delegated handler would reach too late) and its pointerdown (on the document).
+  // root, which a delegated handler would reach too late) and its pointerdown (on the document). A touch that
+  // turned into a scroll of the page is cancelled, and no tap: a key's Enter after it still goes there.
   let touched = false;
   function hush(el: HTMLElement) {
     const over = (event: PointerEvent) => { if (event.pointerType !== "mouse" && onpick) event.stopPropagation(); };
@@ -274,6 +275,7 @@
       {/if}
     {/each}
     {#if !surface}<canvas class="links" bind:this={own} style:left="0" style:top={`${-MARGIN}px`} aria-hidden="true"></canvas>{/if}
+    <!-- The rail's marks take no tab stops (hundreds, before its lists, which name the strongest of them); the navigator's all do. -->
     {#each shown.nodes as node (node.key)}
       <a
         class="node"
@@ -288,6 +290,7 @@
         use:seat={node.key}
         use:hush
         href={href(node.kind, node.layer, node.index)}
+        tabindex={open ? undefined : -1}
         data-tip={node.wire?.title || nameOf(node)}
         data-tip-lent={node.wire?.title && model.labelsFrom ? "body" : undefined}
         data-tip-title={nameOf(node)}
@@ -298,6 +301,7 @@
         onfocus={() => point(node.key)}
         onblur={() => point(null)}
         onpointerdown={pressed}
+        onpointercancel={() => (touched = false)}
         onclick={(event) => clicked(event, node)}
       ><i style:background={depthColor(model, node.layer)}></i>{#if labels?.has(node.key)}<span class="label {labels.get(node.key)}" class:lent={!!(node.wire?.title && model.labelsFrom)} use:titled={[node.key, labels.get(node.key)!]} in:fadeIn out:fadeOut>{node.wire?.title || nameOf(node)}</span>{/if}</a>
     {/each}
@@ -320,7 +324,7 @@
     cursor: help;
     transition: top var(--glide) var(--ease);
     animation: appear var(--in) var(--ease) backwards;
-    animation-delay: calc(var(--i) * 32ms);
+    animation-delay: calc(min(var(--i) * 24ms, 160ms));
   }
   @keyframes appear { from { opacity: 0; } }
   .tick.edge { display: flex; justify-content: flex-end; color: var(--ink2); }
@@ -332,13 +336,11 @@
     width: 100%;
     height: 100%;
     border-radius: var(--r-pill);
-    outline: 2px solid transparent;
-    outline-offset: 2px;
-    transition: opacity var(--in) var(--ease), scale var(--in) var(--ease), background-color var(--glide) var(--ease), outline-color var(--glide) var(--ease);
+    transition: opacity var(--in) var(--ease), scale var(--fast) var(--ease), background-color var(--glide) var(--ease);
   }
   /* A search: what it didn't find falls away and what it found rings once, both spreading out from the middle
      of the screen (--wave); each new search rings again (--ring alternates between two names for one ring). */
-  .node i { transition-delay: var(--wave, 0ms), 0ms, 0ms, 0ms; }
+  .node i { transition-delay: var(--wave, 0ms), 0ms, 0ms; }
   .away i { opacity: 0.12; scale: 0.7; }
   .away .label { opacity: 0; }
   .found::before {
@@ -354,8 +356,18 @@
   @keyframes ring-a { from { opacity: 0.9; scale: 0.6; } to { opacity: 0; scale: 2.2; } }
   @keyframes ring-b { from { opacity: 0.9; scale: 0.6; } to { opacity: 0; scale: 2.2; } }
   @media (prefers-reduced-motion: reduce) { .found::before { animation: none; } .node i { transition-delay: 0ms; } }
+  /* The unit itself: an ink core in its mark, as the atlas fills the chosen bar with ink, so it is never taken
+     for the focus ring (an outline, round the mark). */
   .focus { z-index: 1; }
-  .focus i { outline-color: var(--ink); }
+  .focus i { position: relative; }
+  .focus i::after {
+    content: "";
+    position: absolute;
+    inset: 30%;
+    border-radius: inherit;
+    background: var(--ink);
+    animation: appear var(--glide) var(--ease) backwards;
+  }
   .dim i { opacity: 0.25; }
   /* A title by its mark, where the navigator found room for it, one size on screen at any zoom, wrapped at
      LABEL (Navigator.svelte). Its frosted glass, the tip's, is painted on the links' canvas behind it (ink.ts),
@@ -387,6 +399,6 @@
   .hot .label { color: var(--ink); }
   .dim .label { opacity: 0.25; }
   .hot i { scale: 1.3; }
-  .node:active i { scale: 0.92; }
+  .node:active i { scale: 0.94; }
   @media (hover: hover) { .node:hover i { scale: 1.3; } }
 </style>

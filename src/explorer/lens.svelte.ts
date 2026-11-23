@@ -166,7 +166,7 @@ export class Lens {
         this.failed = false;
         this.scores = null;
         this.heads = null;
-        void loadIndex(model).then((index) => { if (this.modelId === model) this.index = index; }, () => { if (this.modelId === model) this.failed = true; });
+        this.loadIndex(model);
         this.loadHeadIndex(model);
       });
     });
@@ -182,10 +182,7 @@ export class Lens {
       const model = this.modelId;
       const layer = this.layer;
       untrack(() => {
-        if (!this.scores) {
-          const key = `${model}/scores`;
-          void loadScores(model).then((scores) => { this.settle(key); if (this.modelId === model) this.scores = scores; }, () => this.fail(key));
-        }
+        if (!this.scores) this.loadScores(model);
         this.loadRows(model, layer);
       });
     });
@@ -224,6 +221,17 @@ export class Lens {
 
   private fail = (key: string) => { if (!this.failures.includes(key)) this.failures = [...this.failures, key]; };
   private settle = (key: string) => { if (this.failures.includes(key)) this.failures = this.failures.filter((k) => k !== key); };
+
+  loadIndex(model: ModelId) {
+    this.failed = false;
+    loadIndex(model).then((index) => { if (this.modelId === model) this.index = index; }, () => { if (this.modelId === model) this.failed = true; });
+  }
+
+  loadScores(model: ModelId) {
+    const key = `${model}/scores`;
+    this.settle(key);
+    loadScores(model).then((scores) => { if (this.modelId === model) this.scores = scores; }, () => this.fail(key));
+  }
 
   loadNeuron(model: ModelId, layer: number, n: number) {
     if (this.neuron?.model === model && this.neuron.layer === layer && this.neuron.n === n) return;
@@ -264,6 +272,8 @@ export class Lens {
   /** Ask again for whatever the current place is missing. */
   retry() {
     const model = this.modelId;
+    if (this.index?.id !== model) this.loadIndex(model);
+    if (this.all && !this.scores) this.loadScores(model);
     if (this.unit === "heads") {
       if (!this.heads) this.loadHeadIndex(model);
       this.loadHeads(model, this.layer);
@@ -309,10 +319,19 @@ export class Lens {
     if (unit === this.unit) return;
     go(this.hrefFor({ unit, index: null, all: false }));
   };
-  /** Open the shown unit's connections full screen (naming it in the address, as a layer's page doesn't), or close them back to its page, which takes the place of the full-screen entry. */
+  /** Open the shown unit's connections full screen (naming it in the address, as a layer's page doesn't), or close them:
+   * back to the entry they were opened from, or (opened by a link, or moved within) to the unit's page in their place. */
+  private graphEntry: string | null = null;
   setGraph = (open: boolean) => {
     if (open === this.graphOpen || this.selected === null) return;
-    go(this.hrefFor({ index: this.selected, graph: open }), { replace: !open });
+    const to = this.hrefFor({ index: this.selected, graph: open });
+    if (!open && this.graphEntry === location.pathname + location.search) {
+      this.graphEntry = null;
+      history.back();
+      return;
+    }
+    this.graphEntry = open ? to : null;
+    go(to, { replace: !open });
   };
   setAll = (all: boolean) => {
     if (all === this.all) return;

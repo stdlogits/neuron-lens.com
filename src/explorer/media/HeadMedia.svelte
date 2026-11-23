@@ -41,12 +41,12 @@
     <h3 class="head" id={`${uid}-title`}>In images and sound</h3>
     <table>
       <thead>
-        <tr><td></td>{#each COLUMNS as column (column.name)}<th scope="col" data-tip={column.tip}>{column.name}</th>{/each}</tr>
+        <tr><td></td>{#each COLUMNS as column (column.name)}<th scope="col" data-tip={column.tip} tabindex={column.tip ? 0 : undefined}>{column.name}</th>{/each}</tr>
       </thead>
       <tbody>
         {#each rows as row (row.modality)}
           <tr>
-            <th scope="row" data-tip={row.tip}>{row.name}</th>
+            <th scope="row" data-tip={row.tip} tabindex={row.tip ? 0 : undefined}>{row.name}</th>
             {#each cells(row.modality, head.media![row.modality]) as cell, i (i)}
               <td class:on={cell.on} data-tip={cell.tip}>{cell.text}</td>
             {/each}

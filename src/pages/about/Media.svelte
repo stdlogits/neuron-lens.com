@@ -104,7 +104,7 @@
     <Swap key={pole !== null}>
       {#if pole}
         <div class="body">
-          <p class="title"><span class="sign" aria-label="Plus side">+</span><LabelText text={pole.label.fires} interactive /></p>
+          <p class="title"><span class="sign" aria-hidden="true">+</span><span class="sr-only">Plus side. </span><LabelText text={pole.label.fires} interactive /></p>
 
           {#if image}
             <div class="block">
@@ -134,7 +134,7 @@
               <ul class="sounds">
                 {#each sounds as item, i (item.doc)}
                   <li class="sound rise" style:--i={i}>
-                    <button type="button" class="play" aria-label={playing === item.doc ? "Stop" : `Play: ${spoken(item.info)}`} aria-pressed={playing === item.doc} onclick={() => toggle(item)}>
+                    <button type="button" class="play" aria-label="Play: {spoken(item.info)}" aria-pressed={playing === item.doc} onclick={() => toggle(item)}>
                       <Icon name={playing === item.doc ? "pause" : "play"} />
                     </button>
                     <span class="said">{spoken(item.info)}</span>

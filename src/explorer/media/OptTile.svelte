@@ -43,7 +43,7 @@
   {#if opt.png}
     <span class="square patch" style:--png={`url("${opt.png}")`} role="img" aria-label="The patch optimised to drive this side, in every slot" data-tip={tip} data-tip-title="Optimised patch"></span>
   {:else if opt.wave}
-    <button type="button" class="square sound" aria-pressed={playing} aria-label={`${playing ? "Stop" : "Play"} the sound optimised to drive this side`} data-tip={tip} data-tip-title="Optimised sound" onclick={toggle}>
+    <button type="button" class="square sound" aria-pressed={playing} aria-label="Play the sound optimised to drive this side" data-tip={tip} data-tip-title="Optimised sound" onclick={toggle}>
       <svg class="wave" viewBox="0 0 160 40" preserveAspectRatio="none" aria-hidden="true"><path d={path} /></svg>
       <span class="controls">
         <span class="knob"><Icon name={playing ? "pause" : "play"} size={14} /></span>

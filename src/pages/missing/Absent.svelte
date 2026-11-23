@@ -154,7 +154,8 @@
     kick();
   }
   function key(event: KeyboardEvent) {
-    const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
+    // As any slider: right and up raise, left and down lower.
+    const step = event.key === "ArrowRight" || event.key === "ArrowUp" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowDown" ? -1 : 0;
     if (!step) return;
     event.preventDefault();
     quietNames();
@@ -238,20 +239,27 @@
         hit.style.transform = `translate(${at[0]}px, ${at[1]}px)`;
       }
       ctx.globalAlpha = 1;
-    }, (w, h) => { quietNames(); layout(w, h); settle(); });
+    }, (w, h) => {
+      // A new size lands the run: the dots settle where they were going, and the name with them.
+      if (quiet) shown = CENTRE;
+      quietNames();
+      layout(w, h);
+      settle();
+    });
     paint = surf.paint;
     let started = false;
+    let live = true;
     const start = () => {
-      if (started || !surf.at.w) return;
+      if (!live || started || !surf.at.w) return;
       started = true;
       layout(surf.at.w, surf.at.h);
       settle();
       paint();
       play();
     };
-    // The figure is set in the display face: wait a moment for it, never long.
+    // The figure is set in the display face: wait a moment for it, never long, and not past leaving the page.
     Promise.race([document.fonts?.load(`800 64px ${FACE}`), new Promise((done) => setTimeout(done, 700))]).then(start);
-    return () => { stopMove(); quietNames(); cancelAnimationFrame(frame); surf.destroy(); colors.destroy(); };
+    return () => { live = false; stopMove(); quietNames(); cancelAnimationFrame(frame); surf.destroy(); colors.destroy(); };
   });
   $effect(() => { void shown; paint(); });
 </script>

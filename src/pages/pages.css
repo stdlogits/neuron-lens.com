@@ -70,7 +70,8 @@
   }
 }
 
-/* The one filled button on a page: the way into the explorer. */
+/* The one filled button on a page: the way into the explorer. Hover is a colour change, as all of Ledger's are: the
+ * fill eases a little toward the paper. */
 .pg-go {
   display: inline-flex;
   align-items: center;
@@ -80,7 +81,7 @@
   background: var(--ink);
   color: var(--paper);
   font: var(--type-control);
-  transition: opacity var(--fast) var(--ease), scale var(--fast) var(--ease);
+  transition: background-color var(--fast) var(--ease), scale var(--fast) var(--ease);
 }
 
 .pg-go:active {
@@ -89,7 +90,7 @@
 
 @media (hover: hover) {
   .pg-go:hover {
-    opacity: 0.86;
+    background: color-mix(in oklch, var(--ink) 86%, var(--paper));
   }
 }
 

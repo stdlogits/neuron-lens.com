@@ -4,7 +4,6 @@
   import Card, { type Picked } from "./Card.svelte";
   import { scroller } from "../panes";
   import Graph from "./Graph.svelte";
-  import Navigator from "./Navigator.svelte";
   import { focusOf, headInput, nodeKey, siblingTip, trace, type Graph as GraphData, type Mode, type Reach, type Take } from "./trace";
   import { useLens } from "../lens.svelte";
   import { depthColor } from "../../lib/models";
@@ -14,6 +13,12 @@
   // each side in words, and its siblings. A choice between what feeds it in real text, what its weights
   // wire it to, and what fires with it, because those are three different lists.
   const lens = useLens();
+  // The full-screen graph's code loads when first opened (and once the page is idle, so opening it is instant).
+  const navigator = () => import("./Navigator.svelte");
+  onMount(() => {
+    const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 3000));
+    idle(() => void navigator().catch(() => {}), { timeout: 8000 });
+  });
 
   let mode = $state<Mode>("context");
   let reach = $state<Reach>("near");
@@ -27,7 +32,46 @@
     if (key !== hovered) wait = window.setTimeout(() => (hovered = key), key ? 120 : 90);
   }
   onDestroy(() => clearTimeout(wait));
-  let graph = $state.raw<GraphData | null>(null);
+  /** The graph the walk last published, and which unit it is of. */
+  let published = $state.raw<GraphData | null>(null);
+  let publishedFor = $state("");
+  const unitKey = $derived(`${lens.modelId}/${lens.unit}/${lens.layer}/${lens.selected}`);
+  // Another unit's graph is held only a moment while this one's is walked, so a step to a neighbour moves the graph
+  // rather than flashing it; past 150 ms it gives way to the waiting state, as the unit view's does, and if the unit's
+  // own record doesn't load, the rail says so rather than go on showing the last unit's connections.
+  const stale = $derived(publishedFor !== unitKey);
+  let slow = $state(false);
+  $effect(() => {
+    slow = false;
+    if (!stale) return;
+    const timer = setTimeout(() => (slow = true), 150);
+    return () => clearTimeout(timer);
+  });
+  const failed = $derived(!stale && !!published?.failed);
+  const graph = $derived(!published || published.failed || (stale && slow) ? null : published);
+  let attempt = $state(0);
+  function retry() {
+    published = null;
+    attempt += 1;
+  }
+  // Full screen, a graph stays up while the next unit's is walked (a unit's mark opens it there), however long that takes.
+  let held: GraphData | null = null;
+  const navGraph = $derived.by(() => {
+    if (!lens.graphOpen || failed) return (held = null);
+    if (graph) held = graph;
+    return held;
+  });
+  // Closed, it gives focus back to the button that opens it, where a keyboard left off, rather than to the page.
+  let expander = $state<HTMLElement>();
+  let wasOpen = false;
+  $effect(() => {
+    const open = navGraph !== null;
+    untrack(() => {
+      const lost = !document.activeElement || document.activeElement === document.body;
+      if (wasOpen && !open && lost) expander?.querySelector("button")?.focus({ preventScroll: true });
+      wasOpen = open;
+    });
+  });
 
   // A unit tapped in the rail's graph: its card over the page, and what connects it lit, until it is put away,
   // its unit leaves the graph, the graph is of another unit, or the graph is scrolled out of view.
@@ -95,9 +139,11 @@
   // stands, laid out and drawn once a frame (or after 100 ms, for a page given no frames).
   let latest: object | null = null;
   $effect(() => {
+    void attempt;
     if (!ready) return;
     const token = {};
     latest = token;
+    const walked = unitKey;
     let queued: Take | null = null;
     let frame = 0;
     let timer = 0;
@@ -105,7 +151,10 @@
       cancelAnimationFrame(frame);
       clearTimeout(timer);
       frame = timer = 0;
-      if (latest === token && queued) graph = queued();
+      if (latest === token && queued) {
+        published = queued();
+        publishedFor = walked;
+      }
       queued = null;
     };
     const publish = (next: Take) => {
@@ -205,7 +254,7 @@
   const hrefFor = (kind: "neuron" | "head", layer: number, index: number) => lens.unitHref(kind === "head" ? "heads" : "neurons", layer, index);
   // In the full-screen graph, a unit's mark opens it there.
   const graphHref = (kind: "neuron" | "head", layer: number, index: number) => lens.hrefFor({ unit: kind === "head" ? "heads" : "neurons", layer, index, all: kind === "neuron" && lens.all, graph: true });
-  const focusNode = $derived(graph?.nodes.find((node) => node.side === "focus") ?? null);
+  const focusNode = $derived(navGraph?.nodes.find((node) => node.side === "focus") ?? null);
   const focusName = $derived(focusNode ? (focusNode.kind === "head" ? headId(focusNode.layer, focusNode.index) : `${neuronId(focusNode.layer, focusNode.index)} ${focusNode.pole > 0 ? "+" : "−"}`) : "");
   const shownValue = (title: string, { value, shares }: Row) => {
     if (title === "Siblings") return `↑${shares?.[0] ?? 0} ↓${shares?.[1] ?? 0}`;
@@ -238,7 +287,7 @@
     <div class="tools">
       {#if modes.length > 1}<Segmented options={modes} value={shownMode} onchange={(value: Mode) => (mode = value)} label="Which connections" />{/if}
       <div class="reach" class:off={shownMode === "with"} inert={shownMode === "with"}><Tabs options={reaches} value={reach} onchange={(value: string) => (reach = value as Reach)} label="How far" /></div>
-      <IconButton icon="expand" label="Full screen, with every title" onclick={() => lens.setGraph(true)} />
+      <span class="opener" bind:this={expander}><IconButton icon="expand" label="Full screen, with every title" onclick={() => lens.setGraph(true)} /></span>
     </div>
 
     {#if mix}
@@ -248,9 +297,11 @@
       </div>
     {/if}
 
-    {#if graph && lens.graphOpen}
-      <Navigator {graph} model={lens.model} mode={shownMode} modes={modes} onmode={(value: Mode) => (mode = value)} {reach} {reaches} onreach={(value: Reach) => (reach = value)}
-        {hovered} {point} href={graphHref} name={focusName} title={focusWire?.title ?? ""} close={() => lens.setGraph(false)} />
+    {#if navGraph}
+      {#await navigator() then { default: Navigator }}
+      <Navigator graph={navGraph} model={lens.model} mode={shownMode} modes={modes} onmode={(value: Mode) => (mode = value)} {reach} {reaches} onreach={(value: Reach) => (reach = value)}
+        {hovered} {point} href={graphHref} name={focusName} title={focusNode?.wire?.title ?? ""} close={() => lens.setGraph(false)} />
+      {/await}
     {/if}
     {#if graph && !lens.graphOpen}
       <Graph {graph} model={lens.model} mode={shownMode} href={hrefFor} hovered={lit} {point} onpick={pick} />
@@ -263,6 +314,11 @@
           {#if showsAgainst}<li data-tip="Lowers what it leads to"><i class="line against"></i>Pushes against</li>{/if}
         {/if}
       </ul>
+    {:else if failed}
+      <div class="failed" role="alert">
+        <p>Connections didn't load.</p>
+        <button type="button" class="retry" onclick={retry}>Try again</button>
+      </div>
     {:else}<div class="waiting" aria-hidden="true"></div>{/if}
   </div>
 
@@ -273,7 +329,7 @@
         <Swap key={listKey}>
           <div class="rows">
             {#each side.rows as item, i (item.key)}
-              <a class="row rise" style:--i={i} class:on={lit === item.key} href={item.href} onpointerenter={() => point(item.key)} onpointerleave={() => point(null)}>
+              <a class="row rise" style:--i={i} class:on={lit === item.key} href={item.href} onpointerenter={() => point(item.key)} onpointerleave={() => point(null)} onfocus={() => point(item.key)} onblur={() => point(null)}>
                 <span class="id"><i class="swatch" style:background={depthColor(lens.model, item.layer)}></i>{item.name}{#if item.mirrored}<span class="mirror" data-tip="Its other side pushes the opposite way">±</span>{/if}{#if item.through.length}<span data-tip="The inputs of that head it reaches, strongest first">· {item.through.map((through) => THROUGH[through]).join(", ")}</span>{/if}</span>
                 <span class="value" data-tip={valueTip(side.title, item)}><Meter value={Math.abs(item.value) / top(side.rows)} label={valueTip(side.title, item)} />{shownValue(side.title, item)}</span>
                 <span class="title" class:low={item.low}>{#key item.title}<span in:fadeIn>{#if item.title}<LabelText text={item.title} lent={!!lens.model.labelsFrom} />{:else}&nbsp;{/if}</span>{/key}</span>
@@ -306,6 +362,22 @@
   .mix i.two { background: color-mix(in oklch, var(--tint) 40%, transparent); }
   .mix .meta { font-weight: 400; }
   .waiting { height: 780px; }
+  .opener { display: contents; }
+  /* As the unit view says its own failed load. */
+  .failed { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); padding: var(--s5) 0; color: var(--ink2); font: var(--type-body); }
+  .retry {
+    height: 36px;
+    padding: 0 var(--s4);
+    border: 0;
+    border-radius: var(--r-pill);
+    background: var(--wash);
+    color: var(--ink);
+    font: var(--type-control);
+    cursor: pointer;
+    transition: background-color var(--fast) var(--ease), scale var(--fast) var(--ease);
+  }
+  .retry:active { scale: 0.97; }
+  @media (hover: hover) { .retry:hover { background: var(--wash2); } }
   .key { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s4); margin: 0; padding: 0; font-weight: 400; list-style: none; }
   .key li { display: inline-flex; align-items: center; gap: 6px; cursor: help; }
   .key i { flex: none; background: var(--tint); }

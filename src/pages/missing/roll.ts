@@ -4,12 +4,12 @@
 // never shows for a frame before it rolls (Ledger's MorphText paints a change on the next frame, and a change made in
 // the ride's own animation frame would show first). Between rides a change rolls too, unless changes come faster than
 // a roll, as while scrubbing, when they stay plain.
-import { reducedMotion } from "@stdlogits/ledger";
+import { IN, OUT, reducedMotion, stagger } from "@stdlogits/ledger";
 
 export type RollMode = "plain" | "auto" | "land";
 
+// Ledger's curve as the Web Animations API takes it, a string: Ledger exports it only as a function (`ease`).
 const CURVE = "cubic-bezier(0.2, 0, 0, 1)";
-const OUT = 120, IN = 200, STEP = 24;
 
 export function roll(node: HTMLElement, options: { text: string; mode: RollMode }) {
   let shown = options.text;
@@ -44,13 +44,13 @@ export function roll(node: HTMLElement, options: { text: string; mode: RollMode 
       into.textContent = now;
       cell.append(away, into);
       node.append(cell);
-      const delay = k * STEP;
+      const delay = stagger(k);
       away.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-0.32em)" }], { duration: OUT, delay, easing: CURVE, fill: "both" });
       into.animate([{ opacity: 0, transform: "translateY(0.32em)" }, { opacity: 1, transform: "none" }], { duration: IN, delay, easing: CURVE, fill: "backwards" });
       k += 1;
     }
     // Once still, plain text again.
-    timer = window.setTimeout(() => { node.textContent = shown; }, IN + k * STEP + 40);
+    timer = window.setTimeout(() => { node.textContent = shown; }, IN + stagger(k) + 40);
   }
 
   return { update: set, destroy: () => clearTimeout(timer) };

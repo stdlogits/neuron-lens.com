@@ -6,7 +6,9 @@
 </script>
 
 <section {id} class="basket">
-  <h3 class="title" data-tip={tip}>{title}</h3>
+  <!-- Focusable for its tip, which says what the basket holds. -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <h3 class="title" data-tip={tip} tabindex="0">{title}</h3>
   {@render children()}
 </section>
 

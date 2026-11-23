@@ -70,6 +70,11 @@
   let fx = $state<HTMLCanvasElement>();
   let squash = $state(1);
   let drawn = $state(false);
+  // A card whose data didn't load, or that hasn't drawn in 6 s, says so, so the hosted browser stops waiting for it.
+  let lost = $state(false);
+  const deadline = performance.now() + 6000;
+  const late = () => { if (performance.now() > deadline) throw new Error("The card didn't draw in time"); };
+  const status = $derived(drawn ? "drawn" : lost || lens.failed || lens.failures.length ? "failed" : "drawing");
   // The circuit: how much larger than the rail lays it out the graph is shown, and how far down its place it sits.
   let scale = $state(1);
   let drop = $state(0);
@@ -112,6 +117,7 @@
       const bars = plot?.querySelectorAll(".bars") ?? [];
       const mark = plot?.querySelector(".pin, .stack i.sel");
       if (plot && mark && bars.length === 1 && bars[0].matches(".settled")) return { plot, mark };
+      late();
       await frame();
     }
   }
@@ -154,7 +160,7 @@
    *  stage puts them: where they were a frame ago, a few frames running. */
   async function settled(): Promise<HTMLElement> {
     let graph: HTMLElement | null = null;
-    while (!(graph = card?.querySelector<HTMLElement>(".figure .graph[data-settled]") ?? null)) await frame();
+    while (!(graph = card?.querySelector<HTMLElement>(".figure .graph[data-settled]") ?? null)) { late(); await frame(); }
     const marks = () => [...graph!.querySelectorAll(".node")].map((node) => { const at = node.getBoundingClientRect(); return `${at.x.toFixed(1)} ${at.y.toFixed(1)} ${at.width.toFixed(1)}`; }).join(",");
     for (let last = "", same = 0, tries = 0; same < 4 && tries < 240; tries += 1) {
       await frame();
@@ -221,6 +227,8 @@
     }
   }
 
+  $effect(() => { const timer = setTimeout(() => { if (!drawn) lost = true; }, 6500); return () => clearTimeout(timer); });
+
   let begun = false;
   $effect(() => {
     if (!loaded || begun) return;
@@ -231,7 +239,7 @@
         await wire();
         await frame();
         drawn = true;
-      })();
+      })().catch(() => (lost = true));
       return;
     }
     void (async () => {
@@ -244,7 +252,7 @@
       light(mark);
       await frame();
       drawn = true;
-    })();
+    })().catch(() => (lost = true));
   });
 </script>
 
@@ -262,14 +270,14 @@
 {/snippet}
 
 {#if circuit}
-<div class="card circuit" data-card={drawn ? "drawn" : "drawing"} style:--tint={lens.tint} style:--k={scale} style:--drop="{drop}px" bind:this={card}>
+<div class="card circuit" data-card={status} class:lost={status === "failed"} style:--tint={lens.tint} style:--k={scale} style:--drop="{drop}px" bind:this={card}>
   {@render top()}
   <h1 class="name" class:lent={!!lens.model.labelsFrom && !silent}>{loaded ? title : ""}</h1>
   <Connections />
   <canvas class="fx" bind:this={fx} aria-hidden="true"></canvas>
 </div>
 {:else}
-<div class="card" data-card={drawn ? "drawn" : "drawing"} style:--tint={lens.tint} bind:this={card}>
+<div class="card" data-card={status} class:lost={status === "failed"} style:--tint={lens.tint} bind:this={card}>
   {@render top()}
 
   <section class="unit" aria-label={lens.selected === null ? undefined : head ? headId(lens.layer, lens.selected) : neuronId(lens.layer, lens.selected)}>
@@ -373,4 +381,6 @@
   .circuit :global(.lists .row .title *) { display: inline; white-space: nowrap; text-wrap: nowrap; }
   .circuit :global(.lists .row .value) { grid-column: 3; grid-row: 1; min-width: 96px; justify-content: flex-end; gap: 10px; font: 500 20px/1 var(--text); color: var(--ink2); }
   .circuit :global(.lists .row .meter) { width: 30px !important; height: 5px; border-radius: 3px; }
+  /* A card that failed is blanked, so the photograph of it is too small to keep (unfurl.js keeps no card under 16 kB). */
+  .lost { visibility: hidden; }
 </style>

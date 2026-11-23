@@ -70,8 +70,8 @@
   <div class="name">
     <h2 id="unit-title"><MorphText text={lens.selectedId ?? ""} /></h2>
     <p class="meta tags">
-      <span class="band" data-tip={lens.band.summary} data-tip-title={bandRange(lens.band)}><MorphText text={lens.band.name} numbers={false} /></span>
-      {#each tags as tag (tag.label)}<span class="tag" data-tip={tag.tip} in:fadeIn><span class="dot" aria-hidden="true">·</span>{tag.label}</span>{/each}
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex --><span class="band" tabindex="0" data-tip={lens.band.summary} data-tip-title={bandRange(lens.band)}><MorphText text={lens.band.name} numbers={false} /></span>
+      {#each tags as tag (tag.label)}<!-- svelte-ignore a11y_no_noninteractive_tabindex --><span class="tag" tabindex="0" data-tip={tag.tip} in:fadeIn><span class="dot" aria-hidden="true">·</span>{tag.label}</span>{/each}
       {#if lineage}<span class="tag lineage" data-tip={lineage.tip} in:fadeIn><span class="dot" aria-hidden="true">·</span>{lineage.text}{#if lineage.href && lineage.go}{@const [model, neuron] = lineage.go}<a href={lineage.href} onclick={() => neuron !== null && lens.carrySide(model, lens.layer, neuron)}>{lineage.id}</a>{/if}</span>{/if}
     </p>
   </div>

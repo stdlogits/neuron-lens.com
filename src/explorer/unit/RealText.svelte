@@ -19,7 +19,7 @@
   const says = $derived(next ? oneOfEach((pole.stream ?? []).filter((read) => family(read.col) === "pred"), reading.distinctive)[0] : undefined);
 </script>
 
-<Group title="In real text" tip="Tokens that make it fire most" items={drivers} />
+<Group title="In real text" tip="Tokens that make it fire most" items={drivers} empty="None measured" />
 {#if peaks.length}<Group title="Peaks on" tip="Where its top firings land" items={peaks} />{/if}
 {#if next && after.length}<Group title="Comes next" tip="What comes right after its top firings" items={after} />{/if}
 {#if says?.tokens.length}

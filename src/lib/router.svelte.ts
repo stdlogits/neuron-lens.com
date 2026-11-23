@@ -12,6 +12,7 @@
 //   /about, /credits
 // Links from drowse.ai's old page (/neuron-lens?model=…&layer=…&neuron=…, redirected here with their
 // query) are rewritten to these paths on arrival.
+import { tick } from "svelte";
 import { DEFAULT_MODEL, MODELS, isModelId, type ModelId } from "./models";
 import { unknownFirst, type Missing } from "./missing";
 import type { Unit } from "./data";
@@ -117,17 +118,24 @@ const here = () => window.location.pathname + window.location.search;
 /** Whether a change of route moves to another page (and so gets a page transition and scrolls up). */
 const otherPage = (a: Route, b: Route) => a.page !== b.page;
 
+/** The address last applied: a fragment's jump (the skip link) fires popstate without changing it. */
+let applied = "";
+
+/** On another page, focus goes to the page's start, as a page load would put it, so the keyboard and screen readers begin there. */
+const arrive = () => tick().then(() => document.getElementById("main")?.focus({ preventScroll: true }));
+
 function apply(next: Route) {
   const previous = router.route;
+  applied = here();
   if (!otherPage(previous, next) || typeof document.startViewTransition !== "function" || matchMedia("(prefers-reduced-motion: reduce)").matches) {
     router.route = next;
-    if (otherPage(previous, next)) window.scrollTo(0, 0);
+    if (otherPage(previous, next)) { window.scrollTo(0, 0); void arrive(); }
     return;
   }
   document.startViewTransition(() => {
     router.route = next;
     window.scrollTo(0, 0);
-  });
+  }).updateCallbackDone.then(arrive);
 }
 
 /** Go to a path or route. Choices add a history entry; scrubbing and corrections replace it. */
@@ -136,7 +144,8 @@ export function go(to: string | Route, { replace = false }: { replace?: boolean 
   const target = new URL(url, window.location.origin);
   const next = typeof to === "string" ? parse(target.pathname, target.search) : to;
   const path = typeof to === "string" ? target.pathname + target.search : href(next);
-  if (path !== here()) history[replace ? "replaceState" : "pushState"](null, "", path);
+  // A browser may refuse a burst of history calls (holding j down); the view still moves.
+  try { if (path !== here()) history[replace ? "replaceState" : "pushState"](null, "", path); } catch { /* rate-limited */ }
   apply(next);
 }
 
@@ -146,9 +155,15 @@ export function startRouter() {
   router.route = first;
   if (first.page === "explore") {
     const canonical = href(first);
-    if (canonical !== here() && !(canonical === "/" && window.location.pathname === "/" && !window.location.search)) history.replaceState(null, "", canonical);
+    if (canonical !== here() && !(canonical === "/" && window.location.pathname === "/" && !window.location.search)) {
+      history.replaceState(null, "", canonical);
+      // Read again from the canonical address, as Back and Forward will (an old link's neuron gets its layer).
+      const url = new URL(canonical, window.location.origin);
+      router.route = parse(url.pathname, url.search);
+    }
   }
-  const pop = () => apply(parse(window.location.pathname, window.location.search));
+  applied = here();
+  const pop = () => { if (here() !== applied) apply(parse(window.location.pathname, window.location.search)); };
   const click = (event: MouseEvent) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const link = (event.target as Element | null)?.closest?.("a");

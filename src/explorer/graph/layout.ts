@@ -80,7 +80,8 @@ export function layout(graph: Graph, width: number, height: number, layers: numb
   }
 
   const seat = (list: GraphNode[]) => {
-    const step = Math.max(MIN_STEP, Math.min(44, span / Math.max(1, list.length)));
+    // Units a step apart; a row too full for that spreads evenly across the width rather than piling up at its edges.
+    const step = Math.min(44, span / Math.max(1, list.length - 1), Math.max(MIN_STEP, span / Math.max(1, list.length)));
     const hasFocus = list.some((n) => n.side === "focus");
     if (open) {
       // Each as far from the last as the two need, the row centred on the unit's line.

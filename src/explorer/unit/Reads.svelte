@@ -7,7 +7,7 @@
   // One side's reads of the unit's weights, in the order its depth trusts them: each its plain name
   // (the lens and what it measures in a tip), its strength among its peers, and all its tokens. A read
   // through the lens its depth band doesn't use on this side is quiet as a whole, until pointed at, and
-  // comes last. A token two lists agree on is tinted. Flipping Distinctive keeps each read's place: its name morphs and its
+  // comes last. Its name takes focus, so the keyboard reaches its tip and lifts a quiet read as a pointer does. A token two lists agree on is tinted. Flipping Distinctive keeps each read's place: its name morphs and its
   // tokens give way to the others, while what sits under them slides.
   let { reads, agree, scope = "the layer", skipEmpty = false }: {
     reads: LensRead[];
@@ -28,7 +28,7 @@
   {#each ordered as read (family(read.col))}
     <div class="read" class:quiet={quiet(read)}>
       <div class="rh">
-        <span class="name" data-tip={readTip(read) + (quiet(read) ? " Weak at this depth." : "")}><MorphText text={LENSES[read.col].name} numbers={false} /></span>
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex --><span class="name" tabindex="0" data-tip={readTip(read) + (quiet(read) ? " Weak at this depth." : "")}><MorphText text={LENSES[read.col].name} numbers={false} /></span>
         <Meter value={read.pct / 100} label={`${nth(read.pct)} percentile of ${scope}`} />
       </div>
       <div use:fit>

@@ -1,14 +1,12 @@
 <script lang="ts">
   import ModalityMedia from "./ModalityMedia.svelte";
-  import { useLens } from "../lens.svelte";
   import type { Pole } from "../../lib/data";
-  import type { Modality } from "../../lib/models";
+  import type { Modality, ModelId } from "../../lib/models";
 
   // What one side of a Gemma 4 neuron responds to in images and in sound. Nothing for a side (or a
   // model) without media.
-  // layer and neuron name the unit for whoever places this; the side's media carries all it needs.
-  let { pole }: { pole: Pole; layer: number; neuron: number } = $props();
-  const lens = useLens();
+  // `model` is the one the side was read from (not the explorer's, which may already be another while this one stays).
+  let { pole, model }: { pole: Pole; model: ModelId } = $props();
 
   const ORDER: Modality[] = ["image", "audio"];
   const present = $derived(ORDER.filter((modality) => pole.media?.[modality]));
@@ -17,7 +15,7 @@
 {#if present.length}
   <div class="media">
     {#each present as modality (modality)}
-      <ModalityMedia model={lens.modelId} {modality} media={pole.media![modality]!} />
+      <ModalityMedia {model} {modality} media={pole.media![modality]!} />
     {/each}
   </div>
 {/if}

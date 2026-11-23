@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { MorphText, glide, reducedMotion } from "@stdlogits/ledger";
-  import { MODEL_ORDER, MODELS, type ModelInfo } from "../../lib/models";
+  import { DEFAULT_MODEL, MODEL_ORDER, MODELS, type ModelInfo } from "../../lib/models";
   import { edits } from "../../lib/missing";
   import { sequence } from "./motion";
   import { clip } from "./place";
@@ -21,11 +21,13 @@
     const least = Math.min(...d);
     const weights = d.map((x) => Math.exp(least - x));
     const sum = weights.reduce((a, b) => a + b, 0);
+    // With nothing typed (/L8/n344) each distance is only a name's length, so the model a bare address means comes first.
+    const first = (r: Ranked) => (!typed && r.model.id === DEFAULT_MODEL ? 1 : 0);
     return MODEL_ORDER.map((id, i) => ({ model: MODELS[id], d: d[i], p: weights[i] / sum, rank: 0 }))
-      .sort((a, b) => b.p - a.p)
+      .sort((a, b) => first(b) - first(a) || b.p - a.p)
       .map((r, i) => ({ ...r, rank: i + 1 }));
   });
-  const max = $derived(ranked[0].p);
+  const max = $derived(Math.max(...ranked.map((r) => r.p)));
   const cased = $derived(MODEL_ORDER.includes(typed.toLowerCase()) && typed !== typed.toLowerCase());
   const say = $derived(!typed ? "The address names no model." : cased ? `Addresses are lower case, so there’s no model called “${typed}”.` : `There’s no model called “${typed}”.`);
 

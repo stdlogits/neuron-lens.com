@@ -170,6 +170,7 @@
           class:quiet={quiet("neuron")}
           href="/{OWL.model}/L{OWL.layer}/n{OWL.n}"
           tabindex="-1"
+          aria-hidden="true"
           style:left="{g.neuron.x}px"
           style:top="{g.neuron.y}px"
           style:width="{g.neuron.w}px"
@@ -184,6 +185,7 @@
           class:quiet={quiet("head")}
           href="/{GROUPS.model}/L{GROUPS.layer}/h{GROUPS.h}"
           tabindex="-1"
+          aria-hidden="true"
           style:left="{g.head.x}px"
           style:top="{g.head.y}px"
           style:width="{g.head.w}px"

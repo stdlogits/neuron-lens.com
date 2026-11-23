@@ -417,7 +417,8 @@
     }
     const focus = layout.nodes.find((n) => n.side === "focus");
     if (!view || !focus) return;
-    if (focus.key !== centred) { picked = null; centre(centred !== null); centred = focus.key; }
+    // Another unit: Find's place among what it found was among the last one's.
+    if (focus.key !== centred) { picked = null; stepped = -1; stepLit = false; centre(centred !== null); centred = focus.key; }
     else if (!moved && focus.y !== centredAt) centre();
     else if (!pointers.size && !fling && !moving) {
       if (k < lowest() - 1e-6) zoomBy(lowest() / k);
@@ -446,20 +447,36 @@
     go(bounded({ k: next, tx: px - ((px - tx) * next) / k, ty: py - ((py - ty) * next) / k }), true);
   }
   const home = () => centre(true, false, HOME);
+  /** A unit focused off screen (by Tab) comes into the middle, as the map moves; the view itself never scrolls. */
+  function bringIn(event: FocusEvent) {
+    const el = event.target as HTMLElement;
+    if (!view || !el.classList?.contains("node")) return;
+    const box = view.getBoundingClientRect(), at = el.getBoundingClientRect(), a = area();
+    const x = at.left + at.width / 2 - box.left, y = at.top + at.height / 2 - box.top;
+    if (x >= a.x0 + 24 && x <= a.x1 - 24 && y >= a.y0 + 24 && y <= a.y1 - 24) return;
+    moved = true;
+    go(bounded({ k, tx: tx + a.cx - x, ty: ty + a.cy - y }), true);
+  }
 
   /** A wheel's travel in pixels, whichever unit it counts in. */
   const pixels = (event: WheelEvent, by: number) => by * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? area().y1 : 1);
+  /** The most one wheel event zooms by, in pixels of travel: a mouse's notch (100 or more) zooms about ×1.5 rather
+   * than ×2.7, and a trackpad's pinch, which sends many small ones, never comes near it. */
+  const NOTCH = 40;
   /** Safari's trackpad pinch, read from its gesture events rather than from the wheel. */
   let gesturing = false;
   let gestureK = 1;
-  // Anywhere on the screen, the bar and a tip over the graph too: the page itself never scrolls or zooms here.
+  // Anywhere on the screen, the bar and a tip over the graph too: the page itself never scrolls or zooms here, and
+  // the panes it opens over (panes.ts), which would scroll the page themselves, never hear of it.
   function wheel(event: WheelEvent) {
     event.preventDefault();
+    event.stopPropagation();
     if (!view || gesturing) return;
     grab();
     if (event.ctrlKey || event.metaKey) {
       const box = view.getBoundingClientRect();
-      zoomAt(k * Math.exp(-pixels(event, event.deltaY) * 0.01), event.clientX - box.left, event.clientY - box.top);
+      const by = Math.max(-NOTCH, Math.min(NOTCH, pixels(event, event.deltaY)));
+      zoomAt(k * Math.exp(-by * 0.01), event.clientX - box.left, event.clientY - box.top);
       stir(true);
     } else {
       nudge(-pixels(event, event.deltaX), -pixels(event, event.deltaY), WHEEL_BAND);
@@ -505,6 +522,11 @@
     if (pointers.size === 1) travelled = 0;
   }
   function move(event: PointerEvent) {
+    // A pointer moved over a unit after Find stepped lights that unit rather than the one stepped to. Only a move of
+    // the pointer itself: marks gliding under a still one (to the unit stepped to) leave it as it is.
+    const at = `${event.clientX},${event.clientY}`;
+    if (at !== pointerAt && !pointers.size && (event.target as Element | null)?.closest?.(".node")) stepLit = false;
+    pointerAt = at;
     const was = pointers.get(event.pointerId);
     if (!was || !view) return;
     const now = { x: event.clientX, y: event.clientY };
@@ -563,15 +585,20 @@
     }
     settle();
   }
+  /** The click a drag ends with is no click. A key's (Enter on a unit, or a screen reader's, with no pointer: detail 0)
+   * always is, however far the last drag went; and once that click is past, the drag is done with. */
   function click(event: MouseEvent) {
-    if (travelled > 4) { event.preventDefault(); event.stopPropagation(); }
+    if (event.detail > 0 && travelled > 4) { event.preventDefault(); event.stopPropagation(); }
+    travelled = 0;
   }
 
   /** How far an arrow key moves the view (shift: four times as far). */
   const ARROW = 96;
   const ARROWS: Record<string, [number, number]> = { ArrowLeft: [1, 0], ArrowRight: [-1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
   function key(event: KeyboardEvent) {
-    if (event.key === "Escape") { event.preventDefault(); close(); return; }
+    if (event.key === "Tab") { trap(event); return; }
+    // Find first, if it is open: Escape puts away the innermost thing.
+    if (event.key === "Escape") { event.preventDefault(); if (searching) closeSearch(); else close(); return; }
     if ((event.target as Element | null)?.closest?.("input, textarea, [contenteditable]") || event.metaKey || event.ctrlKey || event.altKey) return;
     const arrow = ARROWS[event.key];
     if (arrow) {
@@ -583,6 +610,22 @@
     else if (event.key === "+" || event.key === "=") zoomBy(1.25);
     else if (event.key === "-" || event.key === "_") zoomBy(1 / 1.25);
     else if (event.key === "0") home();
+  }
+
+  // A dialog over the page: Tab goes round what is in it and never out into the page it hides. (Without scrolling:
+  // the view moves by its own transform, and a scrolled view would put every mark off where it is drawn.)
+  const STOPS = "a[href], button, input, select, textarea, [tabindex]";
+  function trap(event: KeyboardEvent) {
+    if (!dialog) return;
+    const stops = [...dialog.querySelectorAll<HTMLElement>(STOPS)].filter((el) => el.tabIndex >= 0 && !(el as HTMLButtonElement).disabled && !el.closest("[inert]") && el.getClientRects().length > 0);
+    const here = document.activeElement;
+    const first = stops[0];
+    const last = stops.at(-1);
+    const to = (el: HTMLElement) => { event.preventDefault(); el.focus({ preventScroll: true }); };
+    if (!first || !last) to(dialog);
+    else if (!dialog.contains(here) || here === dialog) to(event.shiftKey ? last : first);
+    else if (event.shiftKey && here === first) to(last);
+    else if (!event.shiftKey && here === last) to(first);
   }
 
   // A unit tapped: its card, and what connects it lit, until it is put away.
@@ -603,6 +646,9 @@
   let words = $state.raw<Words | null>(null);
   let wordsFor = "";
   let field = $state<HTMLInputElement>();
+  /** The button that opens Find, and Find itself. */
+  let finder = $state<HTMLElement>();
+  let findBox = $state<HTMLElement>();
   function warm() {
     const id = model.id;
     if (wordsFor === id) return;
@@ -618,9 +664,15 @@
   }
   function closeSearch() {
     clearTimeout(typing);
+    const here = document.activeElement;
+    const back = !here || here === document.body || here === dialog || !!findBox?.contains(here);
     searching = false;
     query = asked = "";
     stepped = -1;
+    stepLit = false;
+    // Focus in the field or by it, which are going, goes back to the button that opened it, once that shows
+    // again (a phone hides it while finding).
+    if (back) void tick().then(() => finder?.querySelector("button")?.focus());
   }
   function typed() {
     clearTimeout(typing);
@@ -643,9 +695,12 @@
     if (!found) return [];
     return placed.filter((n) => found.has(n.key)).sort((a, b) => a.y - b.y || a.x - b.x);
   });
-  /** Which of them Enter last stepped to (-1: none yet); it is lit as if pointed at. */
+  /** Which of them Enter last stepped to (-1: none yet); it is lit as if pointed at, until the pointer moves to another. */
   let stepped = $state(-1);
-  const current = $derived(stepped >= 0 && stepped < hits.length ? hits[stepped].key : null);
+  let stepLit = $state(false);
+  /** Where the pointer was last over the graph. */
+  let pointerAt = "";
+  const current = $derived(stepLit && stepped >= 0 && stepped < hits.length ? hits[stepped].key : null);
   /** Each search rings again; the units wait by how far they are from the middle of the screen. */
   let round = $state(0);
   let wave = $state.raw<Map<string, number> | null>(null);
@@ -690,6 +745,7 @@
   function stepTo(by: number) {
     if (!hits.length) return;
     stepped = stepped < 0 ? (by > 0 ? 0 : hits.length - 1) : (stepped + by + hits.length) % hits.length;
+    stepLit = true;
     take([hits[stepped]]);
   }
   function searchKey(event: KeyboardEvent) {
@@ -762,7 +818,7 @@
   style:left={shownBox ? `${shownBox.left}px` : undefined} style:top={shownBox ? `${shownBox.top}px` : undefined}
   style:width={shownBox ? `${shownBox.width}px` : undefined} style:height={shownBox ? `${shownBox.height}px` : undefined}>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="view" class:moving bind:this={view} bind:clientWidth={viewWidth} bind:clientHeight={viewHeight} onpointerdowncapture={down} onpointermove={move} onpointerup={up} onpointercancel={up} onclickcapture={click}>
+  <div class="view" class:moving bind:this={view} bind:clientWidth={viewWidth} bind:clientHeight={viewHeight} onpointerdowncapture={down} onpointermove={move} onpointerup={up} onpointercancel={up} onclickcapture={click} onfocusin={bringIn}>
     <div class="pan" style:transform={`translate(${shown.tx - base.tx}px, ${shown.ty - base.ty}px)`}>
       <canvas class="links" bind:this={links} aria-hidden="true"></canvas>
       <div class="canvas" style:transform={`translate(${base.tx}px, ${base.ty}px) scale(${base.k})`}>
@@ -793,13 +849,13 @@
           <span class="step"><IconButton icon="minus" label="Zoom out" onclick={() => zoomBy(1 / 1.25)} /></span>
           <IconButton icon="focus" label={`Back to ${name}`} onclick={home} />
           <span class="step"><IconButton icon="plus" label="Zoom in" onclick={() => zoomBy(1.25)} /></span>
-          <IconButton icon="search" label="Find in the graph" pressed={searching} onclick={() => (searching ? closeSearch() : openSearch())} />
+          <span class="finder" bind:this={finder}><IconButton icon="search" label="Find in the graph" pressed={searching} onclick={() => (searching ? closeSearch() : openSearch())} /></span>
         </div>
       </div>
       <span class="close"><IconButton icon="close" label="Close" onclick={close} /></span>
     </div>
     {#if searching}
-      <div class="find" role="search" transition:expand>
+      <div class="find" role="search" bind:this={findBox} transition:expand>
         <label class="field">
           <span class="glass" aria-hidden="true"><Icon name="search" size={18} /></span>
           <input
@@ -832,8 +888,8 @@
 
 <style>
   /* Nothing here scrolls or zooms the page, by touch either: a pinch on the bar is no zoom of the page. */
-  .navigator { position: fixed; inset: 0; z-index: 20; overflow: hidden; background: var(--paper); outline: none; touch-action: none; overscroll-behavior: contain; }
-  .view { position: absolute; inset: 0; overflow: hidden; cursor: grab; touch-action: none; overscroll-behavior: contain; }
+  .navigator { position: fixed; inset: 0; z-index: 20; overflow: clip; background: var(--paper); outline: none; touch-action: none; overscroll-behavior: contain; }
+  .view { position: absolute; inset: 0; overflow: clip; cursor: grab; touch-action: none; overscroll-behavior: contain; }
   .view:active { cursor: grabbing; }
   /* What moves every frame of a pan has a layer of its own and moves by a translation alone (the marks and links together,
      the axis's rule), so moving it is the compositor's work and never makes the hundreds of marks and titles be painted or
@@ -878,6 +934,7 @@
   .tools { grid-area: tools; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--s2) var(--s4); min-width: 0; }
   .close { grid-area: close; }
   .zoom { display: flex; gap: var(--s1); }
+  .finder { display: contents; }
   .reach { transition: opacity var(--fast) var(--ease); }
   .reach.off { opacity: 0; }
   @media (max-width: 1180px) {

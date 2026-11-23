@@ -4,7 +4,7 @@
 // of the product of its links) before it is followed. What a link is worth, and how far the walk reaches,
 // come from the mode and the reach. Beside it, in its own row, go its siblings: the units that share both
 // what feeds it and what it feeds (`siblings`).
-import { headKey, headOf, loadHeadWire, loadPoleWire, poleId, poleOf, type Link, type Relation, type Through, type Wire } from "../../lib/data";
+import { dropAhead, headKey, headOf, loadHeadWire, loadPoleWire, poleId, poleOf, type Link, type Relation, type Through, type Wire } from "../../lib/data";
 import type { ModelInfo } from "../../lib/models";
 
 /** On a neuron, `context`, `weights` or `with`; on a head, `context` is its value, beside its `query`, its `key` and `with`. */
@@ -38,7 +38,13 @@ export interface GraphEdge {
   value: number;
   flow: number;
 }
-export interface Graph { nodes: GraphNode[]; edges: GraphEdge[]; settled: boolean }
+export interface Graph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  settled: boolean;
+  /** The unit's own record didn't load, so there was nothing to walk from. */
+  failed?: boolean;
+}
 
 const REACH: Record<Reach, { floor: number; expand: number; show: number; siblings: number }> = {
   near: { floor: 0.01, expand: 48, show: 28, siblings: 6 },
@@ -159,7 +165,8 @@ async function walkSide(walk: Walk, focus: GraphNode, side: Side, mode: Exclude<
     }));
     lookAhead(i + 1);
     const wires = await loading;
-    if (!walk.live()) return;
+    // Another unit or view took over: what this walk asked for ahead no longer waits its turn (the new walk asks again).
+    if (!walk.live()) { dropAhead(); return; }
     ready.forEach((n, i) => {
       done.add(n.key);
       if (wires[i]) spread(n, wires[i]);
@@ -204,10 +211,11 @@ async function siblings(walk: Walk, focus: GraphNode, mode: Exclude<Mode, "with"
   const [ups, downs] = await Promise.all([Promise.all(parents.map(load)), Promise.all(children.map(load))]);
   if (!walk.live()) return;
 
-  const tally = new Map<number, { up: number; down: number; shares: [number, number]; links: GraphEdge[] }>();
+  // A child head reached through two of its inputs is still one unit the sibling drives: it counts once.
+  const tally = new Map<number, { up: number; down: number; shares: [number, number]; children: Set<string>; links: GraphEdge[] }>();
   const meet = (id: number) => {
     let held = tally.get(id);
-    if (!held) tally.set(id, (held = { up: 0, down: 0, shares: [0, 0], links: [] }));
+    if (!held) tally.set(id, (held = { up: 0, down: 0, shares: [0, 0], children: new Set(), links: [] }));
     return held;
   };
   parents.forEach((parent, i) => {
@@ -230,7 +238,8 @@ async function siblings(walk: Walk, focus: GraphNode, mode: Exclude<Mode, "with"
       const held = meet(link.id);
       const from = nodeKey(focus.kind, link.id);
       held.down += child.weight * link.weight;
-      held.shares[1] += 1;
+      held.children.add(to);
+      held.shares[1] = held.children.size;
       held.links.push({ key: `${from}>${to}`, from, to, value: link.value, flow: Math.abs(child.weight * link.weight) });
     }
   });
@@ -264,7 +273,9 @@ export async function trace(model: ModelInfo, start: GraphNode, mode: Mode, reac
   const focus = { ...start, flow: 1, onward: 1 };
   const walk: Walk = { model, flows: new Map([[focus.key, focus]]), edges: new Map(), live, update: () => publish(() => view(walk, focus, reach, false)) };
   const wire = await wireOf(walk, focus).catch(() => null);
-  if (!live() || !wire) return;
+  if (!live()) return;
+  // Without its own record there is nothing to walk: say so, rather than leave the last unit's graph standing.
+  if (!wire) { publish(() => ({ nodes: [], edges: [], settled: true, failed: true })); return; }
   focus.wire = wire;
   if (mode === "with") {
     for (const [id, value] of wire.links.with) {

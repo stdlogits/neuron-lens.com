@@ -8,7 +8,7 @@
 <dl class="facts">
   {#each facts as fact (fact.k)}
     <div>
-      <dt data-tip={fact.tip}>{fact.k}</dt>
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex --><dt data-tip={fact.tip} tabindex={fact.tip ? 0 : undefined}>{fact.k}</dt>
       <dd>{fact.v}</dd>
     </div>
   {/each}

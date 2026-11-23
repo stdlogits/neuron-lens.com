@@ -71,6 +71,8 @@ export class Ink {
   private watch: MutationObserver;
   private dark: MediaQueryList | null;
   private changed: () => void;
+  /** Matches the device's pixel ratio as it is; moved to another screen, or the page zoomed, it stops. */
+  private density: MediaQueryList | null = null;
 
   /** `restyle`: the page's colours changed (a theme switch), so whatever was resolved must be again. `pad`:
    * how far past its box on each side it draws, so a pan can move what is drawn rather than draw it again. */
@@ -86,13 +88,28 @@ export class Ink {
     this.watch.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class"] });
     this.dark = typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)") : null;
     this.dark?.addEventListener("change", this.changed);
+    this.watchDensity();
   }
 
   destroy() {
     this.watch.disconnect();
     this.dark?.removeEventListener("change", this.changed);
+    this.density?.removeEventListener("change", this.redensify);
     this.probe.remove();
   }
+
+  /** A query that stops matching when the pixel ratio changes; each change asks anew for the next. */
+  private watchDensity() {
+    this.density?.removeEventListener("change", this.redensify);
+    this.density = typeof matchMedia === "function" ? matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`) : null;
+    this.density?.addEventListener("change", this.redensify);
+  }
+
+  /** Another pixel ratio: the backing store sized for it and everything drawn again, so the links aren't left blurred. */
+  private redensify = () => {
+    this.watchDensity();
+    if (this.resize(this.width, this.height)) this.restyle();
+  };
 
   /** Ledger's chip radius, in CSS pixels. */
   chip() {
@@ -114,9 +131,10 @@ export class Ink {
     return found;
   }
 
-  /** Its size on the page in CSS pixels; the backing store follows the device's pixel ratio. */
+  /** Its size on the page in CSS pixels; the backing store follows the device's pixel ratio, up to 2: lines drawn
+   * at 2× are as sharp on a 3× screen, and the navigator's canvas, the screen and more, would take over twice the memory. */
   resize(width: number, height: number) {
-    const ratio = Math.min(3, window.devicePixelRatio || 1);
+    const ratio = Math.min(2, window.devicePixelRatio || 1);
     if (width === this.width && height === this.height && ratio === this.ratio) return false;
     this.width = width;
     this.height = height;

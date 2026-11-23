@@ -38,19 +38,22 @@
     { value: "neurons", label: "Neurons", hint: "MLP units, each with two sides" },
     { value: "heads", label: "Heads", hint: "What each looks back at, and carries forward" },
   ];
+  // Until the index says how many, the count holds a four-figure count's width (figure and punctuation spaces), so the
+  // toolbar doesn't rewrap when it arrives.
+  const WAITING = "\u2007\u2008\u2007\u2007\u2007";
   const scopes = $derived(lens.unit === "heads"
     ? [{ value: "all", label: "All", count: formatCount(lens.totals.heads), hint: "Every attention head of the model" }]
     : !lens.model.labelled
     ? [{ value: "all", label: "All", count: formatCount(lens.totals.neurons), hint: "Every neuron of the model" }]
     : [
-      { value: "easiest", label: "Easiest", count: lens.totals.easiest === null ? "" : formatCount(lens.totals.easiest), hint: "The 40 easiest to read in each layer" },
+      { value: "easiest", label: "Easiest", count: lens.totals.easiest === null ? WAITING : formatCount(lens.totals.easiest), hint: "The 40 easiest to read in each layer" },
       { value: "all", label: "All", count: formatCount(lens.totals.neurons), hint: "Every neuron of the model" },
     ]);
 
-  // j and k step through the layer; / finds the search.
+  // j and k step through the layer; / finds the search. Not while the connections are full screen, which stepping would close.
   function keys(event: KeyboardEvent) {
     const target = event.target as HTMLElement | null;
-    if (event.metaKey || event.ctrlKey || event.altKey || target?.closest("input, textarea, select, [role='slider'], [contenteditable]")) return;
+    if (lens.graphOpen || event.metaKey || event.ctrlKey || event.altKey || target?.closest("input, textarea, select, [role='slider'], [contenteditable]")) return;
     if (event.key === "j" || event.key === "k") { event.preventDefault(); lens.step(event.key === "j" ? 1 : -1); }
   }
   onMount(() => {
@@ -86,12 +89,13 @@
     <Atlas />
   </section>
 
-  {#if lens.failed && !lens.index}
-    <p class="notice" role="alert">The catalog didn't load. Check your connection and reload the page.</p>
+  {#if lens.failed && lens.index?.id !== lens.modelId}
+    <p class="notice" role="alert">This model's catalog didn't load. <button type="button" class="prose-link" onclick={() => lens.retry()}>Try again</button></p>
   {:else}
+    <!-- The unit comes first, for the keyboard and screen readers as on a phone's screen; side by side the connections stand on its left. -->
     <section class="panes" id="layer" use:panes>
-      <Connections />
       <UnitView />
+      <Connections />
     </section>
   {/if}
 
@@ -126,10 +130,9 @@
      them to the top of the screen before they do). From 1028 px the gap grows. A column is padded and drawn out by the
      same 4 px, so a focus ring at its edge isn't clipped by its scrolling. */
   .panes { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: var(--s7); scroll-margin-top: var(--s5); }
-  .panes > :global(aside.rail) { order: 2; }
   @container explorer (min-width: 736px) {
     .panes { grid-template-columns: 340px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); column-gap: var(--s6); height: calc(100svh - 2 * var(--s5)); align-items: stretch; }
-    .panes > :global(aside.rail) { order: 0; }
+    .panes > :global(aside.rail) { order: -1; }
     .panes > :global(aside.rail), .panes > :global(article.view) { min-height: 0; margin: -4px; padding: 4px 4px var(--s7); overflow-y: auto; overscroll-behavior-y: auto; scrollbar-width: thin; }
   }
   @container explorer (min-width: 1028px) { .panes { column-gap: var(--s7); } }
@@ -139,6 +142,7 @@
   .panes:global(.split) { scroll-snap-align: start; }
   :global(html:has(#layer.split) .site > footer) { scroll-snap-align: end; }
   .notice { color: var(--ink2); }
+  .notice button { border: 0; padding: 0; background: none; font: inherit; cursor: pointer; }
   .foot { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); }
   kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 var(--s1); border-radius: var(--r-chip); background: var(--wash); color: var(--ink2); font: var(--type-meta); }
 </style>

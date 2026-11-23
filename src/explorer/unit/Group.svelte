@@ -9,8 +9,10 @@
 
   // A titled part of a column: a run of tokens (what the unit fires on in real text, say), or what
   // it holds instead (figures, the reads of its weights), with a share as a meter beside the title.
-  let { title, morph = false, tip, items = [], share, empty = "Nothing distinctive", children }: {
+  let { title, level = 4, morph = false, tip, items = [], share, empty = "Nothing distinctive", children }: {
     title: string;
+    /** Its heading's level: under a basket's (h3), or under a column's head (h4) in Stream. */
+    level?: 4 | 5;
     /** The title changes in place, so it morphs. */
     morph?: boolean;
     /** What the group is, for the title's tip. */
@@ -25,7 +27,8 @@
 
 <div class="group">
   <div class="gh">
-    <h3 class="head" data-tip={tip}>{#if morph}<MorphText text={title} numbers={false} />{:else}{title}{/if}</h3>
+    <!-- Its definition is in its tip, which the keyboard reaches by focusing the heading. -->
+    <svelte:element this={`h${level}`} class="head" data-tip={tip} tabindex={tip ? 0 : undefined}>{#if morph}<MorphText text={title} numbers={false} />{:else}{title}{/if}</svelte:element>
     {#if share}<Meter value={share.value} label={share.label} />{/if}
   </div>
   {#if children}
@@ -40,6 +43,6 @@
 <style>
   .group { display: grid; gap: var(--s2); align-content: start; min-width: 0; }
   .gh { display: flex; align-items: center; gap: var(--s2); min-height: 16px; }
-  h3[data-tip] { cursor: help; }
+  .head[data-tip] { cursor: help; }
   .meta { font-weight: 400; }
 </style>

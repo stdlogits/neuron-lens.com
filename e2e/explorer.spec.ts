@@ -494,6 +494,62 @@ test("side by side, the unit and its connections each scroll on their own", asyn
   await expect(page.locator("#firings")).toBeInViewport();
 });
 
+test("a wheel over a column moves the page to the columns first, then scrolls that column alone", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await page.goto("/qwen3-8b/L8/n344");
+  await settle(page);
+  const read = () => page.evaluate(() => ({ top: Math.round(document.getElementById("layer")!.getBoundingClientRect().top), rail: document.getElementById("connections")!.scrollTop, unit: document.getElementById("unit")!.scrollTop }));
+  const unit = await page.locator("#unit").boundingBox();
+  // Mid-screen, over the unit as the page brings the columns up to fill it.
+  await page.mouse.move(unit!.x + unit!.width / 2, 400);
+  for (let i = 0; i < 12; i += 1) await page.mouse.wheel(0, 200);
+  await expect.poll(async () => (await read()).unit).toBeGreaterThan(0);
+  const after = await read();
+  expect(Math.abs(after.top - 24)).toBeLessThanOrEqual(12);
+  expect(after.rail).toBe(0);
+});
+
+test("j and k don't close the full-screen connections", async ({ page }) => {
+  await page.goto("/qwen3-8b/L8/n344?graph");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("j");
+  await expect(page).toHaveURL(/\/qwen3-8b\/L8\/n344\?graph$/);
+  await expect(page.getByRole("dialog")).toBeVisible();
+});
+
+test("closing the full-screen connections goes back to where they were opened", async ({ page }) => {
+  await page.goto("/qwen3-8b/L8/n344");
+  await settle(page);
+  const length = await page.evaluate(() => history.length);
+  await page.getByRole("button", { name: /Full screen/ }).click();
+  await expect(page).toHaveURL(/\?graph$/);
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/\/qwen3-8b\/L8\/n344$/);
+  expect(await page.evaluate(() => history.length)).toBe(length + 1);
+  await page.goForward();
+  await expect(page).toHaveURL(/\?graph$/);
+});
+
+test("a pasted address of another model opens that model's unit", async ({ page }) => {
+  await page.goto("/qwen3-8b/L8/n344");
+  const field = page.getByRole("combobox", { name: "Search neurons and heads" });
+  await field.fill("https://neuron-lens.com/gemma-4-12b/L14/n8313");
+  await field.press("Enter");
+  await expect(page).toHaveURL(/\/gemma-4-12b\/L14\/n8313/);
+});
+
+test("a bare number is a word, not an ID", async ({ page }) => {
+  await page.goto("/qwen3-8b/L8/n344");
+  const field = page.getByRole("combobox", { name: "Search neurons and heads" });
+  await field.fill("3.14");
+  await field.press("Enter");
+  await settle(page);
+  expect(path(page)).toBe("/qwen3-8b/L8/n344");
+  await field.fill("L3 14");
+  await field.press("Enter");
+  await expect(page).toHaveURL(/\/qwen3-8b\/L3\/n14/);
+});
+
 test("Distinctive swaps each read for its version against the layer, and is remembered", async ({ page }) => {
   await page.goto("/qwen3-8b/L8/n344");
   const distinctive = page.getByRole("switch", { name: "Distinctive" });
@@ -536,22 +592,22 @@ test("a sound tile plays its clip, and only one plays at a time", async ({ page 
   await expect(tiles.nth(1)).toBeEnabled();
   const [one, two] = [tiles.nth(0), tiles.nth(1)];
   await expect(one).toHaveAttribute("aria-pressed", "false");
-  // What each sound is called comes from the catalog; only Play and Stop are the page's.
+  // What each sound is called comes from the catalog; "Play" is the page's, and aria-pressed says whether it plays.
   const called = async (tile: typeof one) => (await tile.getAttribute("aria-label"))!.replace(/^Play /, "");
   const [oneName, twoName] = [await called(one), await called(two)];
   expect(await clips()).toEqual([]);
 
-  // A tile plays its clip: pressed, labelled Stop, and its audio is running.
+  // A tile plays its clip: pressed, its name unchanged, and its audio is running.
   await one.click();
   await expect(one).toHaveAttribute("aria-pressed", "true");
-  await expect(one).toHaveAttribute("aria-label", `Stop ${oneName}`);
+  await expect(one).toHaveAttribute("aria-label", `Play ${oneName}`);
   await expect.poll(async () => (await clips()).map((clip) => clip.playing)).toEqual([true]);
   await expect.poll(async () => (await clips())[0].time).toBeGreaterThan(0);
 
   // Starting another stops the first.
   await two.click();
   await expect(two).toHaveAttribute("aria-pressed", "true");
-  await expect(two).toHaveAttribute("aria-label", `Stop ${twoName}`);
+  await expect(two).toHaveAttribute("aria-label", `Play ${twoName}`);
   await expect(one).toHaveAttribute("aria-pressed", "false");
   await expect(one).toHaveAttribute("aria-label", `Play ${oneName}`);
   await expect(page.getByRole("list", { name: "The sounds it fires on most" }).getByRole("button", { pressed: true })).toHaveCount(1);

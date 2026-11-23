@@ -52,12 +52,14 @@
     show(k);
   }
   function key(event: KeyboardEvent) {
-    let to = event.key === "ArrowRight" ? at + 1 : event.key === "ArrowLeft" ? at - 1 : event.key === "Home" ? 0 : event.key === "End" ? last : null;
+    // As any slider: right and up raise, left and down lower.
+    const up = event.key === "ArrowRight" || event.key === "ArrowUp", down = event.key === "ArrowLeft" || event.key === "ArrowDown";
+    let to = up ? at + 1 : down ? at - 1 : event.key === "Home" ? 0 : event.key === "End" ? last : null;
     if (to === null) return;
     event.preventDefault();
     halt();
     to = Math.min(last, Math.max(0, to));
-    if ("gap" in spots[to]) to += event.key === "ArrowLeft" ? -1 : 1;
+    if ("gap" in spots[to]) to += down ? -1 : 1;
     show(to);
   }
 
@@ -115,7 +117,8 @@
     <Readout id="L{layer}·h{named}" label="" href="/{id}/L{layer}/h{named}" {quiet} />
   {/if}
   <div class="ms-text">
-    <h1>There is no head <span class="ms-slot" class:none={head >= real}><span use:roll={{ text: String(head), mode }}></span></span></h1>
+    <!-- Named for the head asked, whatever the slot counts through on its way there or is pointed at. -->
+    <h1 aria-label="There is no head {asked}">There is no head <span class="ms-slot" class:none={head >= real} aria-hidden="true"><span use:roll={{ text: String(head), mode }}></span></span></h1>
     <p class="ms-say">Layer {layer} of {model.name} has {real}, numbered 0 to {real - 1}.</p>
     <nav class="ms-ways" aria-label="Ways back">
       <a class="pg-go" href="/{id}/L{layer}/h{real - 1}">Open L{layer}·h{real - 1}</a>
@@ -125,11 +128,13 @@
 </section>
 
 <style>
-  .heads { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 0 var(--s3); cursor: ew-resize; touch-action: pan-y; }
+  /* The names column widens past its usual width only if a name needs it; the heads' columns give way. */
+  .heads { display: grid; grid-template-columns: minmax(76px, max-content) minmax(0, 1fr); gap: 0 var(--s3); cursor: ew-resize; touch-action: pan-y; }
   .names { display: grid; grid-auto-rows: 14px; gap: 4px; padding: 4px 0; }
-  .names span { color: var(--ink3); font: 500 11px/14px var(--text); white-space: nowrap; }
+  /* Ledger's smallest type, its lines the rows' height, so each name sits level with its row. */
+  .names span { color: var(--ink3); font: var(--type-meta); line-height: 14px; white-space: nowrap; }
   .grid { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); min-width: 0; }
-  .hc { position: relative; z-index: 1; display: grid; grid-auto-rows: 14px; gap: 4px; padding: 4px 1px; transition: opacity 320ms var(--ease); }
+  .hc { position: relative; z-index: 1; display: grid; grid-auto-rows: 14px; gap: 4px; padding: 4px 1px; transition: opacity var(--glide) var(--ease); }
   .hc i { display: block; border-radius: 3px; background: var(--tint); }
   .hc.dim { opacity: 0.22; }
   /* A head the layer doesn't have: a column of wash, arriving as the ride reaches it. */
@@ -138,5 +143,5 @@
   .ghost.on { opacity: 1; transform: none; }
   .gap { grid-auto-rows: auto; place-items: center; align-content: center; color: var(--ink3); font: 600 14px/1 var(--display); opacity: 0; transition: opacity var(--in) var(--ease); }
   .gap.on { opacity: 1; }
-  @media (max-width: 520px) { .heads { grid-template-columns: 62px minmax(0, 1fr); } .names span { font-size: 10px; } }
+  @media (max-width: 520px) { .heads { grid-template-columns: minmax(62px, max-content) minmax(0, 1fr); } }
 </style>

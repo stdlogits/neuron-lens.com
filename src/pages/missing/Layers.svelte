@@ -56,12 +56,14 @@
     show(k);
   }
   function key(event: KeyboardEvent) {
-    let to = event.key === "ArrowRight" ? at + 1 : event.key === "ArrowLeft" ? at - 1 : event.key === "Home" ? 0 : event.key === "End" ? last : null;
+    // As any slider: right and up raise, left and down lower.
+    const up = event.key === "ArrowRight" || event.key === "ArrowUp", down = event.key === "ArrowLeft" || event.key === "ArrowDown";
+    let to = up ? at + 1 : down ? at - 1 : event.key === "Home" ? 0 : event.key === "End" ? last : null;
     if (to === null) return;
     event.preventDefault();
     halt();
     to = Math.min(last, Math.max(0, to));
-    if ("gap" in spots[to]) to += event.key === "ArrowLeft" ? -1 : 1;
+    if ("gap" in spots[to]) to += down ? -1 : 1;
     show(to);
   }
 
@@ -132,7 +134,8 @@
   {/if}
   <!-- The tint only here, where the slot uses it: set on the section, each layer's change would restyle every bar. -->
   <div class="ms-text" style:--tint={depthColor(model, floor)}>
-    <h1>There is no layer <span class="ms-slot" class:none={layer >= real}><span use:roll={{ text: String(layer), mode }}></span></span></h1>
+    <!-- Named for the layer asked, whatever the slot counts through on its way there or is pointed at. -->
+    <h1 aria-label="There is no layer {asked}">There is no layer <span class="ms-slot" class:none={layer >= real} aria-hidden="true"><span use:roll={{ text: String(layer), mode }}></span></span></h1>
     <p class="ms-say">{model.name} has {real}, numbered 0 to {real - 1}.</p>
     <nav class="ms-ways" aria-label="Ways back">
       <a class="pg-go" href={place.path}>Open {place.label}</a>
@@ -143,7 +146,7 @@
 
 <style>
   .lift { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); height: 92px; cursor: ew-resize; touch-action: pan-y; }
-  .col { position: relative; z-index: 1; display: grid; align-content: start; justify-items: center; gap: 2px; padding: var(--s2) 0; transition: opacity 320ms var(--ease); }
+  .col { position: relative; z-index: 1; display: grid; align-content: start; justify-items: center; gap: 2px; padding: var(--s2) 0; transition: opacity var(--glide) var(--ease); }
   .col i { display: block; width: 62%; max-width: 14px; height: 3px; border-radius: 2px; }
   .col.dim { opacity: 0.22; }
   /* A layer the model doesn't have: a column of wash, arriving as the ride reaches it. */

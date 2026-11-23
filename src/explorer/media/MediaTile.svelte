@@ -13,14 +13,19 @@
 
   let url = $state<string | null>(null);
   let loaded = $state(false);
+  /** It couldn't be fetched: the tile says so, and a press asks again. */
+  let lost = $state(false);
+  let attempt = $state(0);
   // Held while shown, so the page can let go of pictures and sounds nobody is looking at.
   $effect(() => {
     const where = doc.h;
     const [m, kind] = [model, modality];
+    void attempt;
     let live = true;
     url = null;
     loaded = false;
-    mediaUrl(m, kind, where).then((u) => { if (live) url = u; }, () => undefined);
+    lost = false;
+    mediaUrl(m, kind, where).then((u) => { if (live) url = u; }, () => { if (live) lost = true; });
     return () => { live = false; releaseMedia(m, kind, where); };
   });
 
@@ -41,6 +46,7 @@
   let running = $state(0);
   let stop: (() => void) | null = null;
   function toggle() {
+    if (lost) { attempt += 1; return; }
     if (!url) return;
     if (playing) { stop?.(); return; }
     playing = true;
@@ -53,6 +59,7 @@
 <figure class="tile rise" style:--i={i}>
   {#if modality === "image"}
     <span class="square" data-tip={tipBody} data-tip-title={label} data-tip-sub={tipSub}>
+      {#if lost}<button type="button" class="again meta" onclick={() => (attempt += 1)}>Didn't load. Try again</button>{/if}
       {#if url}<img src={url} alt={[label, doc.c].filter(Boolean).join(": ")} class:loaded onload={() => (loaded = true)} />{/if}
     </span>
   {:else}
@@ -60,8 +67,8 @@
       type="button"
       class="square sound"
       aria-pressed={playing}
-      aria-label={`${playing ? "Stop" : "Play"} ${label}, ${source}`}
-      disabled={!url}
+      aria-label={`Play ${label}, ${source}`}
+      disabled={!url && !lost}
       data-tip={tipBody}
       data-tip-title={label}
       data-tip-sub={tipSub}
@@ -131,4 +138,5 @@
   figcaption b { color: var(--ink); font-weight: 500; }
   figcaption span { color: var(--ink3); }
   @media (prefers-reduced-motion: reduce) { .fill.run { animation: none; transform: scaleX(1); opacity: 0.5; } }
+  .again { position: absolute; inset: 0; display: grid; place-items: center; padding: var(--s2); border: 0; background: transparent; color: var(--ink2); text-align: center; cursor: pointer; }
 </style>

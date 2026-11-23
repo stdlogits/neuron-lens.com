@@ -189,13 +189,16 @@ export class Stage {
     this.restyle(false);
   }
 
-  /** An action's body for a title: the canvas paints its glass while it is shown. */
+  /** An action's body for a title: the canvas paints its glass while it is shown. Its size comes from the
+   * observer's first word on it, once the page is laid out: read here, as hundreds of titles arrive together,
+   * each read laid the page out again after the last one's style was set. Until then its glass is nothing,
+   * while the title is only starting to fade in. */
   attachTitle(el: HTMLElement, [key, spot]: [string, Spot]) {
     const now = performance.now();
     const calm = reducedMotion();
     el.style.setProperty("--s", String(this.titleScale));
     const title: Title = {
-      key, spot, el, w: el.offsetWidth, h: el.offsetHeight,
+      key, spot, el, w: 0, h: 0,
       shown: new Tween(1), dim: new Tween(this.dimmed(key) ? DIM : 1), leaving: false,
       frost: { x: 0, y: 0, w: 0, h: 0, r: 0, alpha: 0 },
     };
@@ -204,10 +207,11 @@ export class Stage {
     this.sizes ??= new ResizeObserver((entries) => {
       for (const entry of entries) {
         const held = this.sized.get(entry.target);
+        if (!held) continue;
+        // Where a browser gives no border box (Safari before 15.4), the page is laid out by now to read it from.
         const box = entry.borderBoxSize?.[0];
-        if (!held || !box) continue;
-        held.w = box.inlineSize;
-        held.h = box.blockSize;
+        held.w = box ? box.inlineSize : held.el.offsetWidth;
+        held.h = box ? box.blockSize : held.el.offsetHeight;
       }
       this.later();
     });

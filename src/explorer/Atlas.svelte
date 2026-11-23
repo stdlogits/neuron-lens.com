@@ -64,10 +64,21 @@
   // All mode names a neuron from its layer's full index, loaded the first time it's wanted.
   let known = $state.raw<Record<number, IndexRow[]>>({});
   const asked = new Set<string>();
+  // A layer's rows are megabytes: the last few layers looked at are kept (and the current one), the rest read again if asked.
+  const KNOWN = 8;
+  let order: number[] = [];
   const keep = (layer: number, rows: IndexRow[]) => {
     const byNeuron: IndexRow[] = [];
     for (const row of rows) byNeuron[row[1]] = row;
-    known = { ...known, [layer]: byNeuron };
+    const next = { ...known, [layer]: byNeuron };
+    order = [...order.filter((L) => L !== layer), layer];
+    while (order.length > KNOWN) {
+      const old = order.find((L) => L !== lens.layer)!;
+      order = order.filter((L) => L !== old);
+      delete next[old];
+      asked.delete(`${lens.modelId}:${old}`);
+    }
+    known = next;
   };
   function peek(layer: number) {
     const model = lens.modelId;
@@ -81,13 +92,25 @@
   }
   $effect(() => {
     void lens.modelId;
-    untrack(() => { known = {}; asked.clear(); });
+    untrack(() => { known = {}; order = []; asked.clear(); });
   });
   // The current layer's rows, which the list loads in All mode anyway.
   $effect(() => {
     const rows = lens.layerRows;
     if (rows?.model === lens.modelId && !untrack(() => known[rows.layer])) untrack(() => keep(rows.layer, rows.rows));
   });
+
+  /** The plot's height in bars: the length most columns share. A column the catalog gives a unit more (Qwen3-8B's
+   * L8 keeps the site's own owl among its 40 easiest) packs its bars a little closer rather than standing taller. */
+  function usual(columns: Bar[][]): number {
+    const seen = new Map<number, number>();
+    for (const column of columns) seen.set(column.length, (seen.get(column.length) ?? 0) + 1);
+    let best = 1, most = 0;
+    for (const [length, n] of seen) if (n > most || (n === most && length > best)) [best, most] = [length, n];
+    // Only a pinned unit or two is packed in; columns of truly different lengths keep the tallest's height.
+    const longest = Math.max(1, ...seen.keys());
+    return longest - best <= 2 ? Math.max(1, best) : longest;
+  }
 
   /** What there is to draw now, from what has loaded. */
   const fresh = $derived.by<View>(() => {
@@ -96,7 +119,7 @@
     else if (ready && mode === "easiest") columns = neuronColumns.map((column) => column.map((row) => ({ unit: row[1], o: opacity(strength("neuron", row[4]), lens.passesNeuron(row), matches.has(matchKey(row[0], row[1]))), body: row[2], sub: row[3] })));
     const unit = lens.selected;
     const slot = unit === null || mode === "all" ? -1 : columns[lens.layer]?.findIndex((item) => item.unit === unit) ?? -1;
-    const rows = mode === "all" ? ALL_ROWS : Math.max(1, ...columns.map((column) => column.length));
+    const rows = mode === "all" ? ALL_ROWS : usual(columns);
     return { modelId: lens.modelId, model: lens.model, mode, ready, columns, rows, layer: lens.layer, unit, slot };
   });
 
@@ -123,6 +146,11 @@
   const bar = $derived(narrow ? 2 : 3);
   const pitch = $derived(bar + GAP);
   const height = $derived(PAD * 2 + view.rows * pitch - GAP);
+  /** The distance from one bar to the next in a column: closer where it holds more bars than the plot's rows. */
+  const pitchOf = (L: number) => {
+    const n = view.columns[L]?.length ?? 0;
+    return n > view.rows ? (view.rows * pitch - GAP - bar) / (n - 1) : pitch;
+  };
 
   // ---------- All mode: every neuron a cell, in neuron order, across the bars' width of its column
 
@@ -142,6 +170,14 @@
 
   let canvas = $state<HTMLCanvasElement>();
   let probe = $state<HTMLSpanElement>();
+  // The screen's pixel ratio, followed as the window moves to another screen (or the page is zoomed), so the field stays sharp.
+  let dpr = $state(window.devicePixelRatio || 1);
+  $effect(() => {
+    const query = matchMedia(`(resolution: ${dpr}dppx)`);
+    const changed = () => (dpr = window.devicePixelRatio || 1);
+    query.addEventListener("change", changed, { once: true });
+    return () => query.removeEventListener("change", changed);
+  });
   let swatch: CanvasRenderingContext2D | null = null;
   /** A depth colour as RGB, read through the page's own CSS (it mixes theme colours in oklch). */
   function rgb(css: string): [number, number, number] {
@@ -161,7 +197,7 @@
   $effect(() => {
     if (view.mode !== "all" || holding || !canvas || !probe || !byteStrength || !lens.scores || width === 0) return;
     void theme.mode;
-    const scale = window.devicePixelRatio || 1;
+    const scale = dpr;
     const W = Math.round(width * scale);
     const H = Math.round(height * scale);
     canvas.width = W;
@@ -241,7 +277,7 @@
     const p = lens.peek;
     if (!p || p.unit !== lens.unit || !view.ready || holding) return null;
     if (view.mode === "all") {
-      if (p.index >= view.model.mlp || width === 0) return { layer: p.layer, slot: -1, spot: null };
+      if (p.index < 0 || p.index >= view.model.mlp || width === 0) return { layer: p.layer, slot: -1, spot: null };
       const { x, y } = cell(p.layer, p.index);
       return { layer: p.layer, slot: -1, spot: { x: x + grid.cw / 2, y: y + grid.ch / 2 } };
     }
@@ -308,8 +344,9 @@
     const L = Math.max(0, Math.min(count - 1, Math.floor((event.clientX - box.left) / column)));
     const x = event.clientX - box.left;
     const y = event.clientY - box.top;
-    const i = Math.floor((y - PAD + GAP / 2) / pitch);
-    const slot = y - PAD + GAP / 2 >= 0 && event.clientY < box.bottom && i < (view.columns[L]?.length ?? 0) ? i : null;
+    const step = pitchOf(L);
+    const i = Math.floor((y - PAD + (step - bar) / 2) / step);
+    const slot = y - PAD + (step - bar) / 2 >= 0 && event.clientY < box.bottom && i < (view.columns[L]?.length ?? 0) ? i : null;
     const along = Math.max(0, Math.min(0.999, (x - L * column - column * 0.19) / (column * 0.62)));
     return { L, slot, along, x, y };
   }
@@ -349,7 +386,7 @@
     } else {
       if (lit?.layer !== L || lit.slot !== slot) lit = { layer: L, slot: slot! };
       const wide = L === view.layer && slot === view.slot ? 0.86 : 0.62;
-      rect = new DOMRect(box.left + L * column + (column * (1 - wide)) / 2, box.top + PAD + slot! * pitch, column * wide, bar);
+      rect = new DOMRect(box.left + L * column + (column * (1 - wide)) / 2, box.top + PAD + slot! * pitchOf(L), column * wide, bar);
     }
     // The first waits for the pointer to rest, as every tip does; once one shows, the rest follow the pointer at once.
     showTip(rect, content(L, slot ?? -1, unit), { wait: true });
@@ -405,6 +442,8 @@
   // ---------- keys
 
   function key(event: KeyboardEvent) {
+    // Alt+arrows are the browser's Back and Forward; any modifier is another shortcut's.
+    if (event.altKey || event.metaKey || event.ctrlKey) return;
     const L = lens.layer;
     const to: Record<string, number> = { ArrowRight: L + 1, ArrowLeft: L - 1, PageUp: L + 5, PageDown: L - 5, Home: 0, End: last };
     if (event.key in to) goLayer(Math.max(0, Math.min(last, to[event.key])));
@@ -451,7 +490,7 @@
           <canvas class="field" bind:this={canvas} style:width="{width}px" style:height="{height}px" aria-hidden="true"></canvas>
         {:else}
           {#each view.columns as column, L (L)}
-            <div class="stack" style:--c={depthColor(view.model, L)} style:--L={L} style:--sweep={sweepOf(L)} out:fadeOut>
+            <div class="stack" style:--c={depthColor(view.model, L)} style:--L={L} style:--sweep={sweepOf(L)} style:--gap={column.length > view.rows ? `${pitchOf(L) - bar}px` : undefined} out:fadeOut>
               {#each column as item, i (i)}
                 <i class:sel={L === view.layer && i === view.slot} class:lit={lit?.layer === L && lit.slot === i} class:peek={peeked?.layer === L && peeked.slot === i} style:--o={item.o} out:fadeOut></i>
               {/each}
@@ -512,7 +551,7 @@
     display: grid;
     align-content: start;
     justify-items: center;
-    gap: 2px;
+    gap: var(--gap, 2px);
     padding: var(--s2) 0;
     transition: left var(--glide) var(--ease), width var(--glide) var(--ease);
   }

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
-  import { reducedMotion } from "@stdlogits/ledger";
+  import { GLIDE, reducedMotion } from "@stdlogits/ledger";
   import { MODELS, depthColor, type ModelId } from "../../lib/models";
   import { loadIndex, loadScores, type IndexRow } from "../../lib/data";
   import { byteStrengths, FAINT } from "../../explorer/atlas/levels";
@@ -65,7 +65,8 @@
     return best ?? named[0];
   }
 
-  function halt() { stop(); stop = () => {}; head = null; lit = 1; empty = 1; quiet = false; mode = "auto"; paint(); }
+  let riding = false;
+  function halt() { stop(); stop = () => {}; riding = false; head = null; lit = 1; empty = 1; quiet = false; mode = "auto"; paint(); }
   function pointed(event: PointerEvent) {
     const box = canvas.getBoundingClientRect(), x = event.clientX - box.left, y = event.clientY - box.top;
     halt();
@@ -80,7 +81,9 @@
   }
   function key(event: KeyboardEvent) {
     const stops = [...named.map((r) => r[1]), asked], here = stops.indexOf(at);
-    const to = event.key === "ArrowRight" ? here + 1 : event.key === "ArrowLeft" ? (here < 0 ? stops.length - 1 : here - 1) : event.key === "Home" ? 0 : event.key === "End" ? stops.length - 1 : null;
+    // As any slider: right and up raise, left and down lower.
+    const up = event.key === "ArrowRight" || event.key === "ArrowUp", down = event.key === "ArrowLeft" || event.key === "ArrowDown";
+    const to = up ? here + 1 : down ? (here < 0 ? stops.length - 1 : here - 1) : event.key === "Home" ? 0 : event.key === "End" ? stops.length - 1 : null;
     if (to === null) return;
     event.preventDefault();
     halt();
@@ -94,7 +97,7 @@
     halt();
     if (reducedMotion() || !cells || !R) { at = asked; paint(); return; }
     hit.hidden = true;
-    lit = 0; empty = 0; quiet = true; mode = "plain";
+    riding = true; lit = 0; empty = 0; quiet = true; mode = "plain";
     head = { x: PAD, alpha: 1 };
     let counted = 0;
     const from = () => PAD + R + 4, to = () => PAD + span - 12;
@@ -111,11 +114,18 @@
         paint();
       },
       done() {
-        empty = 1; lit = 1; quiet = false; mode = "land"; at = asked;
+        riding = false; empty = 1; lit = 1; quiet = false; mode = "land"; at = asked;
         const fading = head!;
-        stop = tween(260, (t) => { fading.alpha = 1 - t; paint(); }, () => { head = null; paint(); });
+        stop = tween(GLIDE, (t) => { fading.alpha = 1 - t; paint(); }, () => { head = null; paint(); });
       },
     });
+  }
+  /** A ride cut short by a new size lands where it was going, as it would have, so the page never rests mid-count. */
+  function resized(w: number, h: number) {
+    const landing = riding;
+    halt();
+    measure(w, h);
+    if (landing) { label = named[named.length - 1]; mode = "land"; at = asked; }
   }
 
   onMount(() => {
@@ -178,7 +188,7 @@
       ctx.beginPath(); ctx.arc(x, y, Math.max(4, R / cols / 2 + 3), 0, 6.2832); ctx.stroke();
       ctx.globalAlpha = 1;
       hit.style.transform = `translate(${x}px, ${y}px)`;
-    }, (w, h) => { halt(); measure(w, h); });
+    }, resized);
     paint = surf.paint;
     Promise.all([loadIndex(id), loadScores(id)]).then(([index, scores]) => {
       if (!live) return;
@@ -211,7 +221,8 @@
     <Readout id="L{layer}·n{label[1]} {side ? '−' : '+'}" label={side ? label[3] : label[2]} href="/{id}/L{layer}/n{label[1]}" lent={!!model.labelsFrom} {quiet} />
   {/if}
   <div class="ms-text">
-    <h1>There is no neuron <span class="ms-slot" class:none={at >= width}><span use:roll={{ text: count(at), mode }}></span></span></h1>
+    <!-- Named for the neuron asked, whatever the slot counts through on its way there or is pointed at. -->
+    <h1 aria-label="There is no neuron {count(asked)}">There is no neuron <span class="ms-slot" class:none={at >= width} aria-hidden="true"><span use:roll={{ text: count(at), mode }}></span></span></h1>
     <p class="ms-say">Layer {layer} of {model.name} has {count(width)}, numbered 0 to {count(width - 1)}.</p>
     <nav class="ms-ways" aria-label="Ways back">
       <a class="pg-go" href="/{id}/L{layer}/n{width - 1}">Open L{layer}·n{width - 1}</a>

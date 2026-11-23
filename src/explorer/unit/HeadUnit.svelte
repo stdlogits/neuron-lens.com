@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { ModelInfo } from "../../lib/models";
   import { Context, stem } from "@stdlogits/ledger";
   import HeadMedia from "../media/HeadMedia.svelte";
   import Basket from "./Basket.svelte";
@@ -16,7 +17,7 @@
   // to, what it writes), then its evidence in the same three baskets. Weights: what the lenses read
   // of its QK and OV maps. Stream: what its output says where it fires. Firings: where it fires and
   // what it looks at there, how it handles images and sound, how often and how hard.
-  let { head, labelled, groupSize }: { head: HeadDetail; labelled: boolean; groupSize: number } = $props();
+  let { head, model, labelled, groupSize }: { head: HeadDetail; model: ModelInfo; labelled: boolean; groupSize: number } = $props();
 
   const rows = $derived([{
     sign: "",
@@ -39,7 +40,7 @@
 </script>
 
 <div class="unit" data-link-scope>
-  <Faces columns={["Fires on", "Attends to", "Writes"]} {rows} {labelled} note={head.label.note} />
+  <Faces columns={["Fires on", "Attends to", "Writes"]} {rows} {model} {labelled} note={head.label.note} />
   <BasketBar {baskets} />
 
   <div class="stack">

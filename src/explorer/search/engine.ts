@@ -63,7 +63,8 @@ function matchesOf(list: Result[]): Matches {
 /** Resolves an ID, or null when the query isn't one. */
 export function findId(query: string, model: ModelInfo, index: CatalogIndex, heads: HeadRow[] | null): Found | null {
   const ref = parseRef(query, model);
-  if (!ref) return null;
+  // Another model's pasted address opens there on Enter; its unit isn't this model's to list.
+  if (!ref || ref.model) return null;
   let found: Result;
   if (ref.unit === "heads") {
     const row = heads?.find((r) => r[0] === ref.layer && r[1] === ref.index);
@@ -162,13 +163,15 @@ type Hit = { score: number; matched: string; fuzzy: boolean; said: boolean };
 
 /** Every unit matching a query's words, best first. */
 export async function findWords(query: string, model: ModelInfo, index: CatalogIndex, heads: HeadRow[] | null, words: Words, terms: Terms | null): Promise<Found> {
-  const text = query.trim();
+  // A pasted paragraph is searched by its first few words: each word scans the index, and more would hold up the page.
+  const text = query.trim().slice(0, 200);
   if (!text) return NONE;
   const quoted = /^["“].+["”]$/.test(text);
   const phrase = quoted ? text.slice(1, -1).trim() : text;
   // A run of CJK is one word; elsewhere, each word on its own, without the little ones when there are others.
   let asked = /\s/.test(phrase) ? phrase.split(/\s+/).filter(Boolean) : [phrase];
   if (asked.length > 1) { const kept = asked.filter((w) => !STOP.has(w.toLowerCase())); if (kept.length) asked = kept; }
+  asked = asked.slice(0, 8);
 
   // Each word's forms (and a word in another script, its English's, a little behind the word itself).
   const plans = asked.map((word) => {

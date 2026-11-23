@@ -13,6 +13,10 @@
   const CONNECTIONS = { value: "connections", label: "Connections", hint: "What it is wired to, driven by and fires with" };
   const shown = $derived(under ? [...baskets, CONNECTIONS] : baskets);
 
+  let queue = () => {};
+  // Another set of baskets (the other side's) marks again without waiting for a scroll.
+  $effect(() => { void shown; untrack(() => queue()); });
+
   onMount(() => {
     let frame = 0;
     const look = () => {
@@ -30,7 +34,7 @@
       });
       if (seen) active = seen.value;
     };
-    const queue = () => { if (!frame) frame = requestAnimationFrame(look); };
+    queue = () => { if (!frame) frame = requestAnimationFrame(look); };
     // Captured, so the unit's own column scrolling is heard as well as the page.
     document.addEventListener("scroll", queue, { passive: true, capture: true });
     window.addEventListener("resize", queue, { passive: true });

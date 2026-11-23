@@ -26,8 +26,8 @@
 
 <Part id="evidence" title="Evidence" onnear={load}>
   {#snippet caption()}
-    <p>There are two sources of evidence for a unit's meaning.</p> 
-    <p><b>Its weights</b>: what the lenses directly read from the unit's weights, finding the tokens it fires on to or pushes toward.</p>
+    <p>There are two sources of evidence for a unit's meaning.</p>
+    <p><b>Its weights</b>: what the lenses directly read from the unit's weights, finding the tokens it responds to or pushes toward.</p>
     <p><b>Its firings</b>: what happens to the unit when the model runs, finding the tokens that empirically made it fire the hardest.</p>
     <p>Neither method is infallible, but when they agree, it's pretty compelling evidence for the unit's purpose.</p>
   {/snippet}

@@ -13,13 +13,6 @@ export function scroller(column: HTMLElement | null): HTMLElement | null {
   return column && split(column.parentElement) ? column : null;
 }
 
-/** Brings the panes to the top of the screen, where they fill it. */
-export function align(panes: HTMLElement, smooth: boolean) {
-  const margin = parseFloat(getComputedStyle(panes).scrollMarginTop) || 0;
-  const top = panes.getBoundingClientRect().top - margin;
-  if (Math.abs(top) > 1) window.scrollTo({ top: window.scrollY + top, behavior: smooth ? "smooth" : "auto" });
-}
-
 export function panes(node: HTMLElement) {
   // Side by side is decided by the explorer's width (a container query): read it from where the two columns stand.
   const mark = () => {
@@ -31,8 +24,10 @@ export function panes(node: HTMLElement) {
   resized.observe(node);
   mark();
 
-  // A wheel or trackpad scroll over a column while the panes are not at the top: move the page to them first.
+  // A wheel or trackpad scroll over a column while the panes are not at the top: move the page to them first. Not
+  // over the full-screen graph, which opens inside them and moves itself with the wheel, the page never.
   const wheel = (event: WheelEvent) => {
+    if ((event.target as Element | null)?.closest?.(".navigator")) return;
     if (!split(node) || event.ctrlKey || !event.deltaY) return;
     const margin = parseFloat(getComputedStyle(node).scrollMarginTop) || 0;
     const off = node.getBoundingClientRect().top - margin;
