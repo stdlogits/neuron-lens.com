@@ -5,7 +5,6 @@
   import Explorer from "./explorer/Explorer.svelte";
   import About from "./pages/About.svelte";
   import Credits from "./pages/Credits.svelte";
-  import NotFound from "./pages/NotFound.svelte";
   import { href, router, startRouter } from "./lib/router.svelte";
   import { ORIGIN } from "./lib/site";
   import { theme } from "./lib/theme";
@@ -50,7 +49,8 @@
         {:else if page === "credits"}
           <Credits />
         {:else}
-          <NotFound />
+          <!-- Loaded only for an address with no page: its drawings and the 404 neurons stay out of every other page. -->
+          {#await import("./pages/NotFound.svelte") then { default: NotFound }}<NotFound />{/await}
         {/if}
       {/if}
     </main>

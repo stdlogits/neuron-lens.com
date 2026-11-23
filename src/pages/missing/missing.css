@@ -1,0 +1,77 @@
+/* The missing page (src/pages/NotFound.svelte and its kinds in missing/): what is wrong with the address, drawn and
+ * set moving, then the headline with its slot, a line, and the ways back. */
+
+.ms {
+  display: grid;
+  gap: var(--s6);
+  min-width: 0;
+  padding-top: var(--s5);
+}
+
+.ms-text {
+  display: grid;
+  justify-items: start;
+  gap: var(--s4);
+  min-width: 0;
+}
+
+.ms h1 {
+  font: var(--type-title);
+  letter-spacing: -0.04em;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.ms-say {
+  max-width: 52ch;
+  color: var(--ink2);
+  font: var(--type-lead);
+}
+
+.ms-ways {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s4) var(--s5);
+  margin-top: var(--s2);
+}
+
+/* The slot: what the headline is about, marked as a unit's firing is (the tint at 22%, grown by its own shadow), as
+ * the Standard Logits hero marks its token; in the wash where it names something the model doesn't have. */
+.ms-slot {
+  margin-inline: 0.06em;
+  border-radius: var(--r-col);
+  background: color-mix(in oklch, var(--tint) 22%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--tint) 22%, transparent);
+  font-variant-numeric: tabular-nums;
+  transition: background-color var(--glide) var(--ease), box-shadow var(--glide) var(--ease);
+}
+
+.ms-slot.none {
+  background: var(--wash2);
+  box-shadow: 0 0 0 4px var(--wash2);
+}
+
+.ms-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3) var(--s5);
+  min-width: 0;
+}
+
+/* A ride's thumb rides the ride's own clock, so it has no transition of its own to fall behind on; pointing glides it. */
+.ms-thumb {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(100% / var(--n));
+  border-radius: var(--r-chip);
+  background: var(--wash2);
+  transition: transform var(--glide) var(--ease);
+  will-change: transform;
+}
+
+.riding > .ms-thumb {
+  transition: none;
+}

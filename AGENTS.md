@@ -19,11 +19,13 @@ It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now redire
   `layout.ts` places them, `stage.ts` moves them, `Graph` draws them (its links on a canvas, `ink.ts`), `Connections` is the rail, `Navigator` the same graph full
   screen with its Find (`find.ts`), `Card` a tapped unit's card), `UnitView` (and `unit/`), `Search`
   (and `search/`), `media/`, and `LinkCard`, a unit drawn as the picture its shared link carries.
-- `src/pages/`: About, Credits, the missing page.
+- `src/pages/`: About, Credits, the missing page (`NotFound.svelte`, its kinds in `missing/`: below, "The missing
+  page").
 - `src/lib/`: `data.ts` (the catalog's types and loaders), `models.ts` (each model's shape, its depth
   ramp and the words for its depth bands; the models listed are those with a build in `catalog.json`), `depth.json`
   (every model's reading plan and bands, with the numbers their words cite) and `ladder.json` (the other Qwen3 sizes'
-  profiles), both written by `bands.py` (below), `router.svelte.ts` (every view is a path), `site.ts` (the
+  profiles), both written by `bands.py` (below), `router.svelte.ts` (every view is a path), `missing.ts` (why an
+  address has none), `site.ts` (the
   name and origin), `translate.svelte.ts` (the translations, and the site's `Translator` for Ledger),
   `theme.ts` (the theme, from Ledger's `createTheme`), `media.ts`.
 - `src/styles/site.css`: the site's own rules over Ledger's (the no-script summary).
@@ -37,7 +39,7 @@ It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now redire
   from R2 (below, "The catalog").
 - `scripts/neurons/`: the catalog's build (below). `scripts/catalog/`: its upload to R2, the bucket's
   CORS rules and robots.txt, and the dev server's `/data`. `scripts/site/`: what the site says about
-  itself (below). `scripts/deploy.sh`, `scripts/verify-deployment.mjs`: deploy and the live check;
+  itself (below), and `absent.mjs`, the missing page's 404 neurons. `scripts/deploy.sh`, `scripts/verify-deployment.mjs`: deploy and the live check;
   `scripts/wrangler.sh`: the account and sign-in every Wrangler call uses.
 - `e2e/`: Playwright specs on a mock catalog (`e2e/fixtures/catalog`, committed: a few units cut from
   `catalog/` by `e2e/fixtures/build.mjs`, ~0.5 MB).
@@ -48,7 +50,7 @@ It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now redire
 
 Addresses: `/`, `/<model>`, `/<model>/L<layer>`, `/<model>/L<layer>/n<neuron>` (`?all` lists every
 neuron of the layer), `/<model>/heads`, `/<model>/L<layer>/heads`, `/<model>/L<layer>/h<head>`,
-`/about`, `/credits`. A unit's address with `?graph` opens its connections full screen, and with `?card` is its link card alone (below, "What the site says about itself"). Anything else is the missing page. Bare addresses are Qwen3-8B.
+`/about`, `/credits`. A unit's address with `?graph` opens its connections full screen, and with `?card` is its link card alone (below, "What the site says about itself"). Anything else is the missing page, which says what is wrong with it (below, "The missing page"). Bare addresses are Qwen3-8B.
 
 ## Design
 
@@ -208,6 +210,23 @@ if the explorer's atlas or a neuron did), and change the card's alt text (`scrip
 shows; encoding the card needs Python with Pillow (`PYTHON`, or `python3`). `scripts/site/paint/lens.py` painted
 the card before this one (a lens held up to the atlas, an owl through it) and is kept, unused.
 
+## The missing page
+
+An address with no page shows what is wrong with it. `parse` in `src/lib/router.svelte.ts` returns
+`{ page: "missing", why }` wherever it turns an address down, so the page and the router can't disagree; `why` is one
+of five kinds (`src/lib/missing.ts`). A page the router can't read (`/abuot`, a fourth part) gets the 404 neurons:
+404 of Qwen3-8B's neurons whose labels name an absence, drawn as "404" (`src/pages/missing/absent.json`, written by
+`scripts/site/absent.mjs` from the word index of the build `catalog.json` names), with the nearest real address
+offered when a fix is small. A first part that is no model the site has, but looks like one or is followed by a layer
+(`/qwen-8b/L18/n9459`, `/Gemma-4-12B/…`), gets the models ranked by a softmax of minus their edit distance from it, as
+the Standard Logits hero lists its tokens, and a way back that keeps the place, clipped to the model's shape. A layer,
+neuron or head at or past the model's shape (`/qwen3-8b/L52/n344`, `/qwen3-8b/L18/n30255`, `/gemma-4-12b/L28/h22`)
+gets a ride along that axis into the part that isn't there, from the files the explorer already reads (the index,
+`scores.json`, the heads index), loaded only then. Each kind plays once and lands; reduced motion shows where it
+lands. `NotFound.svelte` loads only for a missing address, so none of it weighs on other pages. DESIGN.md describes
+what each draws. A layer of up to four digits, or a neuron or head of up to seven, past the model's shape is read as one;
+a longer number is a page.
+
 ## The catalog
 
 The explorer reads static JSON (and Gemma 4's media packs), built into `catalog/<model>/` from the
@@ -247,7 +266,8 @@ script's docstring has the full invocation):
    tokenizer; contexts the 8B never showed stay untranslated). `NEURON_LAYERS=8,21`
    builds a subset for development.
 4. `scripts/catalog/upload.sh <model>` puts the build on R2 and names it in `src/lib/catalog.json`;
-   commit that and deploy (below, "On R2").
+   commit that and deploy (below, "On R2"). A new Qwen3-8B build also needs `node scripts/site/absent.mjs` rerun,
+   since the missing page's 404 neurons carry that build's labels.
 5. The pruned pairs' links, once, apart from any model's build: `scripts/neurons/lineage.py
    ~/Work/neuron-lens/data/catalog catalog/lineage` turns the neuron-lens catalogs' `lineage` tables (Qwen3-4B, 0.6B,
    8B, 1.7B) into `catalog/lineage/<model>.bin`, a 4-byte record per neuron (the other model's neuron and how it is

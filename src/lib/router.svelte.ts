@@ -13,6 +13,7 @@
 // Links from drowse.ai's old page (/neuron-lens?model=…&layer=…&neuron=…, redirected here with their
 // query) are rewritten to these paths on arrival.
 import { DEFAULT_MODEL, MODELS, isModelId, type ModelId } from "./models";
+import { unknownFirst, type Missing } from "./missing";
 import type { Unit } from "./data";
 
 export interface ExploreRoute {
@@ -30,9 +31,10 @@ export interface ExploreRoute {
   /** A unit drawn as its link card and nothing else: what it is and where, or ("circuit") its connections. */
   card?: boolean | "circuit";
 }
-export type Route = ExploreRoute | { page: "about" } | { page: "credits" } | { page: "missing" };
+/** An address with no page says why (lib/missing.ts), so the missing page can show what is wrong with it. */
+export type Route = ExploreRoute | { page: "about" } | { page: "credits" } | { page: "missing"; why: Missing };
 
-const MISSING: Route = { page: "missing" };
+const missing = (why: Missing): Route => ({ page: "missing", why });
 
 export function parse(pathname: string, search = ""): Route {
   const query = new URLSearchParams(search);
@@ -40,29 +42,35 @@ export function parse(pathname: string, search = ""): Route {
   try {
     parts = pathname.split("/").filter(Boolean).map((part) => decodeURIComponent(part));
   } catch {
-    return MISSING; // a malformed escape
+    return missing({ kind: "page", parts: [] }); // a malformed escape
   }
   if (parts.length === 0 || (parts.length === 1 && (parts[0] === "neuron-lens" || parts[0] === "neurons"))) return legacy(query);
   if (parts.length === 1 && parts[0] === "about") return { page: "about" };
   if (parts.length === 1 && parts[0] === "credits") return { page: "credits" };
   const [id, second, third] = parts;
-  if (!isModelId(id) || parts.length > 3) return MISSING;
+  if (!isModelId(id)) return missing(unknownFirst(parts));
+  if (parts.length > 3) return missing({ kind: "page", parts });
   const model = MODELS[id];
   const route: ExploreRoute = { page: "explore", model: id, layer: null, unit: "neurons", index: null, all: query.has("all") };
   if (second === undefined) return route;
   if (second === "heads" && third === undefined) return { ...route, unit: "heads", all: false };
-  const layer = second.match(/^L(\d{1,2})$/)?.[1];
-  if (layer === undefined || Number(layer) >= model.layers) return MISSING;
+  // A layer, neuron or head past the model's shape is missing for that reason (up to a few more digits than any has).
+  const layer = second.match(/^L(\d{1,4})$/)?.[1];
+  if (layer === undefined) return missing({ kind: "page", parts });
+  if (Number(layer) >= model.layers) return missing({ kind: "layer", model: id, asked: Number(layer), rest: parts.slice(2) });
+  if (layer.length > 2) return missing({ kind: "page", parts });
   route.layer = Number(layer);
   if (third === undefined) return route;
   if (third === "heads") return { ...route, unit: "heads", all: false };
-  const unit = third.match(/^([nh])(\d{1,5})$/);
-  if (!unit) return MISSING;
+  const unit = third.match(/^([nh])(\d{1,7})$/);
+  if (!unit) return missing({ kind: "page", parts });
   const index = Number(unit[2]);
+  if (index >= (unit[1] === "h" ? model.heads : model.mlp)) return missing({ kind: unit[1] === "h" ? "head" : "neuron", model: id, layer: route.layer, asked: index });
+  if (unit[2].length > 5) return missing({ kind: "page", parts });
   const graph = query.has("graph");
   const card = query.get("card") === "circuit" ? "circuit" : query.has("card");
-  if (unit[1] === "h") return index < model.heads ? { ...route, unit: "heads", index, all: false, graph, card } : MISSING;
-  return index < model.mlp ? { ...route, index, graph, card } : MISSING;
+  if (unit[1] === "h") return { ...route, unit: "heads", index, all: false, graph, card };
+  return { ...route, index, graph, card };
 }
 
 /** drowse.ai's query addresses: ?model=&layer=&neuron= or &head=, &unit=heads, &all=1. */

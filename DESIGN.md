@@ -98,6 +98,23 @@ What the site draws for itself, in Ledger:
   view moves, and during a pinch each title's own scale (set on it, not inherited, so no mark is restyled) keeps it one
   size on screen, while where the titles sit is worked out again only once the pinch rests.
   Reduced motion keeps the fades and drops the rest.
+- The missing page (`src/pages/NotFound.svelte`, its kinds in `src/pages/missing/`) shows what is wrong with the
+  address, as the router found it (`src/lib/missing.ts`), and plays it once, as the Standard Logits hero plays its list:
+  it moves fastest through what matters least and slows where the answer forms; pointing, a tap or the arrow keys take
+  over; reduced motion shows where it lands. Every kind ends on a headline whose slot is marked as the hero marks its
+  token (the depth tint at 22%, in the wash where it names something the model doesn't have), one line, and the ways
+  back. A page the router can't read: "404" drawn in 404 dots, each a Qwen3-8B neuron whose label names an absence
+  (`absent.json`, from `scripts/site/absent.mjs`), arriving in their layers and travelling into the figure while the
+  name under it runs through a dozen and lands on L18·n3025, the not-found neuron; a lens follows the pointer, and "In
+  the model" sends the dots back to their layers; the way back offers the nearest real address when a fix is small. A
+  model the site doesn't have: the hero's own list, the models ranked by a softmax of minus each one's edit distance
+  from what was typed, the slot running up it to the nearest, and the way back keeping the place in that model,
+  clipped to its shape. A layer, a neuron or a head past the model's shape: a ride along that axis on one clock
+  (`motion.ts`), easing up to the last the model has, a hold, then on into the part that isn't there, landing on the
+  number asked. Layers are the atlas's columns (each layer's neurons at fourteen ranks, shaded as the atlas shades
+  them); a layer's neurons are a cell each, as the All field draws them, crossed by an ink playhead; a layer's heads are
+  a column each of where it attends. What the ride passes lights up from dim; what isn't there arrives in the wash. The
+  number holds still a moment before it lands, so Ledger's `MorphText` morphs the landing.
 
 The explorer's one credit is "Labels by Claude Haiku 5.5"; a base model's adds ", written for" its post-trained model,
 and its labels are italic wherever they show, as lent (Ledger's `lent`): the unit's faces and the labeller's note, the

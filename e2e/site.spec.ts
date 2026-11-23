@@ -31,6 +31,33 @@ for (const path of ["/no-such-page", "/qwen3-8b/L99", "/gemma-4-12b/L8/n99999"])
   });
 }
 
+// The missing page shows what is wrong with the address (lib/missing.ts), each kind landed (reduced motion), and offers
+// the way back: the same place clipped to the model's shape, or the nearest real address.
+for (const [path, heading, way, to] of [
+  ["/no-such-page", "Nothing fires here", "Open the explorer", "/"],
+  ["/abuot", "Nothing fires here", "Did you mean About?", "/about"],
+  ["/qwen-8b/L8/n344", "Did you mean Qwen3-8B?", "Open L8·n344", "/qwen3-8b/L8/n344"],
+  ["/Gemma-4-12B/L14/n8313", "Did you mean Gemma 4 12B?", "Open L14·n8313", "/gemma-4-12b/L14/n8313"],
+  ["/qwen3-8b/L99", "There is no layer 99", "Open layer 35", "/qwen3-8b/L35"],
+  ["/qwen3-8b/L52/n344", "There is no layer 52", "Open L35·n344", "/qwen3-8b/L35/n344"],
+  ["/gemma-4-12b/L8/n99999", "There is no neuron 99,999", "Open L8·n15359", "/gemma-4-12b/L8/n15359"],
+  ["/qwen3-8b/L20/h40", "There is no head 40", "Open L20·h31", "/qwen3-8b/L20/h31"],
+] as const) {
+  test(`the missing page says what is wrong with ${path}`, async ({ page }) => {
+    await page.goto(path);
+    await expect(page.locator("main h1")).toHaveText(heading);
+    await expect(page.getByRole("navigation", { name: "Ways back" }).getByRole("link", { name: way, exact: true })).toHaveAttribute("href", to);
+  });
+}
+
+test("a missing page's way back opens the place", async ({ page }) => {
+  await page.goto("/qwen3-8b/L52/n344");
+  await page.getByRole("navigation", { name: "Ways back" }).getByRole("link", { name: "Open L35·n344", exact: true }).click();
+  // A neuron outside the easiest opens with every neuron of its layer listed (?all).
+  await expect(page).toHaveURL(/\/qwen3-8b\/L35\/n344(\?all)?$/);
+  await expect(explorerTitle(page)).toBeVisible();
+});
+
 for (const [path, canonical] of [["/", "/"], ["/qwen3-8b", "/"], ["/gemma-4-12b/L14/n8313?all", "/gemma-4-12b/L14/n8313"], ["/neurons?layer=20&head=17", "/qwen3-8b/L20/h17"], ["/about", "/about"]]) {
   test(`${path} names its canonical address`, async ({ page }) => {
     await page.goto(path);
@@ -130,7 +157,8 @@ test("with ?card=circuit a unit's address draws the card of its connections", as
   expect(new URL(page.url()).search).toBe("?card=circuit");
 });
 
-const TOUR = ["/","/gemma-4-12b", "/qwen3-8b/L8/n344", "/qwen3-8b/L20/h17", "/gemma-4-12b/L33/n12225", "/gemma-4-12b/L28/heads", "/gemma-4-12b/L14/n8313?all", "/about", "/credits", "/no-such-page"];
+// The missing page once for each thing an address can get wrong: a page, a model, a layer, a neuron, a head.
+const TOUR = ["/","/gemma-4-12b", "/qwen3-8b/L8/n344", "/qwen3-8b/L20/h17", "/gemma-4-12b/L33/n12225", "/gemma-4-12b/L28/heads", "/gemma-4-12b/L14/n8313?all", "/about", "/credits", "/no-such-page", "/qwen-8b/L8/n344", "/qwen3-8b/L99/n344", "/gemma-4-12b/L8/n99999", "/qwen3-8b/L20/h40"];
 
 test("no console errors anywhere on the tour", async ({ page }) => {
   const errors: string[] = [];
