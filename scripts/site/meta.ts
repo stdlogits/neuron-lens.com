@@ -15,12 +15,12 @@ const CATALOG = "https://huggingface.co/datasets/stdlogits/neuron-lens";
 const RESEARCH = "https://github.com/stdlogits/neuron-lens";
 const LENSES = "https://huggingface.co/stdlogits/rs-lenses";
 const SOURCE = "https://github.com/stdlogits/neuron-lens.com";
-// public/card.webp, painted and set by scripts/site/render.mjs.
+// public/card.webp, drawn by scripts/site/render.mjs.
 const CARD = {
   url: `${ORIGIN}/card.webp`,
   width: 2400,
   height: 1260,
-  alt: "Neuron Lens: a lens held up to a night sky of out-of-focus lights, one for each neuron of Qwen3-8B, and through it a little owl against the moon; below, neuron 344 of layer 8 and a line it fires on, hear the sound of the owls.",
+  alt: "Neuron Lens: six of Qwen3-8B's neurons, each drawn in dots as what it fires on (a cup of coffee, an owl, a tree, a bell, a crescent moon and a cat), with the tokens it fires on and its ID beneath, and a thread from each down to its own layer, lit in the model's atlas.",
 };
 
 const count = (n: number) => n.toLocaleString("en-US");

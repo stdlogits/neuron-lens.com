@@ -1,0 +1,13 @@
+{
+  "model": "qwen3-8b",
+  "name": "Qwen3-8B",
+  "neuronsPerLayer": 12288,
+  "units": [
+    { "layer": 3, "neuron": 10265, "word": "coffee", "also": "咖啡", "figure": "coffee", "down": 0.06 },
+    { "layer": 8, "neuron": 344, "word": "owl", "figure": "owl", "down": 0.03 },
+    { "layer": 12, "neuron": 11885, "word": "tree", "also": "树", "figure": "tree", "down": 0.02 },
+    { "layer": 20, "neuron": 11348, "word": "bell", "also": "铃", "figure": "bell", "down": 0 },
+    { "layer": 24, "neuron": 10369, "word": "moon", "also": "月亮", "figure": "moon", "down": 0 },
+    { "layer": 30, "neuron": 10935, "word": "cat", "also": "猫", "figure": "cat", "down": 0 }
+  ]
+}

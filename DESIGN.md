@@ -12,8 +12,11 @@ What the site draws for itself, in Ledger:
 - The depth ramp per model (`depthColor`, `src/lib/models.ts`), which the explorer sets as `--tint`
   for the current layer, and its depth bands. A read other than the one its depth's label cards rest on is quiet
   (the whole read at reduced opacity, full again when pointed at or focused) and comes last.
-- The mark (`public/favicon.svg`) and the social card (`scripts/site/paint/lens.py`, the painting, and
-  `scripts/site/card.html`, its type), both described in Ledger's DESIGN.md.
+- The mark (`public/favicon.svg`), described in Ledger's DESIGN.md.
+- The social card (`scripts/site/card.html` and `scripts/site/card/`), which is not one of Ledger's painted cards:
+  flat paper like the site, with six of Qwen3-8B's neurons as small figures of what they fire on, each drawn as dots
+  in its layer's colour along flowing strands, over the model's atlas as the explorer draws it. Its type is Ledger's
+  `card.css`, and the depth ramp is still its only colour.
 - The header's placement of `ThemeButton`, and the no-script summary's rules (`src/styles/site.css`).
 - A pruned model's neuron, or its parent's, names its counterpart at the end of the unit's meta line, after its tags
   (`src/explorer/unit/UnitBar.svelte`): "From Qwen3-8B L20·n10768", "Likely from" where only the weights say so, "Kept

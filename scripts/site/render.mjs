@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // Draws the site's images into public/: the social card (card.webp) and the icons made from the mark
-// (public/favicon.svg): favicon.ico, apple-touch-icon.png and the manifest's icons. The card is a painting with
-// the name set over it (Ledger's DESIGN.md, "The marks and the cards"): scripts/site/paint/lens.py paints it from
-// the built catalog, and scripts/site/card.html sets the type. So run this after the catalog is in catalog/, and
-// again when the mark, the card or Qwen3-8B's catalog changes. Painting needs Python with numpy, scipy and Pillow
-// (PYTHON, or python3).
+// (public/favicon.svg): favicon.ico, apple-touch-icon.png and the manifest's icons. The card is scripts/site/card.html,
+// filled from scripts/site/card/: card.json names the six neurons it shows, figures/ holds a figure for each (drawn
+// by figures.py), and atlas.webp and atlas.json are Qwen3-8B's atlas and where it pins each neuron, taken from the
+// site by atlas.mjs. Run this when the mark or the card changes. Encoding the card needs Python with Pillow (PYTHON,
+// or python3).
 //
 //   node scripts/site/render.mjs
 
@@ -19,16 +19,24 @@ import { chromium } from "@playwright/test";
 const root = resolve(fileURLToPath(import.meta.url), "../../..");
 const at = (path) => resolve(root, path);
 
-/** The card's painting, at twice the card's size and reduced, into a folder of its own. */
-async function paint(folder) {
-  const art = join(folder, "lens.png");
-  const { stdout } = await promisify(execFile)(process.env.PYTHON ?? "python3", [at("scripts/site/paint/lens.py"), at("catalog/qwen3-8b"), "2", art]);
-  process.stdout.write(stdout);
-  return art;
+/** What the card shows: its neurons, each with its figure and its pin, over the model's layers and bands
+ *  (src/lib/depth.json). */
+async function cardData() {
+  const json = async (path) => JSON.parse(await readFile(at(path), "utf8"));
+  const card = await json("scripts/site/card/card.json"), { pins } = await json("scripts/site/card/atlas.json");
+  const { plan, bands } = (await json("src/lib/depth.json"))[card.model];
+  const file = (path) => pathToFileURL(at(`scripts/site/card/${path}`)).href;
+  return {
+    name: card.name,
+    neurons: (plan.layers * card.neuronsPerLayer).toLocaleString("en-US"),
+    layers: plan.layers,
+    bands: bands.map(({ key, first, last }) => ({ name: key[0].toUpperCase() + key.slice(1), first, last })),
+    atlas: file("atlas.webp"),
+    units: card.units.map((unit) => ({ ...unit, art: unit.figure, figure: file(`figures/${unit.figure}.png`), pin: pins[`L${unit.layer}·n${unit.neuron}`] })),
+  };
 }
 
-/** The card as WebP at quality 92, as a9l.im's cards are: a painting weighs a tenth of its PNG that way. Pillow,
- *  which the painting already needs, encodes it. */
+/** The card as WebP at quality 92, as a9l.im's cards are. Pillow encodes it. */
 async function webp(png, out) {
   const encode = "import sys; from PIL import Image; Image.open(sys.argv[1]).save(sys.argv[2], 'WEBP', quality=92, method=6)";
   await promisify(execFile)(process.env.PYTHON ?? "python3", ["-c", encode, png, out]);
@@ -58,7 +66,7 @@ const browser = await chromium.launch();
 try {
   const card = await browser.newPage({ viewport: { width: 1200, height: 630 }, deviceScaleFactor: 2, colorScheme: "dark" });
   await card.goto(pathToFileURL(at("scripts/site/card.html")).href);
-  await card.evaluate((data) => window.draw(data), { art: pathToFileURL(await paint(folder)).href });
+  await card.evaluate((data) => window.draw(data), await cardData());
   await card.evaluate(() => document.fonts.ready);
   const shot = join(folder, "card.png");
   await writeFile(shot, await card.screenshot({ type: "png" }));

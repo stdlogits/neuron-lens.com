@@ -3,30 +3,167 @@
 <head>
   <meta charset="utf-8">
   <title>Neuron Lens social card</title>
-  <!-- The social card (public/card.webp), as Ledger draws one (its DESIGN.md, "The marks and the cards"): a
-       painting with the name set over it. scripts/site/render.mjs paints it (scripts/site/paint/lens.py: a lens
-       held up to Qwen3-8B's atlas, an owl through it) and hands it to draw(); the type is Ledger's card.css:
-       the name, then L8·n344 and its firing, the token it fired on marked at its layer's depth. -->
+  <!-- The social card (public/card.webp), which scripts/site/render.mjs draws from this page. It reads from the top down:
+       the name and the model; six of the model's neurons, each a small figure of what it fires on, drawn as dots in its
+       layer's colour (scripts/site/card/figures/, from figures.py), with the tokens it fires on and its ID beneath; and a
+       thread from each down to its layer in the model's atlas as the explorer draws it (scripts/site/card/atlas.png, taken
+       from the site by atlas.mjs), the neuron pinned where the explorer pins it. The type is Ledger's card.css; the rest
+       is the site's own (DESIGN.md).
+       window.draw({ name, neurons, layers, bands, atlas, units }) fills it; a unit is { layer, neuron, word, also, figure
+       (its URL), art (its name), down, pin }. -->
   <link rel="stylesheet" href="../../node_modules/@stdlogits/ledger/src/styles/card.css">
   <style>
-    body { --tint: color-mix(in oklch, var(--deep) 77%, var(--late)); }
+    body { background: var(--paper); }
+    canvas { position: absolute; inset: 0; width: 1200px; height: 630px; }
+    #light { mix-blend-mode: screen; }
+    .top { position: absolute; inset: 40px 64px auto; display: flex; align-items: center; justify-content: space-between; height: 64px; }
+    .name { font-size: 64px; }
+    .term { background: var(--wash); padding: 0 20px 0 7px; }
+    .alpha { background: var(--wash2); min-width: 0; padding: 0 14px; font-weight: 600; }
+    .term b { font-weight: 500; color: var(--ink2); }
+    .term b strong { font-weight: 600; color: var(--ink); }
+    .cap { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 6px; transform: translateX(-50%); white-space: nowrap; }
+    .cap b { font: 600 24px/34px var(--display); letter-spacing: -0.02em; padding: 0 12px; border-radius: 9px; background: color-mix(in oklch, var(--c) 30%, var(--wash)); }
+    .cap b small { font: 500 20px/1 var(--text); margin-left: 7px; opacity: 0.88; }
+    .cap span { font: 500 16px/18px var(--text); color: var(--ink3); font-variant-numeric: tabular-nums; }
+    .strip { position: absolute; left: 64px; width: 1072px; }
+    .strip img { display: block; width: 100%; height: 100%; }
+    .nums, .bands { position: absolute; left: 64px; width: 1072px; height: 20px; font: 500 16px/20px var(--text); color: var(--ink3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .nums span, .bands span { position: absolute; top: 0; transform: translateX(-50%); }
+    .nums .on { color: var(--ink); font-weight: 600; }
   </style>
 </head>
 <body>
-  <img class="art" id="art" alt="">
-  <main class="card">
-    <div class="name">Neuron Lens</div>
-    <div class="page">
-      <span class="term plain"><span>L8<i>·</i>n344</span></span>
-      <p class="said">hear the sound of the <mark>owl</mark>s</p>
-    </div>
-  </main>
+  <canvas id="figures"></canvas>
+  <header class="top"><div class="name">Neuron Lens</div><span class="term" id="term"></span></header>
+  <div class="strip" id="strip"></div>
+  <div class="nums" id="nums"></div>
+  <div class="bands" id="bands"></div>
+  <div id="caps"></div>
+  <canvas id="light"></canvas>
   <script>
-    // art: the painting's URL.
-    window.draw = async ({ art }) => {
-      const image = document.getElementById("art");
-      image.src = art;
-      await image.decode();
+    const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+    const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${clamp(a, 0, 1)})`;
+    const white = (c, t) => c.map((v) => Math.round(v + (255 - v) * t));
+    const spark = (x, y, s) => new Path2D(`M ${x} ${y - s} Q ${x} ${y} ${x + s} ${y} Q ${x} ${y} ${x} ${y + s} Q ${x} ${y} ${x - s} ${y} Q ${x} ${y} ${x} ${y - s} Z`);
+
+    /** A layer's colour on the depth ramp, as the explorer mixes it from Ledger's two, in sRGB bytes. */
+    const probe = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+    function depthColour(layer, layers) {
+      const el = document.createElement("i");
+      el.style.color = `color-mix(in oklch, var(--deep) ${100 - (layer / (layers - 1)) * 100}%, var(--late))`;
+      document.body.append(el);
+      probe.fillStyle = getComputedStyle(el).color;
+      el.remove();
+      probe.fillRect(0, 0, 1, 1);
+      return [...probe.getImageData(0, 0, 1, 1).data].slice(0, 3);
+    }
+
+    // What is drawn about a figure, thin and in light, in a box from -1 to 1: its night, its steam, its ringing.
+    const ABOUT = {
+      coffee(c, col) {
+        c.strokeStyle = col(0.7); c.lineWidth = 0.024; c.lineCap = "round";
+        for (const [x, y] of [[-0.24, -0.34], [0.0, -0.42], [0.22, -0.34]]) { c.beginPath(); c.moveTo(x, y); c.bezierCurveTo(x - 0.10, y - 0.14, x + 0.10, y - 0.22, x, y - 0.36); c.stroke(); }
+      },
+      owl(c, col) {
+        c.fillStyle = col(0.85);
+        for (const [x, y, s] of [[-0.62, -0.50, 0.05], [-0.30, -0.74, 0.035], [0.14, -0.80, 0.03], [-0.74, -0.12, 0.03], [0.62, -0.58, 0.045], [0.78, -0.22, 0.03]]) c.fill(spark(x, y, s));
+      },
+      tree(c, col) { c.fillStyle = col(0.8); c.fill(spark(-0.66, -0.56, 0.035)); c.fill(spark(0.70, -0.66, 0.03)); },
+      bell(c, col) {
+        c.strokeStyle = col(0.75); c.lineWidth = 0.022; c.lineCap = "round";
+        for (const [x, r, from, to] of [[-0.02, 0.66, 2.70, 3.35], [-0.02, 0.80, 2.78, 3.28], [0.10, 0.62, -0.28, 0.42], [0.10, 0.76, -0.20, 0.34]]) { c.beginPath(); c.arc(x, 0.02, r, from, to); c.stroke(); }
+        c.fillStyle = col(0.9); c.fill(spark(0.60, -0.62, 0.06)); c.fill(spark(-0.62, -0.50, 0.035));
+      },
+      moon(c, col) {
+        c.fillStyle = col(0.85);
+        for (const [x, y, s] of [[0.66, -0.52, 0.055], [0.80, -0.14, 0.035], [-0.74, -0.42, 0.035], [0.52, -0.80, 0.03], [-0.60, 0.20, 0.025]]) c.fill(spark(x, y, s));
+      },
+      cat(c, col) {
+        c.fillStyle = col(0.8);
+        for (const [x, y, s] of [[-0.66, -0.50, 0.05], [0.68, -0.58, 0.04]]) {
+          c.beginPath(); c.ellipse(x, y, s, s * 0.8, 0, 0, 7); c.fill();
+          for (const [dx, dy] of [[-0.9, -1.0], [-0.3, -1.45], [0.3, -1.45], [0.9, -1.0]]) { c.beginPath(); c.arc(x + dx * s, y + dy * s, s * 0.34, 0, 7); c.fill(); }
+        }
+      },
+    };
+
+    // The card's rows, from the top: the figures (their middle, and the half-width each is given), their captions, where
+    // a thread leaves its caption, the atlas and its height. The figures stand evenly across the card's 1072 px.
+    const ROW = { figure: 232, half: 82, caption: 328, thread: 393, atlas: 466, height: 66 };
+    const LEFT = 64, WIDTH = 1072;
+
+    window.draw = async ({ name, neurons, layers, bands, atlas, units }) => {
+      document.getElementById("term").innerHTML = `<span class="alpha">${name}</span><b><strong>${neurons}</strong> neurons</b>`;
+      const load = async (src) => { const image = new Image(); image.src = src; await image.decode(); return image; };
+      const strip = document.getElementById("strip");
+      strip.style.top = `${ROW.atlas}px`; strip.style.height = `${ROW.height}px`;
+      strip.append(await load(atlas));
+      const figures = await Promise.all(units.map((unit) => load(unit.figure)));
+
+      // under the atlas: the layers the card shows, the first and last where they stand clear of those, and the bands
+      const pitch = WIDTH / layers, shown = new Set(units.map((unit) => unit.layer));
+      const nums = document.getElementById("nums"), under = document.getElementById("bands");
+      nums.style.top = `${ROW.atlas + ROW.height + 10}px`; under.style.top = `${ROW.atlas + ROW.height + 34}px`;
+      for (let L = 0; L < layers; L += 1) {
+        const end = (L === 0 || L === layers - 1) && !shown.has(L + 1) && !shown.has(L - 1);
+        if (shown.has(L) || end) nums.insertAdjacentHTML("beforeend", `<span class="${shown.has(L) ? "on" : ""}" style="left:${(L + 0.5) * pitch}px">${L}</span>`);
+      }
+      for (const band of bands) under.insertAdjacentHTML("beforeend", `<span style="left:${((band.first + band.last + 1) / 2) * pitch}px">${band.name}</span>`);
+
+      const dpr = window.devicePixelRatio || 1;
+      const [paint, light] = ["figures", "light"].map((id) => {
+        const canvas = document.getElementById(id);
+        canvas.width = 1200 * dpr; canvas.height = 630 * dpr;
+        const context = canvas.getContext("2d");
+        context.scale(dpr, dpr);
+        return context;
+      });
+      light.globalCompositeOperation = "lighter"; light.lineCap = "round";
+      const snap = (v) => Math.round(v * dpr) / dpr;
+      const caps = document.getElementById("caps"), step = (WIDTH - 2 * ROW.half - 8) / (units.length - 1);
+
+      units.forEach((unit, i) => {
+        const x = LEFT + ROW.half + 4 + step * i, c = depthColour(unit.layer, layers), col = (a) => rgba(white(c, 0.8), a);
+        // the figure, a pixel of it to a pixel of the card so its dots stay dots, with what stands about it and its light
+        const size = figures[i].naturalWidth / dpr, at = [snap(x - size / 2), snap(ROW.figure + ROW.half * unit.down - size / 2), size, size];
+        paint.save(); paint.translate(x, ROW.figure); paint.scale(ROW.half, ROW.half); paint.globalAlpha = 0.8; ABOUT[unit.art]?.(paint, col); paint.restore();
+        for (const [blur, alpha] of [[18, 0.6], [5, 0.85]]) {
+          paint.save(); paint.filter = `blur(${blur}px) brightness(1.35)`; paint.globalAlpha = alpha; paint.globalCompositeOperation = "lighter"; paint.drawImage(figures[i], ...at); paint.restore();
+        }
+        paint.drawImage(figures[i], ...at);
+
+        // the tokens it fires on, and which neuron it is
+        const cap = document.createElement("div");
+        cap.className = "cap";
+        cap.style.cssText = `left:${x}px;top:${ROW.caption}px;--c:rgb(${c})`;
+        cap.innerHTML = `<b>${unit.word}${unit.also ? `<small>${unit.also}</small>` : ""}</b><span>L${unit.layer}·n${unit.neuron}</span>`;
+        caps.append(cap);
+
+        // its layer lit in the atlas, and the neuron pinned where the explorer pins it
+        const cx = LEFT + (unit.layer + 0.5) * pitch, w = pitch * 0.82, top = ROW.atlas, pin = top + unit.pin * ROW.height;
+        light.save(); light.filter = "blur(11px)"; light.fillStyle = rgba(c, 0.36); light.fillRect(cx - w / 2 - 3, top - 3, w + 6, ROW.height + 6); light.restore();
+        light.save(); light.filter = "blur(4px)"; light.fillStyle = rgba(c, 0.26); light.fillRect(cx - w / 2 + 2, top, w - 4, ROW.height); light.restore();
+        light.save(); light.filter = "blur(5px)"; light.fillStyle = rgba(c, 0.95); light.fillRect(cx - w / 2 - 3, pin - 4, w + 6, 8); light.restore();
+        light.fillStyle = "#fff"; light.beginPath(); light.roundRect(cx - w / 2 - 1, pin - 1.5, w + 2, 3, 1.5); light.fill();
+
+        // a thread from its caption down to its layer, with two points of light on their way along it
+        const y0 = ROW.thread, y1 = top - 8, h = y1 - y0, P = [[x, y0], [x, y0 + h * 0.62], [cx, y1 - h * 0.62], [cx, y1]];
+        const along = (t) => [0, 1].map((k) => (1 - t) ** 3 * P[0][k] + 3 * (1 - t) ** 2 * t * P[1][k] + 3 * (1 - t) * t * t * P[2][k] + t ** 3 * P[3][k]);
+        const thread = () => { light.beginPath(); light.moveTo(...P[0]); light.bezierCurveTo(...P[1], ...P[2], ...P[3]); light.stroke(); };
+        light.save(); light.filter = "blur(4px)"; light.strokeStyle = rgba(c, 0.5); light.lineWidth = 3; thread(); light.restore();
+        light.strokeStyle = rgba(white(c, 0.45), 0.9); light.lineWidth = 1.1; thread();
+        for (const [t, s] of [[0.22 + 0.11 * (i % 3), 2.4], [0.62 + 0.07 * ((i + 1) % 3), 1.8]]) {
+          const [bx, by] = along(t);
+          light.save(); light.filter = "blur(3px)"; light.fillStyle = rgba(c, 0.9); light.beginPath(); light.arc(bx, by, s * 2, 0, 7); light.fill(); light.restore();
+          light.fillStyle = rgba(white(c, 0.9), 1); light.beginPath(); light.arc(bx, by, s, 0, 7); light.fill();
+        }
+        light.fillStyle = rgba(white(c, 0.8), 1);
+        for (const [px, py] of [P[0], P[3]]) { light.beginPath(); light.arc(px, py, 2.2, 0, 7); light.fill(); }
+      });
+
+      await document.fonts.ready;
+      await Promise.all(["600 64px 'Wix Madefor Display'", "600 24px 'Wix Madefor Display'", "500 16px 'Wix Madefor Text'"].map((font) => document.fonts.load(font)));
     };
   </script>
 </body>
