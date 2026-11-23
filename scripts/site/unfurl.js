@@ -28,7 +28,7 @@ const WAIT = 2500;                    // ms for the catalog, after which the pag
 const WIRED = 1200;                   // ms for the names of what a neuron is wired to, after which the embed goes without them
 const TITLE = 70, DESCRIPTION = 350;  // bytes: what Discord shows of each
 const COMPONENT = 3000;               // bytes: the most Discord takes of a component embed, as it is written in the page
-const EMBED = false;                  // every unit's page carries Discord's embed; until it has been seen in Discord, only an address with ?discord does
+const EMBED = true;                   // every unit's page carries Discord's embed (false: only an address with ?discord, for trying a change to it)
 const LINKS = 128, PER = 16, ENTRY = 6, DRIVEN = 2, DRIVES = 3;   // a pole's record: where its links start, and which lists (src/lib/data.ts, wireOf)
 const SILENT = "near-silent neuron";
 const PICTURE = /^\/card(\/circuit)?(\/[a-z0-9.-]+\/L\d{1,2}\/[nh]\d{1,5})\.webp$/;
@@ -49,7 +49,7 @@ export default {
     // With ?card the address is the card itself, which the hosted browser opens: it needs no words, only to draw soon.
     if (url.searchParams.has("card")) return ahead(page, unit, context, url.searchParams.get("card") === "circuit");
     try {
-      // Discord shows nothing at all for an embed it won't take, so a new one is tried on an address of its own first.
+      // Discord shows nothing at all for an embed it won't take, so a change to it can be tried on an address of its own first.
       const embedded = EMBED || url.searchParams.has("discord");
       const has = (circuit) => (draws(env) ? keptCard(env, unit, circuit).then((body) => (void body?.cancel(), body !== null), () => false) : false);
       const [words, kept, wired] = await Promise.all([describe(unit, AbortSignal.timeout(WAIT)), has(false), embedded && has(true)]);
