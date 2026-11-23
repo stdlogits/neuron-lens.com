@@ -142,16 +142,21 @@ or pages (a9's call: anyone who wants the data uses `stdlogits/neuron-lens`). `r
 every crawler; the catalog's own host, `data.neuron-lens.com`, has a robots.txt that keeps them out.
 
 `node scripts/site/render.mjs` draws the images into `public/`: the social card (`card.webp`: WebP at
-quality 92, as a9l.im's cards are, because a painting weighs a tenth of its PNG that way) and, from
-`favicon.svg`, `favicon.ico`, `apple-touch-icon.png` and the manifest's icons. The card is a painting with the
-name set over it, as Ledger draws one (its DESIGN.md, "The marks and the cards"; no mark tile). `scripts/site/paint/lens.py`
-paints it with Ledger's paint (`@stdlogits/ledger/paint`, Python with numpy, scipy and Pillow; `PYTHON`, or
-`python3`) from the built catalog: every easiest neuron of Qwen3-8B a light out of focus, as bright as the
-labeller was sure of it, in its layer's column, and a lens, the mark's figure, on L8·n344 with an owl through
-it. `scripts/site/card.html` sets the type in Ledger's `card.css`: the name, the unit's ID and its firing. A
-light's place within its column is a fixed scramble of its neuron number, so the same catalog paints the same
-card. Rerun it when the mark, the card or Qwen3-8B's catalog changes, and change the card's alt text
-(`scripts/site/meta.ts`) with what it shows.
+quality 92, as a9l.im's cards are) and, from `favicon.svg`, `favicon.ico`, `apple-touch-icon.png` and the
+manifest's icons. The card is the site's own drawing, not one of Ledger's painted cards (its DESIGN.md, "The marks
+and the cards"), though its type is Ledger's `card.css`: flat paper like the site, the name and the model, then six
+of Qwen3-8B's neurons (`scripts/site/card/card.json`: L3·n10265 coffee, L8·n344 owl, L12·n11885 tree, L20·n11348
+bell, L24·n10369 moon, L30·n10935 cat; the labeller was sure of each, 85 to 95 of 100), each a small figure of
+what it fires on drawn as dots in its layer's colour, with the tokens it fires on and its ID beneath, and a thread
+from each down to its layer in the model's atlas, the neuron pinned where the explorer pins it.
+`scripts/site/card.html` lays it out. `scripts/site/card/figures.py` draws the figures into `figures/`: each is
+modelled (`models.py`), meshed (`mesh.py`), rendered in Blender's Cycles (`blend.py`) and that render drawn as dots
+along flowing strands (`dots.py`); it needs Python with numpy, scipy, scikit-image and Pillow, and Blender.
+`scripts/site/card/atlas.mjs` takes the atlas (`atlas.webp`) and the pins (`atlas.json`) from the site itself.
+Rerun `render.mjs` when the mark or the card changes (`figures.py` first if a figure or a neuron did, `atlas.mjs`
+if the explorer's atlas or a neuron did), and change the card's alt text (`scripts/site/meta.ts`) with what it
+shows; encoding the card needs Python with Pillow (`PYTHON`, or `python3`). `scripts/site/paint/lens.py` painted
+the card before this one (a lens held up to the atlas, an owl through it) and is kept, unused.
 
 ## The catalog
 
