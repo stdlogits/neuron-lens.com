@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount, tick, untrack } from "svelte";
-  import { split } from "./panes";
   import { flip } from "svelte/animate";
   import { FOREIGN, GLIDE, Icon, LabelText, MorphText, ease, expand, fadeOut, glide, reducedMotion, swell } from "@stdlogits/ledger";
   import { useLens } from "./lens.svelte";
@@ -255,8 +254,7 @@
       if (!panes) return;
       const margin = parseFloat(getComputedStyle(panes).scrollMarginTop) || 0;
       const top = panes.getBoundingClientRect().top - shrink;
-      // Side by side the panes fill the screen, so they come right to its top; else near enough is enough.
-      if (split(panes) ? Math.abs(top - margin) < 1 : top >= margin && top < window.innerHeight * 0.4) return;
+      if (top >= margin && top < window.innerHeight * 0.4) return;
       window.scrollTo({ top: window.scrollY + top - margin, behavior: reducedMotion() ? "auto" : "smooth" });
     });
   }

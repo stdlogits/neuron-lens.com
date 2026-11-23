@@ -466,8 +466,7 @@
   /** Safari's trackpad pinch, read from its gesture events rather than from the wheel. */
   let gesturing = false;
   let gestureK = 1;
-  // Anywhere on the screen, the bar and a tip over the graph too: the page itself never scrolls or zooms here, and
-  // the panes it opens over (panes.ts), which would scroll the page themselves, never hear of it.
+  // Anywhere on the screen, the bar and a tip over the graph too: the page itself never scrolls or zooms here.
   function wheel(event: WheelEvent) {
     event.preventDefault();
     event.stopPropagation();

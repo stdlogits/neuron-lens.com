@@ -450,8 +450,7 @@ test("the baskets sort a head's evidence the same way", async ({ page }) => {
 });
 
 // The unit and its connections by the width there is (Explorer.svelte's panes): narrow, the unit first and its
-// connections after it, a tap away from the basket bar; from 736 px of explorer, the connections on the left beside it,
-// each column scrolling on its own.
+// connections after it, a tap away from the basket bar; from 736 px of explorer, the connections on the left beside it.
 for (const [width, beside] of [[390, false], [768, false], [1024, true], [1280, true]] as const) {
   test(`at ${width} px the unit and its connections stand ${beside ? "side by side" : "one above the other, the unit first"}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -474,39 +473,18 @@ test("on a phone the basket bar's last stop is the unit's connections", async ({
   await expect(page.getByRole("complementary", { name: "Connections" })).toBeInViewport();
 });
 
-test("side by side, the unit and its connections each scroll on their own", async ({ page }) => {
+test("side by side, the unit and its connections scroll with the page", async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 700 });
   await page.goto("/qwen3-8b/L8/n344");
   await settle(page);
-  const read = () => page.evaluate(() => ({ page: scrollY, rail: document.getElementById("connections")!.scrollTop, unit: document.getElementById("unit")!.scrollTop }));
-  await page.evaluate(() => document.getElementById("layer")!.scrollIntoView({ block: "start" }));
-  const before = await read();
-  await page.locator("#unit").evaluate((el) => el.scrollBy(0, 300));
-  const unitMoved = await read();
-  expect(unitMoved.unit).toBeGreaterThan(before.unit);
-  expect([unitMoved.rail, unitMoved.page]).toEqual([before.rail, before.page]);
-  await page.getByRole("complementary", { name: "Connections" }).evaluate((el) => el.scrollBy(0, 200));
-  const railMoved = await read();
-  expect(railMoved.rail).toBeGreaterThan(unitMoved.rail);
-  expect([railMoved.unit, railMoved.page]).toEqual([unitMoved.unit, unitMoved.page]);
-  // A basket chosen from the bar is brought into view within the unit's column.
+  const overflow = await page.evaluate(() => ["connections", "unit"].map((id) => getComputedStyle(document.getElementById(id)!).overflowY));
+  expect(overflow).toEqual(["visible", "visible"]);
+  const before = await page.evaluate(() => scrollY);
+  await page.mouse.move(700, 400);
+  await page.mouse.wheel(0, 600);
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(before);
   await page.getByRole("navigation", { name: "Baskets" }).getByRole("button", { name: "Firings" }).click();
   await expect(page.locator("#firings")).toBeInViewport();
-});
-
-test("a wheel over a column moves the page to the columns first, then scrolls that column alone", async ({ page }) => {
-  await page.setViewportSize({ width: 1024, height: 700 });
-  await page.goto("/qwen3-8b/L8/n344");
-  await settle(page);
-  const read = () => page.evaluate(() => ({ top: Math.round(document.getElementById("layer")!.getBoundingClientRect().top), rail: document.getElementById("connections")!.scrollTop, unit: document.getElementById("unit")!.scrollTop }));
-  const unit = await page.locator("#unit").boundingBox();
-  // Mid-screen, over the unit as the page brings the columns up to fill it.
-  await page.mouse.move(unit!.x + unit!.width / 2, 400);
-  for (let i = 0; i < 12; i += 1) await page.mouse.wheel(0, 200);
-  await expect.poll(async () => (await read()).unit).toBeGreaterThan(0);
-  const after = await read();
-  expect(Math.abs(after.top - 24)).toBeLessThanOrEqual(12);
-  expect(after.rail).toBe(0);
 });
 
 test("j and k don't close the full-screen connections", async ({ page }) => {
