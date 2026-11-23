@@ -5,8 +5,9 @@
 The source of [neuron-lens.com](https://neuron-lens.com): the Neuron Lens explorer of Qwen3-8B's and
 Gemma 4 12B's neurons and attention heads, and of the other Qwen3 sizes (0.6B to 14B) and, unlabelled, the
 base models, with its About and Credits pages. A static single-page app
-(Vite 8, Svelte 5 runes, TypeScript; no SvelteKit, no server code) over a prebuilt catalog of static
-files. It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now redirects its old
+(Vite 8, Svelte 5 runes, TypeScript; no SvelteKit, and no server code but `scripts/site/unfurl.js`, below)
+over a prebuilt catalog of static files.
+It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now redirects its old
 `/neuron-lens` and `/neurons` links here; `src/lib/router.svelte.ts` rewrites their queries to paths.
 
 ## Layout
@@ -137,9 +138,30 @@ person id, and treetown and Standard Logits under standardlogits.com's); a short
 `?graph` dropped) and marks the missing page `noindex`. There is no `og:url`: every address is served this
 page, so a static one would name the home page for all of them.
 
-The site describes the project and points at the Hub release; it never writes a unit's data as text
-or pages (a9's call: anyone who wants the data uses `stdlogits/neuron-lens`). `robots.txt` welcomes
-every crawler; the catalog's own host, `data.neuron-lens.com`, has a robots.txt that keeps them out.
+The site describes the project and points at the Hub release; it writes no unit's data as text or
+pages (a9's call: anyone who wants the data uses `stdlogits/neuron-lens`), with one exception since
+2026-11-22: the words of a shared link to a unit (next). `robots.txt` welcomes every crawler; the
+catalog's own host, `data.neuron-lens.com`, has a robots.txt that keeps them out.
+
+A shared link to a neuron or a head carries that unit's own words, where before every link showed the
+site's. `scripts/site/unfurl.js` does it, and is the site's one piece of server code: Pages runs it
+(advanced mode: `meta.ts` writes it into the build as `_worker.js`, one file with no imports, filled in
+from `src/lib/models.ts` and `src/lib/catalog.json`) in front of a unit's address and no other, which
+`_routes.json`, also written by `meta.ts`, names (`/<model>/L*/n*` and `/<model>/L*/h*`). Every other
+request is served as a file and counts as none of the account's Function requests. It reads the unit
+from the catalog as the explorer does (a neuron's two sides in its layer's `graph.bin` and its detail in
+the units pack; a head's record and its layer's `heads/L<layer>.json`) and rewrites the page's `<title>`
+(as the explorer sets it), its description, `og:title`, `og:description` and its last `theme-color`
+(the one `meta.ts` writes for Discord's bar): the model, layer and band, what it fires on with one
+firing, what it makes the model say, its other side and the labels' credit, within the 70 and 350 bytes
+Discord shows, and its layer's colour on the depth ramp in Ledger's light tokens. A neuron is described
+on the side the explorer opens it on, and a base model's unit with its post-trained model's labels. The
+picture stays the site's card. If the catalog is slow (2.5 s), changed or missing, or the address names
+no unit, the page goes out untouched; it returns what `env.ASSETS.fetch` gives it, so `_headers` still
+applies. It gives up if `graph.bin` isn't the size its record widths expect, so it changes with the
+builder's `WIRE` and `HEAD_WIRE` and with `src/lib/data.ts`. On the Workers Free plan it has 100,000
+requests a day and 10 ms of CPU a request; the Pages project is set to fail open, so past the allowance
+a unit's page is served without its words.
 
 `node scripts/site/render.mjs` draws the images into `public/`: the social card (`card.webp`: WebP at
 quality 92, as a9l.im's cards are) and, from `favicon.svg`, `favicon.ico`, `apple-touch-icon.png` and the
@@ -285,7 +307,8 @@ CI (`.github/workflows/ci.yml`) runs `npm ci`, `check`, `build` and the e2e spec
   and unit view are marked `test.fixme` until those parts settle.
 - `node scripts/verify-deployment.mjs <origin>` checks a deployed site: status codes, the headers from
   `_headers`, the JSON-LD and the files the site serves about itself (icons, card, manifest, llms.txt,
-  sitemap; byte for byte against `dist` when deploying), immutable assets; on the data origin each
+  sitemap; byte for byte against `dist` when deploying), a unit's address carrying its own words and
+  otherwise the same page (`unfurl.js`), immutable assets; on the data origin each
   named build's `index.json`, CORS (a range's preflight too), immutable caching, a 404 for a missing
   file, robots.txt, and 206 ranges on graph records, units packs and media packs; then a
   Chromium smoke that a Gemma neuron's images load and a sound plays with no CSP violation. Its
@@ -305,7 +328,9 @@ account ID.
 
 It refuses a dirty tree, a HEAD not on `origin/main`, or a `catalog.json` build that isn't on R2; runs `npm ci`, `check` and
 `build`; checks `dist` against Pages' file limits; uploads with the pinned Wrangler
-(`--commit-hash` HEAD); and waits for the live site to serve this build before verifying it.
+(`--commit-hash` HEAD); and waits for the live site to serve this build before verifying it. `dist`
+carries `_worker.js` and `_routes.json` (above, "What the site says about itself"), which the upload
+takes with the files.
 `--dry-run` stops before the upload. The Pages project and the custom domain must exist in that
 account first. Cloudflare Web Analytics is on (a9's choice): the CSP allows its beacon from
 `static.cloudflareinsights.com` and its reports to `cloudflareinsights.com`. Keep Rocket Loader and
