@@ -131,6 +131,11 @@ function headTags(): HtmlTagDescriptor[] {
     meta({ property: "og:image:alt", content: CARD.alt }),
     meta({ name: "twitter:card", content: "summary_large_image" }),
     meta({ name: "twitter:image:alt", content: CARD.alt }),
+    // Discord colours a link preview's bar with the page's last theme-color; a browser takes the first that matches,
+    // and index.html's two (light, dark) always do. So this one, written after them, is Discord's alone: Ledger's
+    // --tint in its light tokens (70% --deep, #6a4fe0, to --late, #0b87ad, in oklch), which reads on a light or a
+    // dark chat.
+    meta({ name: "theme-color", content: "#4667da" }),
     link({ rel: "icon", href: "/favicon.ico", sizes: "32x32" }),
     link({ rel: "icon", href: "/favicon.svg", type: "image/svg+xml" }),
     link({ rel: "apple-touch-icon", href: "/apple-touch-icon.png" }),
