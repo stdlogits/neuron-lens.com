@@ -134,8 +134,28 @@ export async function checkHtml(origin, rules, buildDir) {
   // which runs at Cloudflare and reads the catalog): its title as the explorer sets it, the preview's heading and
   // lines, and its layer's colour. Its headers were checked above, like any page's.
   const unit = bodies[paths.indexOf(UNIT)];
-  const besides = (page) => page.replace(/<title>[^<]*<\/title>/, "").replace(/<meta (?:name="description"|property="og:title"|property="og:description"|property="og:image"|property="og:image:alt"|name="twitter:image:alt"|name="theme-color") content="[^"]*"[^>]*>/g, "");
-  assert.equal(besides(unit), besides(html), `${UNIT} differs from / beyond its title, description, link preview and theme colour`);
+  const EMBED = /<script id="discord:component-embed" type="application\/json">([\s\S]*?)<\/script>/;
+  const besides = (page) => page.replace(/<title>[^<]*<\/title>/, "").replace(EMBED, "").replace(/<meta (?:name="description"|property="og:title"|property="og:description"|property="og:image"|property="og:image:alt"|name="twitter:image:alt"|name="theme-color") content="[^"]*"[^>]*>/g, "");
+  assert.equal(besides(unit), besides(html), `${UNIT} differs from / beyond its title, description, link preview, Discord embed and theme colour`);
+  // Discord's component embed (unfurl.js): a data block in the head, held here to what Discord documents, since it
+  // shows no preview at all for one it can't take: one Container, the kinds of component it allows with their keys
+  // and no others, at most 3,000 bytes as written and 40 components.
+  const embedded = unit.match(EMBED);
+  assert.ok(embedded && unit.indexOf(embedded[0]) < unit.indexOf("</head>"), `${UNIT} carries no Discord component embed in its head`);
+  assert.ok(Buffer.byteLength(embedded[1]) <= 3000, `${UNIT}'s Discord embed is ${Buffer.byteLength(embedded[1])} bytes: over Discord's 3,000`);
+  const embed = JSON.parse(embedded[1]), KEYS = { 17: ["type", "accent_color", "components"], 10: ["type", "content"], 12: ["type", "items"], 14: ["type", "spacing", "divider"], 1: ["type", "components"], 2: ["type", "style", "label", "url"] };
+  let components = 0;
+  const hold = (part) => {
+    components += 1;
+    assert.ok(KEYS[part.type], `${UNIT}'s Discord embed has a component of type ${part.type}, which Discord doesn't allow there`);
+    for (const key of Object.keys(part)) assert.ok(KEYS[part.type].includes(key), `${UNIT}'s Discord embed has "${key}" on a component of type ${part.type}`);
+    for (const child of part.components ?? []) hold(child);
+  };
+  assert.deepEqual(Object.keys(embed), ["component"], `${UNIT}'s Discord embed isn't one component`);
+  assert.equal(embed.component.type, 17, `${UNIT}'s Discord embed isn't a Container`);
+  hold(embed.component);
+  assert.ok(components <= 40, `${UNIT}'s Discord embed has ${components} components: over Discord's 40`);
+  assert.ok(embed.component.components.some((part) => part.type === 10 && part.content.includes("**L8·n344**")), `${UNIT}'s Discord embed doesn't name its unit`);
   assert.ok(unit.includes("<title>L8·n344 · Qwen3-8B · Neuron Lens</title>"), `${UNIT} isn't titled with its unit: scripts/site/unfurl.js isn't running there, or couldn't read the catalog`);
   assert.match(unit, /<meta property="og:title" content="L8·n344 · [^"]+"/, `${UNIT}: its link preview isn't headed with its unit`);
   assert.match(unit, /<meta property="og:description" content="Qwen3-8B · layer 8 of 35 · association layers · [^"]+Labels by Claude Haiku 5\.5"/, `${UNIT}: its link preview doesn't describe its unit`);

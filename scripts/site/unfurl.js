@@ -5,6 +5,11 @@
 // catalog, as the explorer would, and writes the unit's title, description and layer colour into the page's head.
 // Whatever goes wrong (the catalog slow or changed, an address with no such unit), the page is served as it is.
 //
+// Discord also reads a "component embed" from the page's head and lays the preview out from it in place of the title
+// and description: the same words in its Markdown (captions in bold, the tokens it fires on as chips, a firing
+// quoted with its token marked), the units that drive it and that it drives as links, and buttons to the unit, its
+// graph and its layer. Every other platform, and Discord if it won't have the embed, goes by the Open Graph tags.
+//
 // The picture is the unit's own card where the project is set up to draw one (below, "the picture"), and the site's
 // card where it isn't: Cloudflare's hosted browser photographs the unit's address with ?card (the explorer's
 // LinkCard.svelte), once, and the photograph is kept (in Workers KV) and served from there after.
@@ -20,7 +25,10 @@ const SITE = /*SITE*/null;
 const WIRE = 800, HEAD_WIRE = 1004;
 const UNIT = /^\/([a-z0-9.-]+)\/L(\d{1,2})\/([nh])(\d{1,5})\/?$/;
 const WAIT = 2500;                    // ms for the catalog, after which the page goes out as it is
+const WIRED = 1200;                   // ms for the names of what a neuron is wired to, after which the embed goes without them
 const TITLE = 70, DESCRIPTION = 350;  // bytes: what Discord shows of each
+const COMPONENT = 3000;               // bytes: the most Discord takes of a component embed, as it is written in the page
+const LINKS = 128, PER = 16, ENTRY = 6, DRIVEN = 2, DRIVES = 3;   // a pole's record: where its links start, and which lists (src/lib/data.ts, wireOf)
 const SILENT = "near-silent neuron";
 const PICTURE = /^\/card(\/[a-z0-9.-]+\/L\d{1,2}\/[nh]\d{1,5})\.webp$/;
 const DRAWN = 2;                      // the card's look or encoding: raise it when either changes, and every card is drawn again
@@ -44,7 +52,7 @@ export default {
       const [words, kept] = await Promise.all([describe(unit, AbortSignal.timeout(WAIT)), has]);
       // A picture not kept yet is named at an address of its own: whoever asks may get the site's card in its place
       // (below) and keep that under the address, which the unit's own card then never has to get past.
-      return rewrite(page, words, draws(env) ? `${url.origin}/card${pathOf(unit)}.webp?v=${versionOf(unit)}${kept ? "" : "-new"}` : null);
+      return rewrite(page, words, draws(env) ? `${url.origin}/card${pathOf(unit)}.webp?v=${versionOf(unit)}${kept ? "" : "-new"}` : null, url.origin);
     } catch {
       return page;
     }
@@ -109,10 +117,17 @@ function cut(text, most) {
 }
 const lower = (text) => text.charAt(0).toLowerCase() + text.slice(1);
 const tidy = (text) => text.replace(/⏎/g, " ").replace(/<\|[^|]*\|>/g, " ").replace(/�/g, "").replace(/\s+/g, " ");
+/** Text as Discord's Markdown shows it plainly: its marks escaped. */
+const md = (text) => String(text).replace(/([\\*_~`|[\]<>#])/g, "\\$1");
+/** Tokens as chips: inline code, where nothing needs escaping but the backtick itself. */
+const chips = (tokens) => tokens.map((token) => `\`${(tidy(token).trim() || (/[⏎\n]/.test(token) ? "↵" : "␣")).replace(/`/g, "ˋ")}\``).join(" ");
+const BRACKETS = { token: (text) => `[${text}]`, key: (text) => `[${text}]`, plain: (text) => text };
+const MARKS = { token: (text) => `**${md(text)}**`, key: (text) => `__${md(text)}__`, plain: md };
 
 /** A firing as a line: a few words either side of the token it fired on, which is in brackets. A head's line also
- *  brackets the earlier token it attended to. In English where the catalog has it translated. */
-function firing(context) {
+ *  brackets the earlier token it attended to. In English where the catalog has it translated. (With MARKS, for
+ *  Discord's Markdown: the token in bold, the attended one underlined.) */
+function firing(context, mark = BRACKETS) {
   const text = context?.[1] ?? context?.[0];
   const at = typeof text === "string" ? text.match(/^([\s\S]*)⟦([\s\S]*?)⟧([\s\S]*)$/) : null;
   if (!at || !at[2]) return null;
@@ -122,15 +137,15 @@ function firing(context) {
   const words = (part, from, to) => tidy(part).trim().split(" ").filter(Boolean).slice(from, to).join(" ");
   const shown = (part) => tidy(part).trim() || (/[⏎\n]/.test(part) ? "↵" : "");      // a token that is only a line's end
   if (!shown(token)) return null;                                                   // or one with nothing to show
-  let lead = words(before.replace(/[⟪⟫]/g, ""), -6);
+  let lead = mark.plain(words(before.replace(/[⟪⟫]/g, ""), -6));
   if (key && shown(key[2])) {
     const between = tidy(key[3]).trim().split(" ").filter(Boolean);
     const middle = between.length > 4 ? `${between[0]} … ${between[between.length - 1]}` : between.join(" ");
     const gap = (side) => (/\s/.test(side) ? " " : "");
-    lead = `${words(key[1], -2)}${gap(key[2].charAt(0) + key[1].slice(-1))}[${shown(key[2])}]${gap(key[2].slice(-1) + key[3].charAt(0))}${middle}`;
+    lead = `${mark.plain(words(key[1], -2))}${gap(key[2].charAt(0) + key[1].slice(-1))}${mark.key(shown(key[2]))}${gap(key[2].slice(-1) + key[3].charAt(0))}${mark.plain(middle)}`;
   }
-  const tail = words(after, 0, 3);
-  return lead || tail ? `…${lead}${open}[${shown(token)}]${close}${tail}`.trim() : null;
+  const tail = mark.plain(words(after, 0, 3));
+  return lead || tail ? `…${lead}${open}${mark.token(shown(token))}${close}${tail}`.trim() : null;
 }
 
 /** A layer's place on the depth ramp, as the explorer colours it (depthColor, src/lib/models.ts), in Ledger's light
@@ -159,7 +174,8 @@ async function describe({ id, model, layer, kind, index }, signal) {
   const where = `${model.name} · layer ${layer} of ${model.layers - 1} · ${band.name.toLowerCase()} layers`;
   const credit = !model.labels ? "Not labelled yet" : lent ? `Labels by Claude Haiku 5.5, written for ${SITE.models[source].name}` : "Labels by Claude Haiku 5.5";
   const lines = [];      // [text, kept only while the whole fits]
-  let what;
+  const body = [];       // the same for Discord's embed, in its Markdown
+  let what, side = "", wiring = "", foot = "";
 
   if (kind === "h") {
     const got = await range(await objectUrl(source, "heads/graph.bin", signal), (layer * model.heads + index) * HEAD_WIRE, HEAD_WIRE, signal);
@@ -167,33 +183,47 @@ async function describe({ id, model, layer, kind, index }, signal) {
     const file = await (await get(await objectUrl(source, `heads/L${pad(layer)}.json`, signal), signal)).json();
     const detail = file.heads.find((head) => head.h === index), label = detail?.label ?? {};
     what = record(got.bytes).title || "attention head";
+    side = "attention head";
     lines.push([`${where} · attention head`]);
-    if (label.attends) lines.push([`Attends to: ${lower(label.attends)}`]);
-    const example = lent ? null : firing(detail?.contexts?.[0]);
-    if (example) lines.push([`e.g. ${example}`, true]);
-    if (label.writes) lines.push([`Writes: ${lower(label.writes)}`]);
+    if (label.attends) lines.push([`Attends to: ${lower(label.attends)}`]), body.push([`**Attends to** ${md(lower(label.attends))}`]);
+    const context = lent ? null : detail?.contexts?.[0], example = firing(context);
+    if (example) lines.push([`e.g. ${example}`, true]), body.push([`> ${firing(context, MARKS)}`, true]);
+    if (label.writes) lines.push([`Writes: ${lower(label.writes)}`]), body.push([`**Writes** ${md(lower(label.writes))}`]);
   } else {
     const url = await objectUrl(source, `neurons/L${pad(layer)}/graph.bin`, signal);
     const got = await Promise.all([range(url, index * WIRE, WIRE, signal), range(url, (index + model.mlp) * WIRE, WIRE, signal)]);
     if (got[0].size !== WIRE * 2 * model.mlp) throw new Error("graph.bin: another record size");
     const poles = got.map((pole) => record(pole.bytes));
     const [{ pack, offset, length }] = poles;
-    const detail = length ? JSON.parse(await inflate((await range(await objectUrl(source, `neurons/L${pad(layer)}/units-${pad(pack)}.bin`, signal), offset, length, signal)).bytes)) : null;
+    // Its own connections, not its lender's: the strongest two that drive each side and that each drives, by name.
+    const soon = AbortSignal.any([signal, AbortSignal.timeout(WIRED)]);
+    const wired = lent ? [[], []] : got.map((pole) => [DRIVEN, DRIVES].map((list) => links(pole.bytes, list, model).slice(0, 2).map((link) => named(link, id, source, model, soon))));
+    const [detail] = await Promise.all([
+      length ? range(await objectUrl(source, `neurons/L${pad(layer)}/units-${pad(pack)}.bin`, signal), offset, length, signal).then((packed) => inflate(packed.bytes)).then(JSON.parse) : null,
+      Promise.allSettled(wired.flat(2)),
+    ]);
     // The explorer opens a neuron on its clearer side.
-    const side = detail && detail.poles[1].score > detail.poles[0].score && !detail.poles[1].silent ? 1 : 0;
-    const pole = detail?.poles[side], label = pole?.label ?? {}, shown = poles[side], other = poles[1 - side];
-    lines.push([`${where} · ${side ? "−" : "+"} side`]);
+    const at = detail && detail.poles[1].score > detail.poles[0].score && !detail.poles[1].silent ? 1 : 0;
+    const pole = detail?.poles[at], label = pole?.label ?? {}, shown = poles[at], other = poles[1 - at];
+    side = `${at ? "−" : "＋"} side`;
+    lines.push([`${where} · ${at ? "−" : "+"} side`]);
     if (pole ? pole.silent : shown.silent) {
       what = SILENT;
       lines.push(["Near-silent: it almost never fires."]);
+      body.push(["**Near-silent.** It almost never fires."]);
     } else {
       what = shown.title || "neuron";
       lines.push([`Fires on: ${label.fires || shown.title}`]);
-      const example = lent ? null : firing(pole?.contexts?.[0]);
-      if (example) lines.push([`e.g. ${example}`, true]);
-      if (label.writes) lines.push([`Makes the model say: ${label.writes}`]);
+      body.push([`**Fires on** ${md(label.fires || shown.title)}`]);
+      const peaks = lent ? [] : [...new Set((pole?.peaks ?? []).map(([token]) => token.trim()).filter(Boolean))].slice(0, 5);
+      if (peaks.length) body.push([chips(peaks), true]);
+      const context = lent ? null : pole?.contexts?.[0], example = firing(context);
+      if (example) lines.push([`e.g. ${example}`, true]), body.push([`> ${firing(context, MARKS)}`, true]);
+      if (label.writes) lines.push([`Makes the model say: ${label.writes}`]), body.push([`**Makes the model say** ${md(label.writes)}`]);
+      const lists = await Promise.all((wired[at] ?? []).map(async (list) => (await Promise.allSettled(list)).filter((row) => row.status === "fulfilled" && row.value).map((row) => row.value)));
+      wiring = [["Driven by", lists[0]], ["Drives", lists[1]]].filter(([, rows]) => rows?.length).map(([title, rows]) => `**${title}**\n${rows.join("\n")}`).join("\n");
     }
-    if (other.title && !other.silent) lines.push([`${side ? "+" : "−"} side: ${other.title}`, true]);
+    if (other.title && !other.silent) lines.push([`${at ? "+" : "−"} side: ${other.title}`, true]), foot = `${at ? "＋" : "−"} side: ${md(other.title)} · `;
   }
   lines.push([credit]);
   // What may go leaves, the example first, until the whole fits what a preview shows.
@@ -206,13 +236,55 @@ async function describe({ id, model, layer, kind, index }, signal) {
     summary: cut(lines.slice(1, -1).map(([line]) => line).concat(`${name}, ${model.name}.`).join(". ").replace(/\.\. /g, ". "), 300),
     accent: depthColour(layer, model.layers),
     alt: `${SITE.name}: ${name} of ${model.name}, ${what}, with the tokens ${kind === "h" ? "it writes" : what === SILENT ? "its weights read" : "it fires on and those it makes the model say"}, and its layer lit in the model's atlas.`,
+    // For Discord's embed: where it is, what it is, its lines, its connections, the small print, and where its buttons go.
+    embed: { where, what, name: `**${name}** · ${side}`, body, wiring, foot: `${foot}${credit}`, path: `/${id}/L${layer}`, at: `${kind}${index}`, layer, head: kind === "h" },
   };
+}
+
+/** A pole's strongest links of one kind, from its record: each the pole it names and whether it pushes against. */
+function links(bytes, list, model) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), out = [];
+  for (let i = 0; i < PER; i += 1) {
+    const at = LINKS + (list * PER + i) * ENTRY, pole = view.getUint32(at, true);
+    if (pole === 0xffffffff || pole >= model.layers * 2 * model.mlp) break;
+    out.push({ pole, against: (view.getUint16(at + 4, true) & 0x8000) !== 0 });
+  }
+  return out;
+}
+
+/** A linked pole as a line of Discord's Markdown: which way it pushes, its ID as a link to it, and its title. */
+async function named({ pole, against }, id, source, model, signal) {
+  const layer = Math.floor(pole / (2 * model.mlp)), slot = pole % (2 * model.mlp);
+  const { title } = record((await range(await objectUrl(source, `neurons/L${pad(layer)}/graph.bin`, signal), slot * WIRE, WIRE, signal)).bytes);
+  return `${against ? "−" : "＋"} [L${layer}·n${slot % model.mlp}](${SITE.origin}/${id}/L${layer}/n${slot % model.mlp})${title ? ` ${md(cut(title, 60))}` : ""}`;
+}
+
+/** Discord's component embed for a unit, as the JSON its page carries: what leaves first when it is too long is the
+ *  connections, then the lines that can be spared; and if it still is, there is none, since Discord shows nothing at
+ *  all for one it can't take. Its keys are Discord's, and one it doesn't know loses the whole embed. */
+function component({ accent, alt, embed }, picture, origin) {
+  const text = (content) => ({ type: 10, content }), here = `${origin}${embed.path}`;
+  const button = (label, url) => ({ type: 2, style: 5, label, url });
+  for (const [wiring, spare] of [[true, true], [false, true], [false, false]]) {
+    const json = JSON.stringify({ component: { type: 17, accent_color: parseInt(accent.slice(1), 16), components: [
+      text(`-# ${md(SITE.name)} · ${md(embed.where)}`),
+      text(`## ${md(embed.what)}\n${embed.name}`),
+      { type: 12, items: [{ media: { url: picture }, description: alt }] },
+      text(embed.body.filter(([, spared]) => spare || !spared).map(([line]) => line).join("\n")),
+      ...(wiring && embed.wiring ? [{ type: 14, spacing: 1 }, text(embed.wiring)] : []),
+      text(`-# ${embed.foot}`),
+      { type: 1, components: [button(embed.head ? "Open head" : "Open neuron", `${here}/${embed.at}`), button("Its graph", `${here}/${embed.at}?graph`), button(`Layer ${embed.layer}`, embed.head ? `${here}/heads` : here)] },
+    ] } }).replace(/</g, "\\u003c");
+    if (bytes(json) <= COMPONENT) return json;
+  }
+  return null;
 }
 
 /** The page with the unit's words in its head, and its picture where one is drawn; everything else, and every
  *  header, as it was. */
-function rewrite(page, words, card) {
+function rewrite(page, words, card, origin) {
   const content = (value) => ({ element(element) { element.setAttribute("content", value); } });
+  const embed = component(words, card ?? SITE.picture, origin);
   const rewriter = new HTMLRewriter()
     .on("title", { element(element) { element.setInnerContent(words.title); } })
     .on('meta[name="description"]', content(words.summary))
@@ -222,6 +294,8 @@ function rewrite(page, words, card) {
     .on('meta[name="theme-color"]', { element(element) { if (!element.getAttribute("media")) element.setAttribute("content", words.accent); } });
   // The unit's card is the size and kind of the site's, so the tags that say those stand.
   if (card) rewriter.on('meta[property="og:image"]', content(card)).on('meta[property="og:image:alt"]', content(words.alt)).on('meta[name="twitter:image:alt"]', content(words.alt));
+  // A data block, which no browser runs (so the page's CSP has nothing to say about it), in the head, where Discord looks.
+  if (embed) rewriter.on("head", { element(element) { element.append(`<script id="discord:component-embed" type="application/json">${embed}</script>`, { html: true }); } });
   return rewriter.transform(page);
 }
 

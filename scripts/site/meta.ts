@@ -239,7 +239,7 @@ function unfurlWorker(card: string[]): string {
   const builds = Object.fromEntries(MODEL_ORDER.map((id) => [id, (catalog.builds as Record<string, string>)[id]]));
   const source = readFileSync(new URL("./unfurl.js", import.meta.url), "utf8"), slot = "/*SITE*/null";
   if (source.split(slot).length !== 2) throw new Error(`scripts/site/unfurl.js: expected one ${slot}`);
-  return source.replace(slot, JSON.stringify({ name: SITE_NAME, catalog: catalog.origin, builds, models, card }));
+  return source.replace(slot, JSON.stringify({ name: SITE_NAME, origin: ORIGIN, picture: CARD.url, catalog: catalog.origin, builds, models, card }));
 }
 
 /** Which addresses reach unfurl.js: a neuron's or a head's, in each model, and a unit's picture (/card/…). Every
