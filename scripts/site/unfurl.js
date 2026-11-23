@@ -26,6 +26,7 @@ const PICTURE = /^\/card(\/[a-z0-9.-]+\/L\d{1,2}\/[nh]\d{1,5})\.webp$/;
 const DRAWN = 1;                      // the card's look: raise it when LinkCard.svelte draws another, and every card is drawn again
 const DRAW = 7500;                    // ms a picture's request waits to be drawn; past it the site's card goes out, this once
 const KEEP = 60 * 24 * 3600;          // s a picture is kept: a unit shared again after that is drawn again, and old builds' pictures go by themselves
+const BLANK = 16000;                  // bytes: a drawn card is three times this; a page photographed before it drew is a tenth
 
 export default {
   async fetch(request, env, context) {
@@ -288,7 +289,10 @@ async function picture(request, env, context, url) {
 }
 
 /** The hosted browser's photograph of a page, taken once the page says it is drawn (LinkCard.svelte's data-card):
- *  its bytes; or how long to wait before asking again, when the browser takes no request yet; or why there is none. */
+ *  its bytes; or how long to wait before asking again, when the browser takes no request yet; or why there is none.
+ *  The page must also have gone quiet, and the photograph must be more than an empty page's: a browser that didn't
+ *  wait for the page's word (Cloudflare's own playground doesn't) would photograph a blank page, to be kept as the
+ *  unit's card. */
 async function photograph(env, page) {
   const response = await fetch(`${env.BROWSER_API ?? "https://api.cloudflare.com/client/v4"}/accounts/${env.BROWSER_ACCOUNT}/browser-run/screenshot`, {
     method: "POST",
@@ -296,12 +300,16 @@ async function photograph(env, page) {
     body: JSON.stringify({
       url: page,
       viewport: { width: 1200, height: 630, deviceScaleFactor: 2 },
+      gotoOptions: { waitUntil: "networkidle0" },
       waitForSelector: { selector: '[data-card="drawn"]', timeout: 15000 },
       screenshotOptions: { type: "webp", quality: 90 },
     }),
     signal: AbortSignal.timeout(25000),
   });
-  if (response.ok && (response.headers.get("content-type") ?? "").startsWith("image/")) return { bytes: await response.arrayBuffer() };
+  if (response.ok && (response.headers.get("content-type") ?? "").startsWith("image/")) {
+    const bytes = await response.arrayBuffer();
+    return bytes.byteLength > BLANK ? { bytes } : { error: `the hosted browser's photograph is ${bytes.byteLength} bytes: a blank page` };
+  }
   const said = (await response.text()).slice(0, 300);
   // One request every ten seconds on the free plan: worth one more try. Out of the day's browser time: not until tomorrow.
   if (response.status === 429 && !/limit exceeded for today/i.test(said)) return { again: Math.min(15, Number(response.headers.get("retry-after")) || 10) * 1000 };
