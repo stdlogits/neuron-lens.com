@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <title>Neuron Lens unit card for Discord: the circuit</title>
+  <!-- A prototype of the card a unit's address would unfurl as on Discord, whose embed carries the unit's words in its own
+       text: so the picture is the unit's connections as the explorer's rail shows them, the graph at true depth with its
+       layer ticks, and beside it the strongest of Driven by, Drives and Siblings in the rail's rows. Flat paper, the
+       site's type, the same top row as unit.html.
+       Nothing serves this yet: render.mjs fills it from samples.json and what capture.mjs takes from the site.
+       window.draw({ unit, cap, graph }) fills it. -->
+  <link rel="stylesheet" href="../../../node_modules/@stdlogits/ledger/src/styles/card.css">
+  <style>
+    body { --tint: color-mix(in oklch, var(--deep) var(--share, 70%), var(--late)); background: var(--paper); }
+    .d { position: absolute; inset: 0; display: grid; grid-template-columns: 436px minmax(0, 1fr); column-gap: 44px; padding: 46px 64px 42px 44px; }
+    .graph { position: relative; display: flex; flex-direction: column; min-height: 0; }
+    .plot { position: relative; flex: 1; min-height: 0; }
+    .plot img, .plot canvas { position: absolute; left: 0; }
+    .plot canvas { mix-blend-mode: screen; }
+    .here, .cover { position: absolute; left: 0; transform: translateY(-50%); background: var(--paper); }
+    .here { text-align: right; font-weight: 600; color: var(--ink); font-family: var(--text); font-variant-numeric: tabular-nums; }
+    .key { display: flex; gap: 16px; margin: 10px 0 0; padding: 0 0 0 24px; list-style: none; font: 500 15.5px/20px var(--text); color: var(--ink3); white-space: nowrap; }
+    .key li { display: flex; align-items: center; gap: 7px; }
+    .key i { display: block; background: var(--tint); }
+    .key .dot { width: 10px; height: 10px; border-radius: 50%; } .key .bar { width: 18px; height: 6px; border-radius: 3px; }
+    .key .line { width: 20px; height: 2.5px; border-radius: 2px; } .key .against { background: repeating-linear-gradient(90deg, var(--ink3) 0 5px, transparent 5px 8px); }
+    .words { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+    .top { display: flex; align-items: center; justify-content: space-between; height: 52px; }
+    .wordmark { font: 600 30px/1 var(--display); letter-spacing: -0.035em; color: var(--ink); }
+    .term { background: var(--wash); } .alpha { background: var(--wash2); min-width: 0; padding: 0 14px; font-weight: 600; }
+    .term .sign { display: grid; place-items: center; width: 36px; height: 36px; margin: 0 -10px 0 2px; border-radius: 50%; font: 600 24px/1 var(--display); background: color-mix(in oklch, var(--tint) 46%, transparent); }
+    .label { margin: 22px 0 0; font: 600 34px/42px var(--display); letter-spacing: -0.028em; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; text-wrap: balance; }
+    .lists { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 14px; padding-top: 18px; }
+    .side h3 { margin: 0 0 4px; font: 500 18px/24px var(--text); color: var(--ink3); }
+    .row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 14px; height: 36px; }
+    .row .id i:not(.swatch) { font-style: normal; color: var(--ink3); }
+    .row .id { display: flex; align-items: center; gap: 10px; font: 500 20px/1 var(--text); color: var(--ink2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .row .swatch { width: 14px; height: 8px; border-radius: 4px; background: var(--c); }
+    .row .title { font: 400 21.5px/36px var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .row .value { display: flex; align-items: center; gap: 10px; min-width: 96px; justify-content: flex-end; font: 500 20px/1 var(--text); color: var(--ink2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .meter { width: 30px; height: 5px; border-radius: 3px; background: var(--wash2); overflow: hidden; } .meter i { display: block; height: 100%; border-radius: 3px; background: var(--c); transform-origin: left; }
+  </style>
+</head>
+<body>
+  <main class="d">
+    <figure class="graph"><div class="plot" id="plot"></div><ul class="key" id="key"></ul></figure>
+    <section class="words" id="words">
+      <div class="top"><span class="term" id="term"></span><span class="wordmark">Neuron Lens</span></div>
+      <h1 class="label" id="label"></h1>
+      <div class="lists" id="lists"></div>
+    </section>
+  </main>
+  <script>
+    const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+    const idOf = (u) => `L${u.layer}<i>·</i>${u.kind === "head" ? "h" : "n"}${u.index}`;
+    const SHOWN = { "Driven by": 3, Drives: 3, Siblings: 2 };
+    window.draw = async ({ unit: u, cap, graph }) => {
+      document.body.style.setProperty("--share", `${u.share}%`);
+      document.getElementById("term").innerHTML = `<span class="alpha">${esc(u.modelName)}</span><span>${idOf(u)}</span>${u.sign ? `<span class="sign">${u.sign}</span>` : ""}`;
+      const label = document.getElementById("label");
+      label.textContent = u.main ?? (u.kind === "head" ? u.role ?? "" : [...(u.inTokens ?? [])].slice(0, 4).join(" · "));
+      // the rail's lists, its strongest rows
+      const lists = document.getElementById("lists");
+      for (const side of cap.lists) {
+        const rows = side.rows.slice(0, SHOWN[side.title] ?? 3);
+        if (!rows.length) continue;
+        const el = document.createElement("section");
+        el.className = "side";
+        el.innerHTML = `<h3>${esc(side.title)}</h3>` + rows.map((r) => `<div class="row" style="--c:${r.swatch?.[2] ?? "var(--tint)"}"><span class="id"><i class="swatch"></i><span>${esc(r.id).replace("·", "<i>·</i>")}</span></span><span class="title" data-full="${esc(r.title).replace(/"/g, "&quot;")}">${esc(r.title)}</span><span class="value"><span class="meter"><i style="transform:scaleX(${r.fill ?? 1})"></i></span>${esc(r.value)}</span></div>`).join("");
+        lists.append(el);
+      }
+      await document.fonts.ready;
+      await Promise.all(["600 34px 'Wix Madefor Display'", "400 22px 'Wix Madefor Text'", "500 20px 'Wix Madefor Text'"].map((f) => document.fonts.load(f)));
+      // a title too long for its row loses its list of examples first
+      for (const t of lists.querySelectorAll(".title")) if (t.scrollWidth > t.clientWidth) { const cut = t.dataset.full.replace(/\s*[(:（].*$/u, ""); if (cut.length > 8) t.textContent = cut; }
+      // and the lists give up rows until they fit under the name: a sibling first, then the longer of the other two
+      const need = () => [...lists.children].reduce((sum, el) => sum + el.getBoundingClientRect().height, 0) + 14 * (lists.children.length - 1) + 18;
+      for (let guard = 0; guard < 8 && need() > lists.clientHeight + 1; guard += 1) {
+        const sides = [...lists.querySelectorAll(".side")], sib = sides.find((el) => el.querySelector("h3").textContent === "Siblings");
+        const from = sib && sib.querySelectorAll(".row").length > 1 ? sib : sides.filter((el) => el !== sib).sort((x, y) => y.querySelectorAll(".row").length - x.querySelectorAll(".row").length)[0];
+        const rows = from?.querySelectorAll(".row"); if (!rows || rows.length <= 1) break; rows[rows.length - 1].remove();
+      }
+      const marks = { Neuron: "dot", Head: "bar", "Pushes for": "line", "Pushes against": "line against" };
+      document.getElementById("key").innerHTML = (cap.key ?? "").split("\n").filter((w) => marks[w]).map((w) => `<li><i class="${marks[w]}"></i>${w}</li>`).join("");
+      // the graph, as large as its place allows, the site's ticks with it
+      const plot = document.getElementById("plot"), box = plot.getBoundingClientRect();
+      const [gw, gh] = cap.graph.size, k = Math.min(box.width / gw, box.height / gh, 1.62), top = (box.height - gh * k) / 2;
+      const img = new Image(); img.src = graph; img.style.width = `${gw * k}px`; img.style.height = `${gh * k}px`; img.style.top = `${top}px`; plot.append(img); await img.decode();
+      // a little light about its lines: the drawing less its paper, blurred and laid back over it
+      const dpr = window.devicePixelRatio || 1, glow = document.createElement("canvas"), pad = 24;
+      glow.width = (gw * k + 2 * pad) * dpr; glow.height = (gh * k + 2 * pad) * dpr;
+      glow.style.cssText = `left:${-pad}px;top:${top - pad}px;width:${gw * k + 2 * pad}px;height:${gh * k + 2 * pad}px`;
+      const lines = document.createElement("canvas"); lines.width = img.naturalWidth; lines.height = img.naturalHeight;
+      const lx = lines.getContext("2d"); lx.drawImage(img, 0, 0); lx.globalCompositeOperation = "difference"; lx.fillStyle = getComputedStyle(document.body).backgroundColor; lx.fillRect(0, 0, lines.width, lines.height);
+      const gx = glow.getContext("2d"); gx.scale(dpr, dpr); gx.globalCompositeOperation = "lighter";
+      for (const [blur, alpha] of [[10, 0.5], [4, 0.45]]) { gx.filter = `blur(${blur}px) saturate(1.3)`; gx.globalAlpha = alpha; gx.drawImage(lines, pad, pad, gw * k, gh * k); }
+      plot.append(glow);
+      // its own layer on the scale, in ink
+      const [, fy, , fh] = cap.graph.focus, size = 12 * k, row = u.kind === "head" ? null : fy;
+      const same = cap.graph.ticks.find(([text]) => text === String(u.layer));
+      const at = same ? same[1] : row;
+      if (at !== null && at !== undefined) {
+        for (const [text, y] of cap.graph.ticks) if (text !== "" && Math.abs(y - at) < 15 && y !== at) { const c = document.createElement("span"); c.className = "cover"; c.style.cssText = `top:${top + y * k}px;width:${24 * k}px;height:${18 * k}px`; plot.append(c); }
+        const here = document.createElement("span"); here.className = "here"; here.textContent = u.layer;
+        here.style.cssText = `top:${top + at * k}px;width:${20 * k}px;font-size:${size}px;line-height:${18 * k}px`;
+        plot.append(here);
+      }
+    };
+  </script>
+</body>
+</html>

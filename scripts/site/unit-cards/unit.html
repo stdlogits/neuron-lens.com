@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <title>Neuron Lens unit card: what it is, and where</title>
+  <!-- A prototype of the card a unit's address would unfurl as everywhere but Discord, drawn like the site: flat paper
+       and its type; the unit's pill and the name in the top row; its label as the main wording; what it fires on and
+       what it makes the model say, each caption above its tokens; and at the foot the atlas as the explorer draws it,
+       the unit's layer lit and the unit pinned in it. The space between the top row and the atlas is shared out evenly.
+       Nothing serves this yet: render.mjs fills it from samples.json and what capture.mjs takes from the site.
+       window.draw({ unit, cap, atlas }) fills it. -->
+  <link rel="stylesheet" href="../../../node_modules/@stdlogits/ledger/src/styles/card.css">
+  <style>
+    body { --tint: color-mix(in oklch, var(--deep) var(--share, 70%), var(--late)); background: var(--paper); }
+    .s { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 46px 64px 46px; }
+    .top { display: flex; align-items: center; justify-content: space-between; height: 52px; }
+    .wordmark { font: 600 30px/1 var(--display); letter-spacing: -0.035em; color: var(--ink); }
+    .where { font: 500 20px/1 var(--text); color: var(--ink3); }
+    .unit { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: space-evenly; align-items: flex-start; }
+    .term { background: var(--wash); } .alpha { background: var(--wash2); min-width: 0; padding: 0 14px; font-weight: 600; }
+    .term .sign { display: grid; place-items: center; width: 36px; height: 36px; margin: 0 -10px 0 2px; border-radius: 50%; font: 600 24px/1 var(--display); background: color-mix(in oklch, var(--tint) 46%, transparent); }
+    .label { margin: 0; text-box: trim-both cap alphabetic; font: 600 56px/64px var(--display); letter-spacing: -0.032em; text-wrap: balance; }
+    .label.long { font-size: 46px; line-height: 54px; }
+    .reads { display: flex; align-items: flex-end; gap: 0; max-width: 100%; white-space: nowrap; }
+    .read { display: grid; gap: 9px; min-width: 0; }
+    .read .group { display: flex; gap: 10px; }
+    .reads.big .read { gap: 12px; } .reads.big .group { gap: 14px; }
+    .cap { font: 500 20px/22px var(--text); color: var(--ink3); }
+    .tok { background: var(--wash2); font-size: 25px; line-height: 38px; }
+    .tok.marked { background: color-mix(in oklch, var(--tint) 44%, transparent); }
+    .reads.big .tok { font-size: 36px; line-height: 54px; padding: 2px 18px; border-radius: 12px; }
+    .arrow { margin: 0 22px; font: 400 26px/42px var(--text); color: var(--ink3); }
+    .reads.big .arrow { line-height: 58px; }
+    .atlas { position: relative; }
+    .strip { position: relative; height: 104px; }
+    .strip img { display: block; width: 100%; height: 100%; }
+    .nums, .bands { position: relative; height: 22px; font: 500 17px/22px var(--text); color: var(--ink3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .nums { margin-top: 12px; } .bands { margin-top: 5px; }
+    .nums span, .bands span { position: absolute; top: 0; transform: translateX(-50%); }
+    .nums .on, .bands .on { color: var(--ink); font-weight: 600; }
+    canvas#fx { position: absolute; inset: 0; width: 1200px; height: 630px; mix-blend-mode: screen; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <main class="s">
+    <header class="top"><span class="term" id="term"></span><span class="wordmark">Neuron Lens</span></header>
+    <section class="unit" id="unit"></section>
+    <footer class="atlas"><div class="strip" id="strip"></div><div class="nums" id="nums"></div><div class="bands" id="bands"></div></footer>
+  </main>
+  <canvas id="fx"></canvas>
+  <script>
+    const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+    const idOf = (u) => `L${u.layer}<i>·</i>${u.kind === "head" ? "h" : "n"}${u.index}`;
+    const tok = (t, cls = "") => `<span class="tok ${cls}">${esc(String(t).trim() || "␣")}</span>`;
+    /** Drops tokens from the end of each group until the row fits its width. */
+    function fit(el) { for (let guard = 0; guard < 12 && el.scrollWidth > el.clientWidth + 1; guard += 1) { const groups = [...el.querySelectorAll(".group")].sort((a, b) => b.children.length - a.children.length); const g = groups[0]; if (!g || g.children.length <= 1) break; g.lastElementChild.remove(); } }
+    window.draw = async ({ unit: u, cap, atlas }) => {
+      document.body.style.setProperty("--share", `${u.share}%`);
+      const head = u.kind === "head", silent = u.variant === "silent";
+      document.getElementById("term").innerHTML = `<span class="alpha">${esc(u.modelName)}</span><span>${idOf(u)}</span>${u.sign ? `<span class="sign">${u.sign}</span>` : ""}`;
+      const group = (list, n) => `<span class="group">${list.slice(0, n).map((t, i) => tok(t, i === 0 ? "marked" : "")).join("")}</span>`;
+      const read = (cap, inner) => `<span class="read"><span class="cap">${cap}</span>${inner}</span>`;
+      const ins = head ? [] : u.inTokens ?? [], outs = u.outTokens ?? [];
+      const named = Boolean(u.main);
+      const n = named ? 4 : 5;
+      const reads = [
+        head && u.role ? read("Role", `<span class="group"><span class="tok marked">${esc(u.role)}</span></span>`) : "",
+        ins.length ? read(silent ? "Its weights read" : "Fires on", group(ins, n)) : "",
+        (ins.length || (head && u.role)) && outs.length ? `<span class="arrow">→</span>` : "",
+        outs.length ? read(head ? "Writes" : "Makes the model say", group(outs, n)) : "",
+      ].join("");
+      const title = silent ? "Near-silent" : u.main;
+      document.getElementById("unit").innerHTML = `${title ? `<h1 class="label">${esc(title)}</h1>` : ""}<div class="reads ${title ? "" : "big"}">${reads}</div>`;
+      // the atlas: the site's drawing of its layers, then the numbers and the bands in the card's own type
+      const strip = document.getElementById("strip"), img = new Image();
+      img.src = atlas; strip.append(img); await img.decode();
+      await document.fonts.ready;
+      await Promise.all(["600 58px 'Wix Madefor Display'", "400 25px 'Wix Madefor Text'", "500 21px 'Wix Madefor Text'"].map((f) => document.fonts.load(f)));
+      const label = document.querySelector(".label");
+      if (label) {
+        const tall = () => label.getBoundingClientRect().height;                              // one line is its capitals' height; each further line adds a line's height
+        if (tall() > 64) label.classList.add("long");
+        const most = parseFloat(getComputedStyle(label).lineHeight) + parseFloat(getComputedStyle(label).fontSize);
+        for (let words = label.textContent.split(" "); tall() > most && words.length > 1;) { words.pop(); label.textContent = `${words.join(" ").replace(/[,;:(]+$/, "")}…`; }
+      }
+      for (const el of document.querySelectorAll(".reads")) fit(el);
+      const box = strip.getBoundingClientRect(), [aw, ah] = cap.atlas.size, sx = box.width / aw, sy = box.height / ah, pitch = box.width / u.layers;
+      const xOf = (L) => (L + 0.5) * pitch;
+      const nums = document.getElementById("nums");
+      for (let L = 0; L < u.layers; L += 1) if (L === u.layer || (L % 5 === 0 && Math.abs(L - u.layer) > 1)) nums.insertAdjacentHTML("beforeend", `<span class="${L === u.layer ? "on" : ""}" style="left:${xOf(L)}px">${L}</span>`);
+      const bands = document.getElementById("bands");
+      for (const b of u.bands) bands.insertAdjacentHTML("beforeend", `<span class="${u.layer >= b.first && u.layer <= b.last ? "on" : ""}" style="left:${((b.first + b.last + 1) / 2) * pitch}px">${esc(b.name)}</span>`);
+      // light: its layer's column glows, a little of it rises behind the words, and the unit's pin shines
+      const dpr = window.devicePixelRatio || 1, fx = document.getElementById("fx"); fx.width = 1200 * dpr; fx.height = 630 * dpr;
+      const ctx = fx.getContext("2d"); ctx.scale(dpr, dpr); ctx.globalCompositeOperation = "lighter";
+      const tint = getComputedStyle(document.body).getPropertyValue("--tint"), probe = document.createElement("i"); probe.style.color = tint; document.body.append(probe);
+      const rgb = (() => { const c = document.createElement("canvas").getContext("2d"); c.fillStyle = getComputedStyle(probe).color; c.fillRect(0, 0, 1, 1); return [...c.getImageData(0, 0, 1, 1).data].slice(0, 3); })(); probe.remove();
+      const col = (a) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`;
+      const [cx0, , cw] = cap.atlas.col, x0 = box.left + cx0 * sx, w = cw * sx, mid = x0 + w / 2;
+      ctx.save(); ctx.filter = "blur(16px)"; ctx.fillStyle = col(0.42); ctx.fillRect(x0 - 4, box.top - 4, w + 8, box.height + 8); ctx.restore();
+      ctx.save(); ctx.filter = "blur(5px)"; ctx.fillStyle = col(0.3); ctx.fillRect(x0 + 2, box.top, w - 4, box.height); ctx.restore();
+      const rise = ctx.createLinearGradient(0, box.top, 0, box.top - 130); rise.addColorStop(0, col(0.17)); rise.addColorStop(1, col(0));
+      ctx.save(); ctx.filter = "blur(14px)"; ctx.fillStyle = rise; ctx.fillRect(mid - w * 0.8, box.top - 130, w * 1.6, 130); ctx.restore();
+      const pin = cap.atlas.pin ?? cap.atlas.own;
+      if (pin) {
+        const py = box.top + (pin[1] + pin[3] / 2) * sy, px0 = box.left + pin[0] * sx, pw = pin[2] * sx;
+        ctx.save(); ctx.filter = "blur(8px)"; ctx.fillStyle = col(0.9); ctx.fillRect(px0 - 6, py - 5, pw + 12, 10); ctx.restore();
+        ctx.save(); ctx.filter = "blur(3px)"; ctx.fillStyle = "rgba(255,255,255,0.8)"; ctx.fillRect(px0 - 1, py - 2.5, pw + 2, 5); ctx.restore();
+        ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.roundRect(px0 - 1, py - 2, pw + 2, 4, 2); ctx.fill();
+      }
+    };
+  </script>
+</body>
+</html>
