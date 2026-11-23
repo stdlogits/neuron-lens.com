@@ -25,6 +25,7 @@ const SILENT = "near-silent neuron";
 const PICTURE = /^\/card(\/[a-z0-9.-]+\/L\d{1,2}\/[nh]\d{1,5})\.webp$/;
 const DRAWN = 2;                      // the card's look or encoding: raise it when either changes, and every card is drawn again
 const DRAW = 7500;                    // ms a picture's request waits to be drawn; past it the site's card goes out, this once
+const TAKES = 3000;                   // ms a drawing usually takes, for judging whether a busy browser's turn comes in time
 const KEEP = 60 * 24 * 3600;          // s a picture is kept: a unit shared again after that is drawn again, and old builds' pictures go by themselves
 const BLANK = 16000;                  // bytes: a drawn card is four times this or more; a page photographed before it drew is a tenth
 
@@ -272,19 +273,20 @@ async function picture(request, env, context, url) {
     const key = keyOf(unit), kept = await keptCard(env, unit);
     if (kept) return drawn(kept);
     // Drawn here, and kept whether or not this request waits for it (it goes out as soon as it is drawn, and is put
-    // away after). `busy` says the browser turned the first try away.
-    let busy;
-    const turned = new Promise((resolve) => { busy = resolve; });
-    const page = `${url.origin}${pathOf(unit)}?${unit.kind === "n" ? "all&" : ""}card`;
+    // away after). A busy browser (it takes one request every ten seconds on the free plan, so two new units shared
+    // together collide) is asked again when it says its turn comes, twice at most: within this request if that still
+    // leaves time to draw, and otherwise behind it, `late` letting the site's card go out at once.
+    let late;
+    const turned = new Promise((resolve) => { late = resolve; });
+    const page = `${url.origin}${pathOf(unit)}?${unit.kind === "n" ? "all&" : ""}card`, asked = Date.now();
     const drawing = (async () => {
-      let shot = await photograph(env, page);
-      if (shot.again) {
-        busy();
+      for (let tries = 0; ; tries += 1) {
+        const shot = await photograph(env, page);
+        if (shot.bytes) return shot.bytes;
+        if (!shot.again || tries === 2) throw new Error(shot.error ?? "the hosted browser stayed busy");
+        if (Date.now() - asked + shot.again + TAKES > DRAW) late();
         await sleep(shot.again);
-        shot = await photograph(env, page);
       }
-      if (!shot.bytes) throw new Error(shot.error);
-      return shot.bytes;
     })();
     context.waitUntil(drawing.then((bytes) => env.CARDS.put(key, bytes, { expirationTtl: KEEP })).catch((error) => console.log(`card ${key}: ${error.message}`)));
     const bytes = await Promise.race([drawing.catch(() => null), turned.then(() => null), sleep(DRAW).then(() => null)]);
