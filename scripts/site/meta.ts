@@ -226,8 +226,8 @@ function manifest() {
 // ---------- a unit's words in a shared link (unfurl.js, which runs at Cloudflare in front of the page)
 
 /** unfurl.js with what it needs to know of the site: each model's shape, the bands' names, whose labels it shows,
- *  and where its catalog is. Pages runs a _worker.js in the build's root in place of serving files directly. */
-function unfurlWorker(): string {
+ *  where its catalog is, and the card page's own files. Pages runs a _worker.js in the build's root in place of serving files directly. */
+function unfurlWorker(card: string[]): string {
   const models = Object.fromEntries(MODEL_ORDER.map((id) => {
     const model = MODELS[id];
     return [id, {
@@ -239,7 +239,7 @@ function unfurlWorker(): string {
   const builds = Object.fromEntries(MODEL_ORDER.map((id) => [id, (catalog.builds as Record<string, string>)[id]]));
   const source = readFileSync(new URL("./unfurl.js", import.meta.url), "utf8"), slot = "/*SITE*/null";
   if (source.split(slot).length !== 2) throw new Error(`scripts/site/unfurl.js: expected one ${slot}`);
-  return source.replace(slot, JSON.stringify({ name: SITE_NAME, catalog: catalog.origin, builds, models }));
+  return source.replace(slot, JSON.stringify({ name: SITE_NAME, catalog: catalog.origin, builds, models, card }));
 }
 
 /** Which addresses reach unfurl.js: a neuron's or a head's, in each model, and a unit's picture (/card/…). Every
@@ -273,9 +273,11 @@ export function siteMeta(): Plugin {
         res.end(file.make());
       });
     },
-    generateBundle() {
+    generateBundle(_options, bundle) {
       for (const [fileName, file] of Object.entries(FILES)) this.emitFile({ type: "asset", fileName, source: file.make() });
-      this.emitFile({ type: "asset", fileName: "_worker.js", source: unfurlWorker() });
+      // The card page's own chunk and style hang off a dynamic import: unfurl.js names them ahead of the page.
+      const card = Object.keys(bundle).filter((name) => /^assets\/LinkCard-[^/]+\.(js|css)$/.test(name)).map((name) => `/${name}`).sort();
+      this.emitFile({ type: "asset", fileName: "_worker.js", source: unfurlWorker(card) });
       this.emitFile({ type: "asset", fileName: "_routes.json", source: unfurlRoutes() });
     },
   };

@@ -23,10 +23,10 @@ const WAIT = 2500;                    // ms for the catalog, after which the pag
 const TITLE = 70, DESCRIPTION = 350;  // bytes: what Discord shows of each
 const SILENT = "near-silent neuron";
 const PICTURE = /^\/card(\/[a-z0-9.-]+\/L\d{1,2}\/[nh]\d{1,5})\.webp$/;
-const DRAWN = 1;                      // the card's look: raise it when LinkCard.svelte draws another, and every card is drawn again
+const DRAWN = 2;                      // the card's look or encoding: raise it when either changes, and every card is drawn again
 const DRAW = 7500;                    // ms a picture's request waits to be drawn; past it the site's card goes out, this once
 const KEEP = 60 * 24 * 3600;          // s a picture is kept: a unit shared again after that is drawn again, and old builds' pictures go by themselves
-const BLANK = 16000;                  // bytes: a drawn card is three times this; a page photographed before it drew is a tenth
+const BLANK = 16000;                  // bytes: a drawn card is four times this or more; a page photographed before it drew is a tenth
 
 export default {
   async fetch(request, env, context) {
@@ -35,8 +35,9 @@ export default {
     if (url.pathname.startsWith("/card/")) return picture(request, env, context, url);
     const page = await env.ASSETS.fetch(request);
     const unit = request.method === "GET" ? unitAt(url.pathname) : null;
-    // (With ?card the address is the card itself, which the hosted browser opens: it needs no words.)
-    if (!unit || url.searchParams.has("card") || page.status !== 200 || !(page.headers.get("content-type") ?? "").includes("text/html")) return page;
+    if (!unit || page.status !== 200 || !(page.headers.get("content-type") ?? "").includes("text/html")) return page;
+    // With ?card the address is the card itself, which the hosted browser opens: it needs no words, only to draw soon.
+    if (url.searchParams.has("card")) return ahead(page, unit, context);
     try {
       const has = draws(env) ? keptCard(env, unit).then((body) => (void body?.cancel(), body !== null), () => false) : false;
       const [words, kept] = await Promise.all([describe(unit, AbortSignal.timeout(WAIT)), has]);
@@ -232,10 +233,14 @@ function rewrite(page, words, card) {
 // If the browser is slow, busy (the free plan takes one request every ten seconds) or out of its day's minutes, the
 // site's card goes out instead, uncached, and a drawing still under way is kept for the next request.
 //
-// Pictures are kept in Workers KV, not R2 beside the catalog: KV's free plan holds 1 GB (some 16,000 cards) and a
-// thousand writes a day, more than the hosted browser's free ten minutes a day can draw, where the catalog already
-// fills R2's free 10 GB. KV may take a minute to show a new picture everywhere; one asked for meanwhile from
-// elsewhere is drawn twice, no worse.
+// Pictures are kept in Workers KV, not R2 beside the catalog: KV's free plan holds 1 GB (some ten thousand cards, at
+// about 100 kB each) and a thousand writes a day, more than the hosted browser's free ten minutes a day can draw,
+// where the catalog already fills R2's free 10 GB. KV may take a minute to show a new picture everywhere; one asked for
+// meanwhile from elsewhere is drawn twice, no worse.
+//
+// A drawing is some seconds of the hosted browser, most of them the card page loading, so that page is helped along
+// (`ahead`, below) and the photograph is taken the moment the page says it is drawn. It is a WebP at quality 75: two
+// thirds of a neuron's card is the fine grain of the atlas, which costs 45% more at 90 for no difference to the eye.
 //
 // The project sets this up in its settings, and until it does every unit keeps the site's card: a KV namespace bound
 // as CARDS, the account's ID as BROWSER_ACCOUNT, and as the secret BROWSER_TOKEN an API token allowed Browser Run - Edit.
@@ -266,21 +271,22 @@ async function picture(request, env, context, url) {
     if (!draws(env)) return await instead();
     const key = keyOf(unit), kept = await keptCard(env, unit);
     if (kept) return drawn(kept);
-    // Drawn here, and kept whether or not this request waits for it. `busy` says the browser turned the first try away.
+    // Drawn here, and kept whether or not this request waits for it (it goes out as soon as it is drawn, and is put
+    // away after). `busy` says the browser turned the first try away.
     let busy;
     const turned = new Promise((resolve) => { busy = resolve; });
+    const page = `${url.origin}${pathOf(unit)}?${unit.kind === "n" ? "all&" : ""}card`;
     const drawing = (async () => {
-      let shot = await photograph(env, `${url.origin}${pathOf(unit)}?${unit.kind === "n" ? "all&" : ""}card`);
+      let shot = await photograph(env, page);
       if (shot.again) {
         busy();
         await sleep(shot.again);
-        shot = await photograph(env, `${url.origin}${pathOf(unit)}?${unit.kind === "n" ? "all&" : ""}card`);
+        shot = await photograph(env, page);
       }
       if (!shot.bytes) throw new Error(shot.error);
-      await env.CARDS.put(key, shot.bytes, { expirationTtl: KEEP });
       return shot.bytes;
     })();
-    context.waitUntil(drawing.catch((error) => console.log(`card ${key}: ${error.message}`)));
+    context.waitUntil(drawing.then((bytes) => env.CARDS.put(key, bytes, { expirationTtl: KEEP })).catch((error) => console.log(`card ${key}: ${error.message}`)));
     const bytes = await Promise.race([drawing.catch(() => null), turned.then(() => null), sleep(DRAW).then(() => null)]);
     return bytes ? drawn(bytes) : await instead();
   } catch {
@@ -288,11 +294,29 @@ async function picture(request, env, context, url) {
   }
 }
 
+/** The card page with its needs named ahead of it, so the browser fetches them while the page's script is still on
+ *  its way: the card's own chunk and style (behind a dynamic import), the build's manifest, and the catalog files a
+ *  card reads first, which the page could only ask for once the script, the chunk and the manifest were all in,
+ *  one after another. (The files by name only where this worker already holds the build's manifest; else it fetches
+ *  it for the next card.) Measured on a neuron's card, it is drawn in about half the time. */
+function ahead(page, unit, context) {
+  const { id, kind, layer } = unit, fetched = (url) => `<${url}>; rel=preload; as=fetch; crossorigin`;
+  // (The style as Vite's loader will ask for it, without credentials, or the browser fetches it a second time.)
+  const links = SITE.card.map((path) => (path.endsWith(".js") ? `<${path}>; rel=modulepreload` : `<${path}>; rel=preload; as=style; crossorigin`));
+  links.push(fetched(`${SITE.catalog}/${id}/${SITE.builds[id]}.json`));
+  const manifest = manifests.get(id);
+  const files = kind === "n" ? ["index.json", "vocab.json", "scores.json", `neurons/L${pad(layer)}/index.json`] : ["index.json", "vocab.json", "heads/index.json", `heads/L${pad(layer)}.json`];
+  if (manifest) links.push(...files.filter((path) => manifest[path]).map((path) => fetched(`${SITE.catalog}/o/${manifest[path]}`)));
+  else context.waitUntil(objectUrl(id, files[0], AbortSignal.timeout(WAIT)).catch(() => {}));
+  const headers = new Headers(page.headers);
+  headers.append("link", links.join(", "));
+  return new Response(page.body, { status: page.status, headers });
+}
+
 /** The hosted browser's photograph of a page, taken once the page says it is drawn (LinkCard.svelte's data-card):
  *  its bytes; or how long to wait before asking again, when the browser takes no request yet; or why there is none.
- *  The page must also have gone quiet, and the photograph must be more than an empty page's: a browser that didn't
- *  wait for the page's word (Cloudflare's own playground doesn't) would photograph a blank page, to be kept as the
- *  unit's card. */
+ *  The photograph must be more than an empty page's: a browser that didn't wait for the page's word (Cloudflare's
+ *  own playground doesn't) would photograph a blank page, and that is never kept as a unit's card. */
 async function photograph(env, page) {
   const response = await fetch(`${env.BROWSER_API ?? "https://api.cloudflare.com/client/v4"}/accounts/${env.BROWSER_ACCOUNT}/browser-run/screenshot`, {
     method: "POST",
@@ -300,9 +324,8 @@ async function photograph(env, page) {
     body: JSON.stringify({
       url: page,
       viewport: { width: 1200, height: 630, deviceScaleFactor: 2 },
-      gotoOptions: { waitUntil: "networkidle0" },
       waitForSelector: { selector: '[data-card="drawn"]', timeout: 15000 },
-      screenshotOptions: { type: "webp", quality: 90 },
+      screenshotOptions: { type: "webp", quality: 75 },
     }),
     signal: AbortSignal.timeout(25000),
   });

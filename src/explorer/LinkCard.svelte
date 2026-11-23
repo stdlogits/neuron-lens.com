@@ -92,13 +92,14 @@
     }
   }
 
-  /** The atlas has its units in and this one placed: one plot, past its arrival, with the unit's mark. */
+  /** The atlas has its units in and this one placed: one plot, drawn, with the unit's mark. (Not past its arrival:
+   *  a card's atlas doesn't arrive, it is there, so nothing waits out an animation no one sees.) */
   async function placed(): Promise<{ plot: HTMLElement; mark: Element }> {
     for (;;) {
       const plot = strip?.querySelector<HTMLElement>(".plot");
       const bars = plot?.querySelectorAll(".bars") ?? [];
       const mark = plot?.querySelector(".pin, .stack i.sel");
-      if (plot && mark && bars.length === 1 && bars[0].matches(".settled:not(.arrive)")) return { plot, mark };
+      if (plot && mark && bars.length === 1 && bars[0].matches(".settled")) return { plot, mark };
       await frame();
     }
   }
@@ -231,6 +232,7 @@
   .strip :global(.atlas) { display: block; }
   .strip :global(.atlas > :not(.plot)) { display: none; }
   .strip :global(.plot) { transform-origin: 0 0; transform: scaleY(var(--squash)); transition: none; }
+  .strip :global(.arrive .stack i), .strip :global(.arrive .field) { animation: none !important; }
   .nums, .bands { position: relative; height: 22px; font: 500 17px/22px var(--text); color: var(--ink3); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .nums { margin-top: 12px; }
   .bands { margin-top: 5px; }
