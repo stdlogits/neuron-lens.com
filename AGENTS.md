@@ -124,10 +124,12 @@ The unit and its rail are laid out by the width the explorer has (container quer
 the screen's width). Under 736 px (a phone, a narrow window, a tablet upright) the unit comes first, its number and
 labels in the first screen under the atlas, then its baskets, then the rail, and the basket bar then ends with a fourth
 entry, Connections, that goes to the rail (`unit/BasketBar.svelte`). From 736 px the rail stands on the left beside
-the unit at 340 px, graph above lists, and follows the page as it scrolls (`src/explorer/follow.ts`: it scrolls with
-the page until its foot reaches the screen's and stays, and moves with the page again as soon as it scrolls back up),
-so neither column leaves blank space beside the other; it sits above the basket bar so the full-screen graph opens
-over it.
+the unit at 340 px, graph above lists, the two as tall as the screen, and each scrolls on its own while the page
+around them scrolls as any page (`src/explorer/panes.ts`): a scroll over a column while they are only partly on screen
+moves the page until they fill it, a column at its end hands the scroll back to the page, and for touch the page
+settles onto them (CSS scroll snapping, proximity) when it comes to rest near them, and onto its foot near the end.
+A new unit opens both columns from their tops. Whatever reads the unit's scroll (the basket bar, search's reveal)
+reads its column there, not the window.
 
 `main.ts` loads `@stdlogits/ledger/ledger.css`, then `site.css`, and installs `translator` with
 `setTranslator` before mounting. The dev server serves Ledger as source rather than pre-bundling it

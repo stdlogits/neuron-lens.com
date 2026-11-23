@@ -451,7 +451,7 @@ test("the baskets sort a head's evidence the same way", async ({ page }) => {
 
 // The unit and its connections by the width there is (Explorer.svelte's panes): narrow, the unit first and its
 // connections after it, a tap away from the basket bar; from 736 px of explorer, the connections on the left beside it,
-// following the page as it scrolls.
+// each column scrolling on its own.
 for (const [width, beside] of [[390, false], [768, false], [1024, true], [1280, true]] as const) {
   test(`at ${width} px the unit and its connections stand ${beside ? "side by side" : "one above the other, the unit first"}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -474,13 +474,24 @@ test("on a phone the basket bar's last stop is the unit's connections", async ({
   await expect(page.getByRole("complementary", { name: "Connections" })).toBeInViewport();
 });
 
-test("beside the unit its connections keep in view as the page scrolls down to the unit's last basket", async ({ page }) => {
+test("side by side, the unit and its connections each scroll on their own", async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 700 });
   await page.goto("/qwen3-8b/L8/n344");
   await settle(page);
-  await page.locator("#firings").scrollIntoViewIfNeeded();
-  await page.mouse.wheel(0, 400);
-  await expect(page.getByRole("complementary", { name: "Connections" })).toBeInViewport();
+  const read = () => page.evaluate(() => ({ page: scrollY, rail: document.getElementById("connections")!.scrollTop, unit: document.getElementById("unit")!.scrollTop }));
+  await page.evaluate(() => document.getElementById("layer")!.scrollIntoView({ block: "start" }));
+  const before = await read();
+  await page.locator("#unit").evaluate((el) => el.scrollBy(0, 300));
+  const unitMoved = await read();
+  expect(unitMoved.unit).toBeGreaterThan(before.unit);
+  expect([unitMoved.rail, unitMoved.page]).toEqual([before.rail, before.page]);
+  await page.getByRole("complementary", { name: "Connections" }).evaluate((el) => el.scrollBy(0, 200));
+  const railMoved = await read();
+  expect(railMoved.rail).toBeGreaterThan(unitMoved.rail);
+  expect([railMoved.unit, railMoved.page]).toEqual([unitMoved.unit, unitMoved.page]);
+  // A basket chosen from the bar is brought into view within the unit's column.
+  await page.getByRole("navigation", { name: "Baskets" }).getByRole("button", { name: "Firings" }).click();
+  await expect(page.locator("#firings")).toBeInViewport();
 });
 
 test("Distinctive swaps each read for its version against the layer, and is remembered", async ({ page }) => {

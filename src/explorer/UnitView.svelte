@@ -5,6 +5,8 @@
   import HeadUnit from "./unit/HeadUnit.svelte";
   import Pending from "./unit/Pending.svelte";
   import { useLens } from "./lens.svelte";
+  import { scroller } from "./panes";
+  import { untrack } from "svelte";
 
   // The chosen neuron or head. Its header stays put (the ID morphs); below it one unit gives way to
   // the next: stepping down the list it rises into place, stepping up it falls. While the next one
@@ -15,6 +17,12 @@
   const detail = $derived(lens.unit === "heads" ? lens.headDetail : lens.neuronDetail);
   const phase = $derived(detail ? "ready" : lens.detailFailed ? "failed" : "pending");
   const unitKey = $derived(`${lens.modelId}/${lens.unit}/${lens.layer}/${lens.selected}`);
+  // Side by side with its connections the unit scrolls on its own (panes.ts): another unit opens from its top.
+  let view = $state<HTMLElement>();
+  $effect(() => {
+    void unitKey;
+    untrack(() => { const column = scroller(view ?? null); if (column) column.scrollTop = 0; });
+  });
 
   // What was last on screen, for as long as it takes the next to arrive.
   interface Held { key: string; neuron: typeof lens.neuronDetail; head: typeof lens.headDetail; layer: number; model: typeof lens.model; labelled: boolean; groupSize: number }
@@ -49,7 +57,7 @@
   });
 </script>
 
-<article class="view" id="unit" aria-labelledby="unit-title">
+<article class="view" id="unit" aria-labelledby="unit-title" bind:this={view}>
   <UnitBar />
   <Swap {key} {direction}>
     {#if showing === "failed"}

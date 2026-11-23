@@ -61,11 +61,13 @@ What the site draws for itself, in Ledger:
   basket bar then ends with ("Connections", `unit/BasketBar.svelte`), so they are a tap away; from 600 px their lists
   stand beside their graph. From 736 px two columns: the connections on the left at the 340 px they have on a desktop
   (their controls need it), graph above lists, and the unit on the right with all it has, its own two columns from
-  600 px of its width; from 1028 px the gap widens to a desktop's. Beside the unit the connections follow the page
-  (`src/explorer/follow.ts`): they scroll with it until their foot reaches the screen's and stay there, and scrolling
-  back up they move with the page again until their head reaches the screen's top, so neither column runs out into
-  blank space beside the other and the graph is back after a short scroll however long the lists are. The following
-  column sits above the basket bar, so the full-screen graph and a tapped unit's card open over everything.
+  600 px of its width; from 1028 px the gap widens to a desktop's. Side by side, the two columns are as tall as the
+  screen and each scrolls on its own, as a mail app's list and message do, while the page around them scrolls as any
+  page (`src/explorer/panes.ts`): a scroll over a column while they are only partly on screen moves the page first,
+  until they fill it, and a column at its end hands the scroll back to the page, on to the footer. Where a scroll
+  can't be redirected (touch), the page settles onto the columns when it comes to rest near them (CSS scroll snapping,
+  proximity), and onto its foot near the end. A new unit opens both columns from their tops; the basket bar reads
+  the unit's column, and search brings the columns right to the top of the screen.
 - The connections graph (`src/explorer/graph/`): a band per layer down the page, a dot per neuron side
   and a bar per head, both in the depth colour of their layer. A link is as heavy as its
   flow, in the depth colour of its source, or grey and dashed where it pushes against: the one hue is depth.

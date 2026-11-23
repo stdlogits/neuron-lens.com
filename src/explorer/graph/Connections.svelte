@@ -2,7 +2,7 @@
   import { onDestroy, onMount, untrack } from "svelte";
   import { IconButton, LabelText, Meter, MorphText, Segmented, Swap, Tabs, expand, fadeIn } from "@stdlogits/ledger";
   import Card, { type Picked } from "./Card.svelte";
-  import { follow } from "../follow";
+  import { scroller } from "../panes";
   import Graph from "./Graph.svelte";
   import Navigator from "./Navigator.svelte";
   import { focusOf, headInput, nodeKey, siblingTip, trace, type Graph as GraphData, type Mode, type Reach, type Take } from "./trace";
@@ -47,6 +47,12 @@
   };
   $effect(() => { if (lens.graphOpen) untrack(() => (picked = null)); });
   let figure = $state<HTMLElement>();
+  // Side by side with the unit the rail scrolls on its own (panes.ts): a new unit opens its connections from the top.
+  let railNode = $state<HTMLElement>();
+  $effect(() => {
+    void `${lens.modelId}/${lens.unit}/${lens.layer}/${lens.selected}`;
+    untrack(() => { const column = scroller(railNode ?? null); if (column) column.scrollTop = 0; });
+  });
   $effect(() => {
     if (!picked || !figure) return;
     const seen = new IntersectionObserver(([entry]) => { if (!entry.isIntersecting) picked = null; });
@@ -227,7 +233,7 @@
   const showsAgainst = $derived(graph?.edges.some((edge) => edge.value < 0) ?? false);
 </script>
 
-<aside class="rail" id="connections" aria-label="Connections" use:follow>
+<aside class="rail" id="connections" aria-label="Connections" bind:this={railNode}>
   <div class="figure" bind:this={figure}>
     <div class="tools">
       {#if modes.length > 1}<Segmented options={modes} value={shownMode} onchange={(value: Mode) => (mode = value)} label="Which connections" />{/if}
@@ -285,11 +291,9 @@
 <style>
   .rail { display: grid; align-content: start; gap: var(--s5); min-width: 0; scroll-margin-top: var(--s5); }
   .figure, .lists { display: grid; align-content: start; gap: var(--s5); min-width: 0; }
-  /* Beside the unit (from 736 px, Explorer.svelte's panes) it is a column that follows the page as it scrolls
-     (follow.ts sets --follow), above the unit's basket bar so its full-screen graph and cards open over it. Under the
-     unit (narrower) it takes the row's width, and from 600 px its lists stand beside the graph rather than under it,
-     where a column would leave half the row empty. */
-  @container explorer (min-width: 736px) { .rail { position: sticky; top: var(--follow, var(--s5)); z-index: 3; } }
+  /* Beside the unit (from 736 px, Explorer.svelte's panes) it is a column that scrolls on its own. Under the unit
+     (narrower) it takes the row's width, and from 600 px its lists stand beside the graph rather than under it, where
+     a column would leave half the row empty. */
   @container explorer (min-width: 600px) and (max-width: 735.98px) {
     .rail { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--s7); }
   }

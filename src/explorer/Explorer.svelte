@@ -5,6 +5,7 @@
   import Atlas from "./Atlas.svelte";
   import Connections from "./graph/Connections.svelte";
   import UnitView from "./UnitView.svelte";
+  import { panes } from "./panes";
   import { Lens, provideLens } from "./lens.svelte";
   import { DEFAULT_MODEL, MODELS, MODEL_ORDER, type ModelInfo } from "../lib/models";
   import { formatCount, type Unit } from "../lib/data";
@@ -88,7 +89,7 @@
   {#if lens.failed && !lens.index}
     <p class="notice" role="alert">The catalog didn't load. Check your connection and reload the page.</p>
   {:else}
-    <section class="panes" id="layer">
+    <section class="panes" id="layer" use:panes>
       <Connections />
       <UnitView />
     </section>
@@ -119,17 +120,24 @@
   .left { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s5); }
   .filters { min-width: 0; max-width: 100%; }
   /* The chosen unit and its connections, by the width the explorer has. Narrow (a phone, a small window), one column:
-     the unit first, under the atlas, its connections after it. From 736 px, two: the connections at the width they
-     have on a desktop (340 px, which their controls need) on the left, the unit on the right with all it has; from
-     1028 px the unit has its full width and the gap grows. Beside the unit the connections follow the page as it
-     scrolls (follow.ts), so neither column runs out into blank space. */
+     the unit first, under the atlas, its connections after it, and the page scrolls them. From 736 px, two: the
+     connections at the width they have on a desktop (340 px, which their controls need) on the left, the unit on the
+     right with all it has, side by side as tall as the screen, and each column scrolls on its own (panes.ts brings
+     them to the top of the screen before they do). From 1028 px the gap grows. A column is padded and drawn out by the
+     same 4 px, so a focus ring at its edge isn't clipped by its scrolling. */
   .panes { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: var(--s7); scroll-margin-top: var(--s5); }
   .panes > :global(aside.rail) { order: 2; }
   @container explorer (min-width: 736px) {
-    .panes { grid-template-columns: 340px minmax(0, 1fr); column-gap: var(--s6); }
+    .panes { grid-template-columns: 340px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); column-gap: var(--s6); height: calc(100svh - 2 * var(--s5)); align-items: stretch; }
     .panes > :global(aside.rail) { order: 0; }
+    .panes > :global(aside.rail), .panes > :global(article.view) { min-height: 0; margin: -4px; padding: 4px 4px var(--s7); overflow-y: auto; overscroll-behavior-y: auto; scrollbar-width: thin; }
   }
   @container explorer (min-width: 1028px) { .panes { column-gap: var(--s7); } }
+  /* Where they stand side by side, the page settles onto them as a scroll ends near them, and onto its foot near the
+     end (for touch, whose scrolls panes.ts can't redirect). */
+  :global(html:has(#layer.split)) { scroll-snap-type: y proximity; }
+  .panes:global(.split) { scroll-snap-align: start; }
+  :global(html:has(#layer.split) .site > footer) { scroll-snap-align: end; }
   .notice { color: var(--ink2); }
   .foot { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); }
   kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 var(--s1); border-radius: var(--r-chip); background: var(--wash); color: var(--ink2); font: var(--type-meta); }
