@@ -18,7 +18,7 @@ It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now redire
   are its parts: `Atlas` (and `atlas/`), `graph/` (the unit's connections: `trace.ts` walks them,
   `layout.ts` places them, `stage.ts` moves them, `Graph` draws them (its links on a canvas, `ink.ts`), `Connections` is the rail, `Navigator` the same graph full
   screen with its Find (`find.ts`), `Card` a tapped unit's card), `UnitView` (and `unit/`), `Search`
-  (and `search/`), `media/`.
+  (and `search/`), `media/`, and `LinkCard`, a unit drawn as the picture its shared link carries.
 - `src/pages/`: About, Credits, the missing page.
 - `src/lib/`: `data.ts` (the catalog's types and loaders), `models.ts` (each model's shape, its depth
   ramp and the words for its depth bands; the models listed are those with a build in `catalog.json`), `depth.json`
@@ -48,7 +48,7 @@ It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now redire
 
 Addresses: `/`, `/<model>`, `/<model>/L<layer>`, `/<model>/L<layer>/n<neuron>` (`?all` lists every
 neuron of the layer), `/<model>/heads`, `/<model>/L<layer>/heads`, `/<model>/L<layer>/h<head>`,
-`/about`, `/credits`. A unit's address with `?graph` opens its connections full screen. Anything else is the missing page. Bare addresses are Qwen3-8B.
+`/about`, `/credits`. A unit's address with `?graph` opens its connections full screen, and with `?card` is its link card alone (below, "What the site says about itself"). Anything else is the missing page. Bare addresses are Qwen3-8B.
 
 ## Design
 
@@ -146,8 +146,8 @@ catalog's own host, `data.neuron-lens.com`, has a robots.txt that keeps them out
 A shared link to a neuron or a head carries that unit's own words, where before every link showed the
 site's. `scripts/site/unfurl.js` does it, and is the site's one piece of server code: Pages runs it
 (advanced mode: `meta.ts` writes it into the build as `_worker.js`, one file with no imports, filled in
-from `src/lib/models.ts` and `src/lib/catalog.json`) in front of a unit's address and no other, which
-`_routes.json`, also written by `meta.ts`, names (`/<model>/L*/n*` and `/<model>/L*/h*`). Every other
+from `src/lib/models.ts` and `src/lib/catalog.json`) in front of a unit's address and its picture's (next paragraph) and no other, which
+`_routes.json`, also written by `meta.ts`, names (`/<model>/L*/n*`, `/<model>/L*/h*` and `/card/*`). Every other
 request is served as a file and counts as none of the account's Function requests. It reads the unit
 from the catalog as the explorer does (a neuron's two sides in its layer's `graph.bin` and its detail in
 the units pack; a head's record and its layer's `heads/L<layer>.json`) and rewrites the page's `<title>`
@@ -156,12 +156,40 @@ the units pack; a head's record and its layer's `heads/L<layer>.json`) and rewri
 firing, what it makes the model say, its other side and the labels' credit, within the 70 and 350 bytes
 Discord shows, and its layer's colour on the depth ramp in Ledger's light tokens. A neuron is described
 on the side the explorer opens it on, and a base model's unit with its post-trained model's labels. The
-picture stays the site's card. If the catalog is slow (2.5 s), changed or missing, or the address names
+picture is the unit's own card (next paragraph). If the catalog is slow (2.5 s), changed or missing, or the address names
 no unit, the page goes out untouched; it returns what `env.ASSETS.fetch` gives it, so `_headers` still
 applies. It gives up if `graph.bin` isn't the size its record widths expect, so it changes with the
 builder's `WIRE` and `HEAD_WIRE` and with `src/lib/data.ts`. On the Workers Free plan it has 100,000
 requests a day and 10 ms of CPU a request; the Pages project is set to fail open, so past the allowance
 a unit's page is served without its words.
+
+A shared link to a unit also carries the unit's own picture since 2026-11-23 (Luna's call), where the
+project is set up to draw them, and the site's card otherwise. `src/explorer/LinkCard.svelte` is the
+picture: a unit's address with `?card` (a neuron's with `?all&card`) draws only its link card, 1200 × 630
+in the dark tokens (DESIGN.md), and sets `data-card="drawn"` once it has. `unfurl.js` names
+`/card/<the unit's address>.webp?v=<version>` as the page's `og:image` and answers it. The first request
+has Cloudflare's hosted browser (Browser Run's REST screenshot endpoint; Pages Functions get no browser
+binding) photograph the card page at 2× as a WebP at quality 75 (70 to 115 kB), sends that, and keeps it
+in Workers KV for 60 days; every later request is served what was kept, and the zone's edge caches that
+answer, so a unit costs the browser's time once. The version is the card's look (`DRAWN` in `unfurl.js`:
+raise it when `LinkCard.svelte` or the photograph's settings change) and the builds the card reads, so a
+new look or build is a new address and a new key; a picture not kept yet is named with `-new` after its
+version, so whatever a preview fetched under that address never stands in the kept card's way. If the
+browser takes over 7.5 s, is busy (it is then asked once more, in the background), is out of its day's
+time, or hands back a blank page, the site's card goes out under the unit's address, uncached, and a
+drawing still under way is kept for the next request. The card page goes out with `Link` headers naming
+its own chunk and style, the build's manifest and the catalog files a card reads first (`ahead` in
+`unfurl.js`), so the browser fetches them alongside the script; a drawing takes about 3 s of the hosted
+browser. `scripts/site/unit-cards/` holds the prototypes the card was drawn from, and one of a card for
+Discord alone (a unit's connections) that nothing serves.
+
+The project's settings hold what the pictures need, for Production only: the KV namespace
+`neuron-lens-cards` bound as `CARDS`, the variable `BROWSER_ACCOUNT` (the account's ID) and the secret
+`BROWSER_TOKEN` (the account API token `neuron-lens-cards`: Browser Run, Edit). Without all three every
+unit keeps the site's card, as on a preview deployment. KV and not R2, because the catalog already fills
+R2's free 10 GB and KV's free plan holds 1 GB, some ten thousand cards. On the Workers Free plan the
+hosted browser has 10 minutes a day and takes one request every 10 seconds, and KV has 100,000 reads and
+1,000 writes a day.
 
 `node scripts/site/render.mjs` draws the images into `public/`: the social card (`card.webp`: WebP at
 quality 92, as a9l.im's cards are) and, from `favicon.svg`, `favicon.ico`, `apple-touch-icon.png` and the
@@ -308,10 +336,12 @@ CI (`.github/workflows/ci.yml`) runs `npm ci`, `check`, `build` and the e2e spec
 - `node scripts/verify-deployment.mjs <origin>` checks a deployed site: status codes, the headers from
   `_headers`, the JSON-LD and the files the site serves about itself (icons, card, manifest, llms.txt,
   sitemap; byte for byte against `dist` when deploying), a unit's address carrying its own words and
-  otherwise the same page (`unfurl.js`), immutable assets; on the data origin each
+  otherwise the same page, and its picture answering with a WebP, its own card or the site's standing in
+  (`unfurl.js`), immutable assets; on the data origin each
   named build's `index.json`, CORS (a range's preflight too), immutable caching, a 404 for a missing
   file, robots.txt, and 206 ranges on graph records, units packs and media packs; then a
-  Chromium smoke that a Gemma neuron's images load and a sound plays with no CSP violation. Its
+  Chromium smoke that a Gemma neuron's images load, a sound plays and a unit's card page draws, with no
+  CSP violation. Its
   selectors are constants at the top of its browser section.
 
 ## Deploy
@@ -330,7 +360,8 @@ It refuses a dirty tree, a HEAD not on `origin/main`, or a `catalog.json` build 
 `build`; checks `dist` against Pages' file limits; uploads with the pinned Wrangler
 (`--commit-hash` HEAD); and waits for the live site to serve this build before verifying it. `dist`
 carries `_worker.js` and `_routes.json` (above, "What the site says about itself"), which the upload
-takes with the files.
+takes with the files. The binding, variable and secret the pictures need (same section) are set in the
+dashboard, not by a deploy, and a change to them waits for the next one.
 `--dry-run` stops before the upload. The Pages project and the custom domain must exist in that
 account first. Cloudflare Web Analytics is on (a9's choice): the CSP allows its beacon from
 `static.cloudflareinsights.com` and its reports to `cloudflareinsights.com`. Keep Rocket Loader and
