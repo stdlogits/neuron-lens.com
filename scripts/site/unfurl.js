@@ -7,7 +7,7 @@
 //
 // The picture is the unit's own card where the project is set up to draw one (below, "the picture"), and the site's
 // card where it isn't: Cloudflare's hosted browser photographs the unit's address with ?card (the explorer's
-// LinkCard.svelte), once, and the photograph is kept in a bucket and served from there after.
+// LinkCard.svelte), once, and the photograph is kept (in Workers KV) and served from there after.
 //
 // scripts/site/meta.ts writes this into the build as _worker.js (Pages' advanced mode: one file, no bundling, so it
 // can be uploaded in the dashboard as well as by Wrangler), with SITE filled in from src/lib/models.ts and
@@ -25,6 +25,7 @@ const SILENT = "near-silent neuron";
 const PICTURE = /^\/card(\/[a-z0-9.-]+\/L\d{1,2}\/[nh]\d{1,5})\.webp$/;
 const DRAWN = 1;                      // the card's look: raise it when LinkCard.svelte draws another, and every card is drawn again
 const DRAW = 7500;                    // ms a picture's request waits to be drawn; past it the site's card goes out, this once
+const KEEP = 60 * 24 * 3600;          // s a picture is kept: a unit shared again after that is drawn again, and old builds' pictures go by themselves
 
 export default {
   async fetch(request, env, context) {
@@ -36,7 +37,8 @@ export default {
     // (With ?card the address is the card itself, which the hosted browser opens: it needs no words.)
     if (!unit || url.searchParams.has("card") || page.status !== 200 || !(page.headers.get("content-type") ?? "").includes("text/html")) return page;
     try {
-      const [words, kept] = await Promise.all([describe(unit, AbortSignal.timeout(WAIT)), draws(env) ? env.CARDS.head(keyOf(unit)).catch(() => null) : null]);
+      const has = draws(env) ? keptCard(env, unit).then((body) => (void body?.cancel(), body !== null), () => false) : false;
+      const [words, kept] = await Promise.all([describe(unit, AbortSignal.timeout(WAIT)), has]);
       // A picture not kept yet is named at an address of its own: whoever asks may get the site's card in its place
       // (below) and keep that under the address, which the unit's own card then never has to get past.
       return rewrite(page, words, draws(env) ? `${url.origin}/card${pathOf(unit)}.webp?v=${versionOf(unit)}${kept ? "" : "-new"}` : null);
@@ -224,13 +226,18 @@ function rewrite(page, words, card) {
 //
 // A unit's page names /card/<its address>.webp as its picture. The first request for it has Cloudflare's hosted
 // browser (Browser Run's screenshot endpoint) open the unit's address with ?card, which draws the card and nothing
-// else, and photograph it; the photograph goes into the bucket and out to whoever asked. Every later request is
-// served from the bucket, so a unit costs the hosted browser's time once per catalog build. If the browser is slow,
-// busy (the free plan takes one request every ten seconds) or out of its day's minutes, the site's card goes out
-// instead, uncached, and a drawing still under way is kept for the next request.
+// else, and photograph it; the photograph is kept and goes out to whoever asked. Every later request is served what
+// was kept, so a unit costs the hosted browser's time once per catalog build (and again if it is shared after KEEP).
+// If the browser is slow, busy (the free plan takes one request every ten seconds) or out of its day's minutes, the
+// site's card goes out instead, uncached, and a drawing still under way is kept for the next request.
 //
-// The project sets this up in its settings, and until it does every unit keeps the site's card: an R2 bucket bound as
-// CARDS, the account's ID as BROWSER_ACCOUNT, and as the secret BROWSER_TOKEN an API token allowed Browser Run - Edit.
+// Pictures are kept in Workers KV, not R2 beside the catalog: KV's free plan holds 1 GB (some 16,000 cards) and a
+// thousand writes a day, more than the hosted browser's free ten minutes a day can draw, where the catalog already
+// fills R2's free 10 GB. KV may take a minute to show a new picture everywhere; one asked for meanwhile from
+// elsewhere is drawn twice, no worse.
+//
+// The project sets this up in its settings, and until it does every unit keeps the site's card: a KV namespace bound
+// as CARDS, the account's ID as BROWSER_ACCOUNT, and as the secret BROWSER_TOKEN an API token allowed Browser Run - Edit.
 
 const draws = (env) => Boolean(env.CARDS && env.BROWSER_ACCOUNT && env.BROWSER_TOKEN);
 const pathOf = ({ id, layer, kind, index }) => `/${id}/L${layer}/${kind}${index}`;
@@ -238,6 +245,9 @@ const pathOf = ({ id, layer, kind, index }) => `/${id}/L${layer}/${kind}${index}
  *  one its labels come from). Another of either is another picture, at another address and under another key. */
 const versionOf = ({ id, model }) => [DRAWN, SITE.builds[id], model.labels && model.labels !== id ? SITE.builds[model.labels] : ""].filter(Boolean).join("-");
 const keyOf = (unit) => `${versionOf(unit)}${pathOf(unit)}.webp`;
+/** A unit's kept picture as a stream (to send, or to cancel when only asking whether there is one: KV has no other
+ *  way to ask), or null. */
+const keptCard = (env, unit) => env.CARDS.get(keyOf(unit), "stream");
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
 async function picture(request, env, context, url) {
@@ -253,8 +263,8 @@ async function picture(request, env, context, url) {
   const drawn = (body) => new Response(body, { headers: { "content-type": "image/webp", "cache-control": "public, max-age=31536000, immutable", "x-content-type-options": "nosniff" } });
   try {
     if (!draws(env)) return await instead();
-    const key = keyOf(unit), kept = await env.CARDS.get(key);
-    if (kept) return drawn(kept.body);
+    const key = keyOf(unit), kept = await keptCard(env, unit);
+    if (kept) return drawn(kept);
     // Drawn here, and kept whether or not this request waits for it. `busy` says the browser turned the first try away.
     let busy;
     const turned = new Promise((resolve) => { busy = resolve; });
@@ -266,7 +276,7 @@ async function picture(request, env, context, url) {
         shot = await photograph(env, `${url.origin}${pathOf(unit)}?${unit.kind === "n" ? "all&" : ""}card`);
       }
       if (!shot.bytes) throw new Error(shot.error);
-      await env.CARDS.put(key, shot.bytes, { httpMetadata: { contentType: "image/webp" } });
+      await env.CARDS.put(key, shot.bytes, { expirationTtl: KEEP });
       return shot.bytes;
     })();
     context.waitUntil(drawing.catch((error) => console.log(`card ${key}: ${error.message}`)));
