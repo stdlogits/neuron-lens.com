@@ -12,7 +12,9 @@ It left [drowse.ai](https://drowse.ai) (`stdlogits/drowse.ai`), which now redire
 
 ## Layout
 
-- `src/main.ts`, `src/App.svelte`: the shell (header, footer, page switch).
+- `src/main.ts`, `src/App.svelte`: the shell (header, footer, page switch). About, Credits, the missing page, the
+  link card and the full-screen graph are chunks of their own, imported when shown and fetched ahead once the browser is
+  idle.
 - `src/explorer/`: the explorer. `lens.svelte.ts` is its state (get it with `useLens()`): it reads the
   address, loads what that place needs and changes place only by going to another address. The rest
   are its parts: `Atlas` (and `atlas/`), `graph/` (the unit's connections: `trace.ts` walks them,
@@ -160,7 +162,10 @@ site's. `scripts/site/unfurl.js` does it, and is the site's one piece of server 
 (advanced mode: `meta.ts` writes it into the build as `_worker.js`, one file with no imports, filled in
 from `src/lib/models.ts` and `src/lib/catalog.json`) in front of a unit's address and its picture's (next paragraph) and no other, which
 `_routes.json`, also written by `meta.ts`, names (`/<model>/L*/n*`, `/<model>/L*/h*` and `/card/*`). Every other
-request is served as a file and counts as none of the account's Function requests. It reads the unit
+request is served as a file and counts as none of the account's Function requests. A person's browser opening a unit
+(`Sec-Fetch-Dest: document` from no crawler `BOTS` knows) isn't kept waiting for the catalog: its page goes out with
+nothing rewritten but preloads in its head of what the explorer reads first (`first`: the build's manifest, and the
+index, vocabulary and heads index once this isolate holds the manifest). It reads the unit
 from the catalog as the explorer does (a neuron's two sides in its layer's `graph.bin` and its detail in
 the units pack; a head's record and its layer's `heads/L<layer>.json`) and rewrites the page's `<title>`
 (as the explorer sets it), its description, `og:title`, `og:description` and its last `theme-color`
@@ -178,7 +183,7 @@ a unit's page is served without its words.
 A shared link to a unit also carries the unit's own picture since 2026-11-23 (Luna's call), where the
 project is set up to draw them, and the site's card otherwise. `src/explorer/LinkCard.svelte` is the
 picture: a unit's address with `?card` (a neuron's with `?all&card`) draws only its link card, 1200 × 630
-in the dark tokens (DESIGN.md), and sets `data-card="drawn"` once it has. `unfurl.js` names
+in the dark tokens (DESIGN.md), and sets `data-card="drawn"` once it has, or `failed` if it hasn't in 6 s. `unfurl.js` names
 `/card/<the unit's address>.webp?v=<version>` as the page's `og:image` and answers it. The first request
 has Cloudflare's hosted browser (Browser Run's REST screenshot endpoint; Pages Functions get no browser
 binding) photograph the card page at 2× as a WebP at quality 75 (70 to 115 kB), sends that, and keeps it
@@ -186,12 +191,15 @@ in Workers KV for 60 days; every later request is served what was kept, and the 
 answer, so a unit costs the browser's time once. The version is the card's look (`DRAWN` in `unfurl.js`:
 raise it when `LinkCard.svelte` or the photograph's settings change) and the builds the card reads, so a
 new look or build is a new address and a new key; a picture not kept yet is named with `-new` after its
-version, so whatever a preview fetched under that address never stands in the kept card's way. If the
+version, so whatever a preview fetched under that address never stands in the kept card's way. A version not shaped as
+`versionOf` writes it (`VERSION`) is answered with the site's card; a HEAD never draws; and a unit whose drawing failed
+isn't tried again for 10 minutes (`FAILED`), the site's card going out meanwhile. If the
 browser takes over 7.5 s, is busy (it is then asked once more, in the background), is out of its day's
 time, or hands back a blank page, the site's card goes out under the unit's address, uncached, and a
-drawing still under way is kept for the next request. The card page goes out with `Link` headers naming
+drawing still under way is kept for the next request. The card page goes out with preloads in its head naming
 its own chunk and style, the build's manifest and the catalog files a card reads first (`ahead` in
-`unfurl.js`), so the browser fetches them alongside the script; a drawing takes about 3 s of the hosted
+`unfurl.js`), so the browser fetches them alongside the script (in the head and not a `Link` header, which Cloudflare
+would send as an Early Hint to everyone opening the unit); a drawing takes about 3 s of the hosted
 browser. `scripts/site/unit-cards/` holds the prototypes the card was drawn from, and one of a card for
 Discord alone (a unit's connections) that nothing serves.
 
@@ -298,7 +306,9 @@ catalog lists only what drives a unit). `heads/graph.bin` holds a record per hea
 it through its value, its query and its key, what fires with it, and what it drives.
 The graph's walk (`trace.ts`) settles a layer before the next, so it reads ahead: what already clears the floor
 a few layers on is asked for at once, as a read that waits behind any needed now (`range` in `data.ts`) and
-moves up when it is. The graph comes out the same; All settles in about a third of the time.
+moves up when it is. The graph comes out the same; All settles in about a third of the time. A walk that ends drops the reads it asked
+ahead for (`dropAhead`). A long visit stays light: `data.ts` keeps only the most recent records, details, layers and
+media documents it read (`recent`), and the atlas the rows of its 8 most recent layers.
 
 The search reads the word index (`search/`, `write_search` in the builder): `words.json` lists every word a unit is found
 by, as `stem()` keys it, sorted and front-coded, with how many units each has and how it shows; it loads whole on the
@@ -307,7 +317,8 @@ search's first hover or focus (0.6–1.2 MB gzipped). `p<NN>.bin` packs (4 MiB) 
 search reads only the head of a long list by range (the engine's `EXACT` and `NEAR`). A labelled model indexes every
 pole's label words, and its Easiest neurons' poles and its heads by all their words (reads, peaks, translations), as
 the curated search did before it; an unlabelled one, its heads. A result outside the Easiest gets its title from its
-graph record as it shows.
+graph record as it shows. A neuron's ID needs its L or its n (`L8 344`, `8n344`) and a head's its h, so a bare number
+(`3.14`) is searched as a word; a unit's address pasted whole opens in the model it names (`parseRef` in `data.ts`).
 
 The types in `src/lib/data.ts` mirror the builder's output. Change both together, then regenerate the
 e2e mock catalog (`node e2e/fixtures/build.mjs`) so the specs see the new shape. The builder's `stem()`
@@ -326,7 +337,8 @@ reads one build throughout (a graph record and the units pack it points into alw
 goes live with the deploy that names it. A file a new build shares with any earlier build (most layers of a
 rebuild, and the Qwen3 builds' vocabularies) is the same object, so `scripts/catalog/upload.sh` sends only
 the objects not up yet (8 at a time, logged in `catalog/.uploads/objects.log`, so an interrupted upload
-resumes), then the manifest, checks it answers, and names it; `deploy.sh` refuses to deploy a
+resumes), then checks that every object the manifest names answers (dropping from the log any that doesn't, to send again),
+puts the manifest, checks it answers, and names it; `deploy.sh` refuses to deploy a
 `catalog.json` whose manifests aren't up. Older builds, and the objects only they name, stay in the bucket
 until deleted, at R2's storage price (10 GB free, then $0.015/GB-month; reads past 10 million a month
 $0.36 a million; no egress fees). The catalog is public, so any page may read it: the bucket's CORS
@@ -354,15 +366,14 @@ the builder still keeps units packs under 20 MiB, so a range is cut from a file 
 
 ## Testing
 
-CI (`.github/workflows/ci.yml`) runs `npm ci`, `check`, `build` and the e2e specs on every push to
-`main` and every pull request to it. It never deploys: deploys stay manual (below).
+CI (`.github/workflows/ci.yml`) runs `npm ci`, `check`, `build`, `node --check` on the built `_worker.js` and the
+e2e specs on every push to `main` and every pull request to it, with its actions pinned to commits. It never deploys: deploys stay manual (below).
 
 - `npm run check` (svelte-check) must be clean.
 - `npm run test:e2e` runs the specs in `e2e/` against the dev server on port 5195, with every `/data`
   request answered from `e2e/fixtures/catalog` (`e2e/fixtures/catalog.mjs`, which also makes up
   `scores.json`, answers range requests and blanks the `graph.bin` records of units the mock doesn't keep). The mock's media bytes are made up, not the collections'.
-  Specs test the address and the shell through roles and names; markup-level tests of the atlas, list
-  and unit view are marked `test.fixme` until those parts settle.
+  Specs test the address and the shell through roles and names.
 - `node scripts/verify-deployment.mjs <origin>` checks a deployed site: status codes, the headers from
   `_headers`, the JSON-LD and the files the site serves about itself (icons, card, manifest, llms.txt,
   sitemap; byte for byte against `dist` when deploying), a unit's address carrying its own words and
@@ -395,7 +406,9 @@ dashboard, not by a deploy, and a change to them waits for the next one.
 `--dry-run` stops before the upload. The Pages project and the custom domain must exist in that
 account first. Cloudflare Web Analytics is on (a9's choice): the CSP allows its beacon from
 `static.cloudflareinsights.com` and its reports to `cloudflareinsights.com`. Keep Rocket Loader and
-email obfuscation off: they add inline scripts the CSP blocks. The zone's security-headers transform
+email obfuscation off: they add inline scripts the CSP blocks. Speed Brain and Early Hints are off too (Luna's call,
+2026-11-23): Speed Brain's speculation kept every unit's detached page alive in Chrome, and Early Hints would send a
+page's preloads to everyone who opens it. The zone's security-headers transform
 sets `Referrer-Policy: same-origin` and `X-Frame-Options: SAMEORIGIN`, so `_headers` says the same
 (the CSP's `frame-ancestors 'none'` still forbids framing), and its HSTS setting (a9's) replaces the
 header with `max-age=31536000; includeSubDomains; preload`, which `_headers` repeats (a year is the
