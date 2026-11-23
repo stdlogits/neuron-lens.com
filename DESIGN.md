@@ -41,7 +41,7 @@ What the site draws for itself, in Ledger:
   bar takes its new strength and depth colour, new bars fade in and spare ones fade out. The layer numbers and band
   names glide with the columns, and the column wash with them. The All field, a canvas, crossfades instead.
 - The search (`src/explorer/Search.svelte`, matching in `search/engine.ts`), as wide as the atlas under it. A word finds
-  the curated neurons' poles and the heads whose labels hold it; an ID (or a unit's pasted address) opens its unit, and
+  every neuron pole whose labels hold it, and the easiest neurons' poles and the heads by all their words; an ID (or a unit's pasted address) opens its unit, and
   "L8" or "layer 8" its layer. Each word counts: units matching every word come first, and a title holding the whole
   phrase rises; a quoted phrase must be in the title. A word with nothing close is matched within a typo or two (≈), and
   a query that finds nothing offers what it might mean. Each result shows its layer's depth colour, the query marked in
@@ -121,7 +121,7 @@ What the site draws for itself, in Ledger:
   name under it runs through a dozen and lands on L18·n3025, the not-found neuron; a lens follows the pointer, and "In
   the model" sends the dots back to their layers; the way back offers the nearest real address when a fix is small. A
   model the site doesn't have: the hero's own list, the models ranked by a softmax of minus each one's edit distance
-  from what was typed, the slot running up it to the nearest, and the way back keeping the place in that model,
+  from what was typed (Qwen3-8B first when nothing was, as a bare address means it), the slot running up it to the nearest, and the way back keeping the place in that model,
   clipped to its shape. A layer, a neuron or a head past the model's shape: a ride along that axis on one clock
   (`motion.ts`), easing up to the last the model has, a hold, then on into the part that isn't there, landing on the
   number asked. Layers are the atlas's columns (each layer's neurons at fourteen ranks, shaded as the atlas shades

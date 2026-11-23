@@ -1,7 +1,7 @@
 # Neuron Lens
 
-[neuron-lens.com](https://neuron-lens.com) shows what each neuron and attention head inside two open
-language models, Qwen3-8B and Gemma 4 12B, responds to and what it makes the model say: the words and
+[neuron-lens.com](https://neuron-lens.com) shows what each neuron and attention head inside open
+language models (Qwen3 from 0.6B to 14B, post-trained and base, and Gemma 4 12B) responds to and what it makes the model say: the words and
 ideas that set it off, the examples where it fired hardest, what pushing it promotes, and, for Gemma 4,
 the images and sounds it responds to. Every unit has an address (`/qwen3-8b/L8/n344`,
 `/gemma-4-12b/L35/h14`).
@@ -21,7 +21,8 @@ npm run test:e2e     # Playwright, on a small mock catalog
 npm run build        # dist/
 ```
 
-The site is a static single-page app: Vite, Svelte 5 and TypeScript, no server code.
+The site is a static single-page app: Vite, Svelte 5 and TypeScript. Its one piece of server code,
+`scripts/site/unfurl.js`, runs in front of a unit's address to give a shared link that unit's words and picture.
 
 ## The data
 

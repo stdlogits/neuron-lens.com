@@ -8,7 +8,7 @@ Neuron Lens (https://neuron-lens.com) is the explorer of neuron-lens, a public c
 
 ## Method
 
-**Units.** Both models have gated MLPs (SwiGLU in Qwen3-8B; Gemma 4 12B gates with GELU in place of SiLU), so a neuron's activation can be positive or negative. The catalog treats each sign as its own unit, a pole (+ or −), with an input side (what drives it) and a write side (what its output vector does), since the two often mean different things, and, as Cammarata also finds, the negative side matters about as much as the positive. Poles are split by the activation's sign, not by regime: a + pole's firings can mix gate and value both positive with both negative (the double-negative regime Cammarata describes). Heads are read through their QK circuit (where they look) and OV circuit (what they copy).
+**Units.** Every model here has gated MLPs (SwiGLU in Qwen3; Gemma 4 12B gates with GELU in place of SiLU), so a neuron's activation can be positive or negative. The catalog treats each sign as its own unit, a pole (+ or −), with an input side (what drives it) and a write side (what its output vector does), since the two often mean different things, and, as Cammarata also finds, the negative side matters about as much as the positive. Poles are split by the activation's sign, not by regime: a + pole's firings can mix gate and value both positive with both negative (the double-negative regime Cammarata describes). Heads are read through their QK circuit (where they look) and OV circuit (what they copy).
 
 **Lenses.** The R-lens (camilablank et al., 2026) is the J-lens of Gurnee et al. (2026) under RelP's propagation rules: an averaged Jacobian from a layer to the final residual, read through the unembedding, so it says what a vector makes the model say. The S-lens, introduced by this project, is Theia Vogel's K-lens under the same rules, taken back to the input embeddings, so it says which input tokens put a direction there. Each pole gets eight reads: its input direction and its write, each through both lenses, raw and scored against the layer's other poles (z). Heads get token-by-token OV and QK maps built from S-lens footprints, and the QK map's diagonal a second time with the query read through the R-lens. Lens reads give directions, not effect sizes.
 
@@ -55,7 +55,7 @@ Every view of the explorer is a path:
 - `/gemma-4-12b/L27/h4`: one head, here layer 27, head 4 of Gemma 4 12B, which at a word for a group ("both", "respectively") looks back at the members just named
 {{ladder}}- `/about`, `/credits`
 
-The explorer draws each view in the browser, and this site serves no unit's data as text. To look up a unit, use the catalog on Hugging Face: its tables have a row for every pole and head, by model and layer.
+The explorer draws each view in the browser; a unit's address carries only a short description of it for link previews. To look up a unit, use the catalog on Hugging Face: its tables have a row for every pole and head, by model and layer.
 
 ## Research and data
 
@@ -63,7 +63,7 @@ The explorer draws each view in the browser, and this site serves no unit's data
 - [Findings](https://raw.githubusercontent.com/stdlogits/neuron-lens/main/docs/findings.md): every result with its setup, controls and limits
 - [Methods](https://raw.githubusercontent.com/stdlogits/neuron-lens/main/docs/design.md): how the lenses, reads, tests and labels are made
 - [The catalog](https://huggingface.co/datasets/stdlogits/neuron-lens): Parquet tables for every pole and head (reads, acts, drivers, labels, sources; firings and edges for neurons; image, audio and media for Gemma 4 12B), CC BY 4.0; its dataset card documents every column
-- [The lenses](https://huggingface.co/stdlogits/rs-lenses): the R-lens and S-lens for both models, CC BY 4.0
+- [The lenses](https://huggingface.co/stdlogits/rs-lenses): the R-lens and S-lens, CC BY 4.0
 - [Neural Networks Are Already Clean](https://already-clean.goodfire.com/): Cammarata (Goodfire, 2026), the case for studying a model's own neurons
 
 ## The site

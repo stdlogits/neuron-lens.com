@@ -34,6 +34,9 @@ CI runs `npm run check`, the build, and the e2e specs. It can't catch these:
   writes. Change both together, then regenerate the mock catalog (`npm run e2e:fixtures`) so the
   specs see the new shape.
 - **Narrow phones.** Every view must fit a screen 320 px wide without scrolling sideways.
+- **The worker.** `scripts/site/unfurl.js` (a unit's link-preview words and picture) runs only on Cloudflare Pages:
+  neither the dev server nor the specs run it, and CI only checks that it parses. It reads the catalog's records
+  as `src/lib/data.ts` does, so a change to their shape changes it too.
 
 ## Pull requests
 

@@ -7,7 +7,7 @@ body:
     attributes:
       label: Where it's shown
       description: The unit's address, or the Credits page if the issue is about a whole collection.
-      placeholder: https://neuron-lens.com/gemma-4-12b/L35/h14
+      placeholder: https://neuron-lens.com/gemma-4-12b/L33/n12225
     validations:
       required: true
 

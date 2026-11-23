@@ -1,7 +1,9 @@
 # Security Policy
 
-This policy covers neuron-lens.com: the static site this repository builds, its response headers
-(`public/_headers`), and the catalog and media packs it serves from `data.neuron-lens.com`. The analysis behind the
+This policy covers neuron-lens.com: the site this repository builds, its response headers
+(`public/_headers`), the worker in front of a unit's address and its picture (`scripts/site/unfurl.js`, served as
+`_worker.js`, which answers `/card/*` and keeps the pictures it draws in Workers KV), and the catalog and media packs it
+serves from `data.neuron-lens.com`. The analysis behind the
 catalog and its Hub release belong to [neuron-lens](https://github.com/stdlogits/neuron-lens), and the
 shared design pieces belong to [Ledger](https://github.com/stdlogits/ledger).
 
@@ -26,11 +28,13 @@ Only the build deployed at neuron-lens.com gets fixes.
 
 ## What the site does
 
-- No accounts, no server code, and no cookies. The browser's local storage keeps two preferences,
-  the theme and whether to show translations, and nothing else.
+- No accounts and no cookies. The one piece of server code, the worker, writes a unit's words into the page a
+  link preview reads and draws the unit's picture with Cloudflare's hosted browser, holding that browser's API token
+  as a secret; it reads only the public catalog. The browser's local storage keeps the theme, whether to show
+  translations, whether to show distinctive lists, and the last few searches typed, and nothing else.
 - Catalog text (labels, example contexts, translations, captions) is always rendered as text, never
   as HTML.
-- Each image and sound is cut from a media pack on this origin by a range request and shown from a
+- Each image and sound is cut from a media pack on `data.neuron-lens.com` by a range request and shown from a
   `blob:` URL. The CSP allows scripts only from this origin and Cloudflare Web Analytics' beacon, and
   forbids framing.
 - Cloudflare Web Analytics counts visits without cookies.
