@@ -17,6 +17,12 @@ What the site draws for itself, in Ledger:
   flat paper like the site, with six of Qwen3-8B's neurons as small figures of what they fire on, each drawn as dots
   in its layer's colour along flowing strands, over the model's atlas as the explorer draws it. Its type is Ledger's
   `card.css`, and the depth ramp is still its only colour.
+- A unit's link card (`src/explorer/LinkCard.svelte`, the unit's address with `?card`): the picture a shared link to a
+  neuron or a head carries where the project draws them. Flat paper in the dark tokens, like the social card: the
+  unit's pill and the site's name in one row, its label as the main wording (without the examples it ends on, and in
+  the text face's italic where it is lent), what it fires on and what it makes the model say as tokens under their
+  captions, and at the foot the explorer's own atlas, squashed into a strip, with the unit's layer lit and the unit
+  marked. The light over the atlas is the unit's layer colour and the card's only effect.
 - The header's placement of `ThemeButton`, and the no-script summary's rules (`src/styles/site.css`).
 - A pruned model's neuron, or its parent's, names its counterpart at the end of the unit's meta line, after its tags
   (`src/explorer/unit/UnitBar.svelte`): "From Qwen3-8B L20·n10768", "Likely from" where only the weights say so, "Kept

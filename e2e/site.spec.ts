@@ -105,6 +105,20 @@ test("a stored theme applies on load", async ({ page }) => {
   await expect(page.getByRole("navigation", { name: "Site" }).locator("button.theme")).toHaveAccessibleName("Use the light theme");
 });
 
+// A unit's address with ?card is its link card alone: the page a hosted browser photographs (scripts/site/unfurl.js).
+// (A neuron's: the mock keeps too few heads for the atlas to draw them, and a card waits for its atlas.)
+test("a unit's address with ?card draws its link card and nothing else", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 630 });
+  await page.goto("/qwen3-8b/L8/n344?all&card");
+  const card = page.locator('[data-card="drawn"]');
+  await expect(card).toBeVisible();
+  await expect(card).toContainText("Qwen3-8B");
+  await expect(card).toContainText("Neuron Lens");
+  await expect(page.getByRole("navigation", { name: "Site" })).toHaveCount(0);
+  await expect(page.locator('meta[name="robots"][content="noindex"]')).toHaveCount(1);
+  expect(new URL(page.url()).search).toBe("?all&card");
+});
+
 const TOUR = ["/","/gemma-4-12b", "/qwen3-8b/L8/n344", "/qwen3-8b/L20/h17", "/gemma-4-12b/L33/n12225", "/gemma-4-12b/L28/heads", "/gemma-4-12b/L14/n8313?all", "/about", "/credits", "/no-such-page"];
 
 test("no console errors anywhere on the tour", async ({ page }) => {

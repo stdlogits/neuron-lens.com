@@ -3,8 +3,11 @@
 // and description whichever unit was shared. This runs at Cloudflare in front of the page, on a neuron's or a head's
 // address only (the build's _routes.json; any other request never reaches it): it reads that unit's label from the
 // catalog, as the explorer would, and writes the unit's title, description and layer colour into the page's head.
-// The picture stays the site's card. Whatever goes wrong (the catalog slow or changed, an address with no such unit),
-// the page is served as it is.
+// Whatever goes wrong (the catalog slow or changed, an address with no such unit), the page is served as it is.
+//
+// The picture is the unit's own card where the project is set up to draw one (below, "the picture"), and the site's
+// card where it isn't: Cloudflare's hosted browser photographs the unit's address with ?card (the explorer's
+// LinkCard.svelte), once, and the photograph is kept in a bucket and served from there after.
 //
 // scripts/site/meta.ts writes this into the build as _worker.js (Pages' advanced mode: one file, no bundling, so it
 // can be uploaded in the dashboard as well as by Wrangler), with SITE filled in from src/lib/models.ts and
@@ -18,15 +21,25 @@ const WIRE = 800, HEAD_WIRE = 1004;
 const UNIT = /^\/([a-z0-9.-]+)\/L(\d{1,2})\/([nh])(\d{1,5})\/?$/;
 const WAIT = 2500;                    // ms for the catalog, after which the page goes out as it is
 const TITLE = 70, DESCRIPTION = 350;  // bytes: what Discord shows of each
+const SILENT = "near-silent neuron";
+const PICTURE = /^\/card(\/[a-z0-9.-]+\/L\d{1,2}\/[nh]\d{1,5})\.webp$/;
+const DRAWN = 1;                      // the card's look: raise it when LinkCard.svelte draws another, and every card is drawn again
+const DRAW = 7500;                    // ms a picture's request waits to be drawn; past it the site's card goes out, this once
 
 export default {
   async fetch(request, env, context) {
     context.passThroughOnException();
+    const url = new URL(request.url);
+    if (url.pathname.startsWith("/card/")) return picture(request, env, context, url);
     const page = await env.ASSETS.fetch(request);
-    const unit = request.method === "GET" ? unitAt(new URL(request.url).pathname) : null;
-    if (!unit || page.status !== 200 || !(page.headers.get("content-type") ?? "").includes("text/html")) return page;
+    const unit = request.method === "GET" ? unitAt(url.pathname) : null;
+    // (With ?card the address is the card itself, which the hosted browser opens: it needs no words.)
+    if (!unit || url.searchParams.has("card") || page.status !== 200 || !(page.headers.get("content-type") ?? "").includes("text/html")) return page;
     try {
-      return rewrite(page, await describe(unit, AbortSignal.timeout(WAIT)));
+      const [words, kept] = await Promise.all([describe(unit, AbortSignal.timeout(WAIT)), draws(env) ? env.CARDS.head(keyOf(unit)).catch(() => null) : null]);
+      // A picture not kept yet is named at an address of its own: whoever asks may get the site's card in its place
+      // (below) and keep that under the address, which the unit's own card then never has to get past.
+      return rewrite(page, words, draws(env) ? `${url.origin}/card${pathOf(unit)}.webp?v=${versionOf(unit)}${kept ? "" : "-new"}` : null);
     } catch {
       return page;
     }
@@ -166,7 +179,7 @@ async function describe({ id, model, layer, kind, index }, signal) {
     const pole = detail?.poles[side], label = pole?.label ?? {}, shown = poles[side], other = poles[1 - side];
     lines.push([`${where} · ${side ? "−" : "+"} side`]);
     if (pole ? pole.silent : shown.silent) {
-      what = "near-silent neuron";
+      what = SILENT;
       lines.push(["Near-silent: it almost never fires."]);
     } else {
       what = shown.title || "neuron";
@@ -187,18 +200,100 @@ async function describe({ id, model, layer, kind, index }, signal) {
     description: cut(text(), DESCRIPTION),
     summary: cut(lines.slice(1, -1).map(([line]) => line).concat(`${name}, ${model.name}.`).join(". ").replace(/\.\. /g, ". "), 300),
     accent: depthColour(layer, model.layers),
+    alt: `${SITE.name}: ${name} of ${model.name}, ${what}, with the tokens ${kind === "h" ? "it writes" : what === SILENT ? "its weights read" : "it fires on and those it makes the model say"}, and its layer lit in the model's atlas.`,
   };
 }
 
-/** The page with the unit's words in its head; everything else, and every header, as it was. */
-function rewrite(page, words) {
+/** The page with the unit's words in its head, and its picture where one is drawn; everything else, and every
+ *  header, as it was. */
+function rewrite(page, words, card) {
   const content = (value) => ({ element(element) { element.setAttribute("content", value); } });
-  return new HTMLRewriter()
+  const rewriter = new HTMLRewriter()
     .on("title", { element(element) { element.setInnerContent(words.title); } })
     .on('meta[name="description"]', content(words.summary))
     .on('meta[property="og:title"]', content(words.heading))
     .on('meta[property="og:description"]', content(words.description))
     // Discord takes the page's last theme-color; the two with a media query are the browser's.
-    .on('meta[name="theme-color"]', { element(element) { if (!element.getAttribute("media")) element.setAttribute("content", words.accent); } })
-    .transform(page);
+    .on('meta[name="theme-color"]', { element(element) { if (!element.getAttribute("media")) element.setAttribute("content", words.accent); } });
+  // The unit's card is the size and kind of the site's, so the tags that say those stand.
+  if (card) rewriter.on('meta[property="og:image"]', content(card)).on('meta[property="og:image:alt"]', content(words.alt)).on('meta[name="twitter:image:alt"]', content(words.alt));
+  return rewriter.transform(page);
+}
+
+// ---------- the picture: a unit's own card, drawn the first time it is asked for and kept
+//
+// A unit's page names /card/<its address>.webp as its picture. The first request for it has Cloudflare's hosted
+// browser (Browser Run's screenshot endpoint) open the unit's address with ?card, which draws the card and nothing
+// else, and photograph it; the photograph goes into the bucket and out to whoever asked. Every later request is
+// served from the bucket, so a unit costs the hosted browser's time once per catalog build. If the browser is slow,
+// busy (the free plan takes one request every ten seconds) or out of its day's minutes, the site's card goes out
+// instead, uncached, and a drawing still under way is kept for the next request.
+//
+// The project sets this up in its settings, and until it does every unit keeps the site's card: an R2 bucket bound as
+// CARDS, the account's ID as BROWSER_ACCOUNT, and as the secret BROWSER_TOKEN an API token allowed Browser Run - Edit.
+
+const draws = (env) => Boolean(env.CARDS && env.BROWSER_ACCOUNT && env.BROWSER_TOKEN);
+const pathOf = ({ id, layer, kind, index }) => `/${id}/L${layer}/${kind}${index}`;
+/** What a unit's card was drawn from: the card's look and the builds it reads (its own and, for a base model, the
+ *  one its labels come from). Another of either is another picture, at another address and under another key. */
+const versionOf = ({ id, model }) => [DRAWN, SITE.builds[id], model.labels && model.labels !== id ? SITE.builds[model.labels] : ""].filter(Boolean).join("-");
+const keyOf = (unit) => `${versionOf(unit)}${pathOf(unit)}.webp`;
+const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+
+async function picture(request, env, context, url) {
+  const unit = request.method === "GET" || request.method === "HEAD" ? unitAt(url.pathname.match(PICTURE)?.[1] ?? "") : null;
+  if (!unit) return new Response("No such card.\n", { status: 404, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+  // The site's card under this address, for now: kept by no one, so the unit's own takes its place once drawn.
+  const instead = async () => {
+    const card = await env.ASSETS.fetch(new URL("/card.webp", url));
+    const headers = new Headers(card.headers);
+    headers.set("cache-control", "no-store");
+    return new Response(card.body, { status: card.status, headers });
+  };
+  const drawn = (body) => new Response(body, { headers: { "content-type": "image/webp", "cache-control": "public, max-age=31536000, immutable", "x-content-type-options": "nosniff" } });
+  try {
+    if (!draws(env)) return await instead();
+    const key = keyOf(unit), kept = await env.CARDS.get(key);
+    if (kept) return drawn(kept.body);
+    // Drawn here, and kept whether or not this request waits for it. `busy` says the browser turned the first try away.
+    let busy;
+    const turned = new Promise((resolve) => { busy = resolve; });
+    const drawing = (async () => {
+      let shot = await photograph(env, `${url.origin}${pathOf(unit)}?${unit.kind === "n" ? "all&" : ""}card`);
+      if (shot.again) {
+        busy();
+        await sleep(shot.again);
+        shot = await photograph(env, `${url.origin}${pathOf(unit)}?${unit.kind === "n" ? "all&" : ""}card`);
+      }
+      if (!shot.bytes) throw new Error(shot.error);
+      await env.CARDS.put(key, shot.bytes, { httpMetadata: { contentType: "image/webp" } });
+      return shot.bytes;
+    })();
+    context.waitUntil(drawing.catch((error) => console.log(`card ${key}: ${error.message}`)));
+    const bytes = await Promise.race([drawing.catch(() => null), turned.then(() => null), sleep(DRAW).then(() => null)]);
+    return bytes ? drawn(bytes) : await instead();
+  } catch {
+    return instead();
+  }
+}
+
+/** The hosted browser's photograph of a page, taken once the page says it is drawn (LinkCard.svelte's data-card):
+ *  its bytes; or how long to wait before asking again, when the browser takes no request yet; or why there is none. */
+async function photograph(env, page) {
+  const response = await fetch(`${env.BROWSER_API ?? "https://api.cloudflare.com/client/v4"}/accounts/${env.BROWSER_ACCOUNT}/browser-run/screenshot`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${env.BROWSER_TOKEN}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      url: page,
+      viewport: { width: 1200, height: 630, deviceScaleFactor: 2 },
+      waitForSelector: { selector: '[data-card="drawn"]', timeout: 15000 },
+      screenshotOptions: { type: "webp", quality: 90 },
+    }),
+    signal: AbortSignal.timeout(25000),
+  });
+  if (response.ok && (response.headers.get("content-type") ?? "").startsWith("image/")) return { bytes: await response.arrayBuffer() };
+  const said = (await response.text()).slice(0, 300);
+  // One request every ten seconds on the free plan: worth one more try. Out of the day's browser time: not until tomorrow.
+  if (response.status === 429 && !/limit exceeded for today/i.test(said)) return { again: Math.min(15, Number(response.headers.get("retry-after")) || 10) * 1000 };
+  return { error: `the hosted browser answered ${response.status}: ${said}` };
 }

@@ -24,6 +24,8 @@
   });
 
   const page = $derived(router.route.page);
+  // A unit's address with ?card is its link card and nothing else: no header, no footer (explorer/LinkCard.svelte).
+  const card = $derived(router.route.page === "explore" && router.route.card === true && router.route.index !== null);
   // Every view's address, without the ?all that only changes how much of a layer it lists. The
   // missing page has none and asks not to be indexed (Pages answers it 200, as every path).
   const canonical = $derived(page === "missing" ? null : ORIGIN + href(router.route).split("?")[0]);
@@ -33,24 +35,28 @@
   {#if canonical}<link rel="canonical" href={canonical} />{:else}<meta name="robots" content="noindex" />{/if}
 </svelte:head>
 
-<a class="skip" href="#main">Skip to content</a>
-<div class="site" use:tips>
-  <SiteHeader {page} />
-  <main id="main" tabindex="-1">
-    {#if ready}
-      {#if page === "explore"}
-        <Explorer />
-      {:else if page === "about"}
-        <About />
-      {:else if page === "credits"}
-        <Credits />
-      {:else}
-        <NotFound />
+{#if card}
+  {#await import("./explorer/LinkCard.svelte") then { default: LinkCard }}<LinkCard />{/await}
+{:else}
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="site" use:tips>
+    <SiteHeader {page} />
+    <main id="main" tabindex="-1">
+      {#if ready}
+        {#if page === "explore"}
+          <Explorer />
+        {:else if page === "about"}
+          <About />
+        {:else if page === "credits"}
+          <Credits />
+        {:else}
+          <NotFound />
+        {/if}
       {/if}
-    {/if}
-  </main>
-  <SiteFooter />
-</div>
+    </main>
+    <SiteFooter />
+  </div>
+{/if}
 
 <style>
   .site { display: flex; flex-direction: column; min-height: 100svh; }

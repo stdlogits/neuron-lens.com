@@ -242,11 +242,11 @@ function unfurlWorker(): string {
   return source.replace(slot, JSON.stringify({ name: SITE_NAME, catalog: catalog.origin, builds, models }));
 }
 
-/** Which addresses reach unfurl.js: a neuron's or a head's, in each model. Every other request is served as a file
- *  and counts as none of the account's Function requests. (A layer's `heads` list matches the second pattern;
- *  unfurl.js hands it on untouched.) */
+/** Which addresses reach unfurl.js: a neuron's or a head's, in each model, and a unit's picture (/card/…). Every
+ *  other request is served as a file and counts as none of the account's Function requests. (A layer's `heads` list
+ *  matches the second pattern; unfurl.js hands it on untouched.) */
 function unfurlRoutes(): string {
-  return JSON.stringify({ version: 1, include: MODEL_ORDER.flatMap((id) => [`/${id}/L*/n*`, `/${id}/L*/h*`]), exclude: [] }, null, 2);
+  return JSON.stringify({ version: 1, include: [...MODEL_ORDER.flatMap((id) => [`/${id}/L*/n*`, `/${id}/L*/h*`]), "/card/*"], exclude: [] }, null, 2);
 }
 
 // ---------- the plugin

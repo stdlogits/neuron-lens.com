@@ -7,7 +7,9 @@
        and its type; the unit's pill and the name in the top row; its label as the main wording; what it fires on and
        what it makes the model say, each caption above its tokens; and at the foot the atlas as the explorer draws it,
        the unit's layer lit and the unit pinned in it. The space between the top row and the atlas is shared out evenly.
-       Nothing serves this yet: render.mjs fills it from samples.json and what capture.mjs takes from the site.
+       The site now draws this card itself, with the explorer's own atlas: src/explorer/LinkCard.svelte, at a unit's
+       address with ?card. This is the prototype it was drawn from: render.mjs fills it from samples.json and what
+       capture.mjs takes from the site.
        window.draw({ unit, cap, atlas }) fills it. -->
   <link rel="stylesheet" href="../../../node_modules/@stdlogits/ledger/src/styles/card.css">
   <style>

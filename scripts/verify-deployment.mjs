@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Checks a deployed neuron-lens.com: every path answers as Cloudflare Pages should serve this build,
 // with the headers public/_headers sets and the files the site serves about itself; the catalog builds
-// src/lib/catalog.json names answer from R2 as the explorer reads them (each build's manifest, then the objects it names); and the explorer shows images
-// and plays sounds under that CSP (the dev server sends no CSP, so only a deployed site can fail that way).
+// src/lib/catalog.json names answer from R2 as the explorer reads them (each build's manifest, then the objects it names); and the explorer shows images,
+// plays sounds and draws a unit's link card under that CSP (the dev server sends no CSP, so only a deployed site can fail that way).
 //
 //   node scripts/verify-deployment.mjs [origin]      default https://neuron-lens.com
 //     --build dist     also require the live page to be this local build (scripts/deploy.sh passes it)
@@ -134,12 +134,27 @@ export async function checkHtml(origin, rules, buildDir) {
   // which runs at Cloudflare and reads the catalog): its title as the explorer sets it, the preview's heading and
   // lines, and its layer's colour. Its headers were checked above, like any page's.
   const unit = bodies[paths.indexOf(UNIT)];
-  const besides = (page) => page.replace(/<title>[^<]*<\/title>/, "").replace(/<meta (?:name="description"|property="og:title"|property="og:description"|name="theme-color") content="[^"]*"[^>]*>/g, "");
+  const besides = (page) => page.replace(/<title>[^<]*<\/title>/, "").replace(/<meta (?:name="description"|property="og:title"|property="og:description"|property="og:image"|property="og:image:alt"|name="twitter:image:alt"|name="theme-color") content="[^"]*"[^>]*>/g, "");
   assert.equal(besides(unit), besides(html), `${UNIT} differs from / beyond its title, description, link preview and theme colour`);
   assert.ok(unit.includes("<title>L8·n344 · Qwen3-8B · Neuron Lens</title>"), `${UNIT} isn't titled with its unit: scripts/site/unfurl.js isn't running there, or couldn't read the catalog`);
   assert.match(unit, /<meta property="og:title" content="L8·n344 · [^"]+"/, `${UNIT}: its link preview isn't headed with its unit`);
   assert.match(unit, /<meta property="og:description" content="Qwen3-8B · layer 8 of 35 · association layers · [^"]+Labels by Claude Haiku 5\.5"/, `${UNIT}: its link preview doesn't describe its unit`);
   assert.notEqual(unit.match(/<meta name="theme-color" content="([^"]+)">/)?.[1], html.match(/<meta name="theme-color" content="([^"]+)">/)?.[1], `${UNIT}: its link preview has the site's colour, not its layer's`);
+  // Its picture is its own card where the project draws them (unfurl.js, "the picture": a hosted browser photographs
+  // the unit's address with ?card, once, and the photograph is kept), and the site's card where it doesn't. Either
+  // way /card/<its address>.webp answers with a WebP: the unit's card, kept for good, or the site's for now.
+  const ogImage = (page) => page.match(/<meta property="og:image" content="([^"]+)"/)?.[1];
+  const drawsCards = ogImage(unit) !== ogImage(html), shown = new URL(drawsCards ? ogImage(unit) : `/card${UNIT}.webp`, origin);
+  if (drawsCards) {
+    assert.equal(shown.pathname, `/card${UNIT}.webp`, `${UNIT}'s og:image (${shown.pathname}) is neither the site's card nor its own`);
+    assert.ok(shown.searchParams.get("v"), `${UNIT}'s og:image (${shown.pathname + shown.search}) carries no version (?v=), so a link preview can go on showing an old card under it`);
+  }
+  const picture = await get(origin, shown.pathname + shown.search), pictureBytes = Buffer.from(await picture.arrayBuffer());
+  assert.equal(picture.status, 200, `${shown.pathname}: HTTP ${picture.status}`);
+  assert.ok(mime(picture) === "image/webp" && startsWith(pictureBytes, "RIFF") && startsWith(pictureBytes, "WEBP", 8), `${shown.pathname}: not a WebP (${mime(picture)})`);
+  const cached = picture.headers.get("cache-control") ?? "", kept = /\bimmutable\b/.test(cached);
+  assert.ok(kept || cached === "no-store", `${shown.pathname}: cache-control ${cached || "(none)"} is neither a kept card's nor the stand-in's`);
+  console.log(`      ${UNIT}'s picture: ${kept ? "its own card" : drawsCards ? "the site's card for now (its own wasn't drawn in time; ask again)" : "the site's card (the project isn't set up to draw unit cards)"}`);
   // The CSP allows no inline script: anything injected into the page (Cloudflare's analytics beacon,
   // Rocket Loader, email obfuscation) would be blocked, so the zone must leave HTML alone. The JSON-LD
   // is a data block, which never runs.
@@ -369,6 +384,9 @@ const IMAGE = 'img[src^="blob:"]';
 const AUDIO = 'audio[src^="blob:"]';
 // A clip from a media pack, not the optimised sound (made in the page as a WAV).
 const PLAY_BUTTON = /^play (?!the sound optimised)/i;
+// A unit's link card and the mark it sets once drawn.
+const CARD_PATH = `${UNIT}?all&card`;
+const CARD_DRAWN = '[data-card="drawn"]';
 
 export async function browserSmoke(origin) {
   const { chromium } = await import("@playwright/test");
@@ -428,6 +446,11 @@ export async function browserSmoke(origin) {
 
     const csp = await page.evaluate(() => /** @type {any} */ (window).__csp);
     for (const violation of csp) problems.push(`CSP: ${violation}`);
+
+    // A unit's link card, the page the hosted browser photographs: it says when it is drawn (LinkCard.svelte).
+    await page.goto(new URL(CARD_PATH, origin).href, { waitUntil: "load" });
+    await page.locator(CARD_DRAWN).waitFor({ state: "attached", timeout: 30_000 }).catch(() => problems.push(`${CARD_PATH} didn't draw its card within 30 s`));
+    for (const violation of await page.evaluate(() => /** @type {any} */ (window).__csp)) problems.push(`CSP at ${CARD_PATH}: ${violation}`);
     for (const text of consoleErrors) {
       if (/Content Security Policy|Refused to/i.test(text)) problems.push(`console: ${text}`);
       else console.warn(`  console error (not failing): ${text}`);
@@ -487,7 +510,7 @@ async function main() {
       ["neurons by range", () => checkGraphRanges(opts.origin)],
     );
   }
-  if (opts.browser) steps.push(["browser smoke: images, a sound, no CSP violation", () => browserSmoke(opts.origin)]);
+  if (opts.browser) steps.push(["browser smoke: images, a sound, a unit's card, no CSP violation", () => browserSmoke(opts.origin)]);
 
   // Just after an upload the domain may still serve the last build for a moment.
   if (opts.http && opts.build) await waitForBuild(opts.origin, opts.build);
