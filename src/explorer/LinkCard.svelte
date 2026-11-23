@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
   import Atlas from "./Atlas.svelte";
+  import Connections from "./graph/Connections.svelte";
   import { Lens, provideLens } from "./lens.svelte";
   import { headId, neuronId, rolesOf } from "../lib/data";
+  import { router } from "../lib/router.svelte";
   import { SITE_NAME } from "../lib/site";
   import { primaryTokens } from "./unit/evidence";
 
@@ -10,6 +12,13 @@
   // fires on and what it makes the model say, and the atlas with its layer lit and the unit pinned. scripts/site/unfurl.js
   // has a hosted browser open this page (a unit's address with ?card) and keeps the picture it takes, once the page
   // marks itself drawn (data-card="drawn"). A card is a dark surface, as Ledger's are, whatever the viewer's theme.
+  //
+  // With ?card=circuit it is the card Discord shows, whose own text already carries the unit's words: the unit's
+  // connections as the explorer's rail draws and lists them (it is the rail, laid out for a card): the graph at true
+  // depth with its layers, and beside it the strongest of Driven by, Drives and Siblings.
+  const circuit = untrack(() => router.route.page === "explore" && router.route.card === "circuit");
+  // The rail's graph is shown larger here than it is laid out, so its canvas is asked for more pixels and stays sharp.
+  if (circuit) Object.defineProperty(window, "devicePixelRatio", { value: (window.devicePixelRatio || 1) * 1.3, configurable: true });
   const root = document.documentElement;
   root.dataset.theme = "dark";
   root.style.scrollbarGutter = "auto";      // the page's reserved scrollbar would take the card's right edge
@@ -24,7 +33,7 @@
   const pole = $derived(lens.neuronDetail?.poles[lens.side] ?? null);
   const row = $derived(lens.selectedNeuronRow);
   /** Everything the words need is in: the unit's detail and, for a neuron, its row (which holds its sides' titles). */
-  const loaded = $derived(head ? lens.headDetail !== null : pole !== null && (row !== null || lens.failures.includes(lens.rowsKey)));
+  const loaded = $derived(head ? lens.headDetail !== null : pole !== null && (circuit || row !== null || lens.failures.includes(lens.rowsKey)));
   const silent = $derived(!head && pole?.silent === true);
 
   /** A label without the examples it ends on ("… (PCB, 主板)", "…: 她, herself, she"): the card sets its tokens beneath. */
@@ -61,6 +70,9 @@
   let fx = $state<HTMLCanvasElement>();
   let squash = $state(1);
   let drawn = $state(false);
+  // The circuit: how much larger than the rail lays it out the graph is shown, and how far down its place it sits.
+  let scale = $state(1);
+  let drop = $state(0);
 
   const numbers = $derived(Array.from({ length: lens.model.layers }, (_, L) => L).filter((L) => L === lens.layer || (L % 5 === 0 && Math.abs(L - lens.layer) > 1)));
   const at = (layers: number) => `${(layers / lens.model.layers) * 100}%`;
@@ -138,10 +150,90 @@
     ctx.fill();
   }
 
+  /** The rail's graph has reached every unit it will (Graph.svelte marks it) and they have come to rest where the
+   *  stage puts them: where they were a frame ago, a few frames running. */
+  async function settled(): Promise<HTMLElement> {
+    let graph: HTMLElement | null = null;
+    while (!(graph = card?.querySelector<HTMLElement>(".figure .graph[data-settled]") ?? null)) await frame();
+    const marks = () => [...graph!.querySelectorAll(".node")].map((node) => { const at = node.getBoundingClientRect(); return `${at.x.toFixed(1)} ${at.y.toFixed(1)} ${at.width.toFixed(1)}`; }).join(",");
+    for (let last = "", same = 0, tries = 0; same < 4 && tries < 240; tries += 1) {
+      await frame();
+      const now = marks();
+      same = now === last ? same + 1 : 0;
+      last = now;
+    }
+    return graph;
+  }
+
+  /** The circuit, laid out: the graph as large as its place allows, the lists cut to their room, the unit's own
+   *  layer on the scale in ink, and a little light about the links. */
+  async function wire() {
+    await Promise.all(FACES.map((face) => document.fonts.load(face)));
+    const graph = await settled(), figure = graph.parentElement!, key = figure.querySelector<HTMLElement>(".key");
+    const room = figure.clientHeight - (key ? key.offsetHeight + 10 : 0);
+    scale = Math.min(figure.clientWidth / graph.offsetWidth, room / graph.offsetHeight, 1.62);
+    drop = (room - graph.offsetHeight * scale) / 2;
+    await document.fonts.ready;
+    await tick();
+    // The rows shown: three of what drives it and of what it drives, two siblings; a title too long for its row
+    // loses the examples it ends on, and the lists give up rows until they fit under its name: a sibling first,
+    // then the longer of the other two.
+    const lists = card!.querySelector<HTMLElement>(".lists")!;
+    const rows = (side: Element) => [...side.querySelectorAll<HTMLElement>(".row")].filter((item) => item.offsetParent !== null);
+    for (const text of lists.querySelectorAll<HTMLElement>(".title")) {
+      const cut = (text.textContent ?? "").replace(/\s*[(:（].*$/u, "");
+      if (text.scrollWidth > text.clientWidth && cut.length > 8) text.textContent = cut;
+    }
+    const sides = () => [...lists.querySelectorAll<HTMLElement>(".side")].filter((side) => rows(side).length);
+    const need = () => sides().reduce((sum, side) => sum + side.getBoundingClientRect().height, 0) + 14 * (sides().length - 1) + 18;
+    for (let guard = 0; guard < 8 && need() > lists.clientHeight + 1; guard += 1) {
+      const siblings = sides().find((side) => side.querySelector(".head")?.textContent === "Siblings");
+      const from = siblings && rows(siblings).length > 1 ? siblings : sides().filter((side) => side !== siblings).sort((a, b) => rows(b).length - rows(a).length)[0];
+      const left = from ? rows(from) : [];
+      if (left.length <= 1) break;
+      left[left.length - 1].style.display = "none";
+    }
+    // Its own layer on the scale: the number in ink, at its row; a number that would sit against it gives way.
+    const ticks = [...graph.querySelectorAll<HTMLElement>(".tick")], mark = graph.querySelector(".node.focus");
+    if (ticks.length && mark) {
+      const box = graph.getBoundingClientRect(), at = mark.getBoundingClientRect(), y = (at.top + at.height / 2 - box.top) / scale;
+      const own = ticks.find((item) => item.textContent === String(lens.layer)) ?? (graph.appendChild(ticks.find((item) => !item.classList.contains("edge"))?.cloneNode(false) ?? ticks[0].cloneNode(false)) as HTMLElement);
+      own.textContent = String(lens.layer);
+      own.style.top = `${y}px`;
+      own.style.color = "var(--ink)";
+      own.style.fontWeight = "600";
+      for (const item of ticks) if (item !== own && Math.abs(parseFloat(item.style.top) - y) < 15) item.style.visibility = "hidden";
+    }
+    await frame();
+    const links = graph.querySelector<HTMLCanvasElement>("canvas.links");
+    if (links && links.width && fx) {
+      const ratio = window.devicePixelRatio || 1, at = links.getBoundingClientRect();
+      fx.width = 1200 * ratio;
+      fx.height = 630 * ratio;
+      const ctx = fx.getContext("2d")!;
+      ctx.scale(ratio, ratio);
+      ctx.globalCompositeOperation = "lighter";
+      for (const [blur, alpha] of [[10, 0.5], [4, 0.45]]) {
+        ctx.filter = `blur(${blur}px) saturate(1.3)`;
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(links, at.left, at.top, at.width, at.height);
+      }
+    }
+  }
+
   let begun = false;
   $effect(() => {
     if (!loaded || begun) return;
     begun = true;
+    if (circuit) {
+      void (async () => {
+        await tick();
+        await wire();
+        await frame();
+        drawn = true;
+      })();
+      return;
+    }
     void (async () => {
       await tick();
       await fit();
@@ -158,7 +250,7 @@
 
 <svelte:head><meta name="robots" content="noindex" /></svelte:head>
 
-<div class="card" data-card={drawn ? "drawn" : "drawing"} style:--tint={lens.tint} bind:this={card}>
+{#snippet top()}
   <header class="top">
     <span class="term">
       <span class="alpha">{lens.model.name}</span>
@@ -167,6 +259,18 @@
     </span>
     <span class="wordmark">{SITE_NAME}</span>
   </header>
+{/snippet}
+
+{#if circuit}
+<div class="card circuit" data-card={drawn ? "drawn" : "drawing"} style:--tint={lens.tint} style:--k={scale} style:--drop="{drop}px" bind:this={card}>
+  {@render top()}
+  <h1 class="name" class:lent={!!lens.model.labelsFrom && !silent}>{loaded ? title : ""}</h1>
+  <Connections />
+  <canvas class="fx" bind:this={fx} aria-hidden="true"></canvas>
+</div>
+{:else}
+<div class="card" data-card={drawn ? "drawn" : "drawing"} style:--tint={lens.tint} bind:this={card}>
+  {@render top()}
 
   <section class="unit" aria-label={lens.selected === null ? undefined : head ? headId(lens.layer, lens.selected) : neuronId(lens.layer, lens.selected)}>
     {#if loaded}
@@ -199,6 +303,7 @@
   </footer>
   <canvas class="fx" bind:this={fx} aria-hidden="true"></canvas>
 </div>
+{/if}
 
 <style>
   /* The card's type is Ledger's card.css, as scripts/site/card.html has it, set here over the site's own tokens. */
@@ -239,4 +344,33 @@
   .nums span, .bands span { position: absolute; top: 0; transform: translateX(-50%); }
   .nums .on, .bands .on { color: var(--ink); font-weight: 600; }
   .fx { position: absolute; left: 0; top: 0; width: 1200px; height: 630px; color: var(--tint); mix-blend-mode: screen; pointer-events: none; }
+
+  /* The circuit: the rail itself (graph/Connections.svelte), its figure in the left column and its lists under the
+     unit's name in the right, at a card's sizes. Its tools and its mix are the explorer's and stay out. */
+  .circuit { display: grid; grid-template-columns: 436px minmax(0, 1fr); grid-template-rows: 52px auto minmax(0, 1fr); column-gap: 44px; padding: 46px 64px 42px 44px; pointer-events: none; }
+  .circuit .top { grid-column: 2; grid-row: 1; }
+  .name { grid-column: 2; grid-row: 2; margin: 22px 0 0; font: 600 34px/42px var(--display); letter-spacing: -0.028em; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; text-wrap: balance; }
+  .name.lent { font-family: var(--text); font-style: italic; }
+  .circuit :global(*) { animation: none !important; transition: none !important; }
+  .circuit :global(.rail) { display: contents; }
+  .circuit :global(.rail > .figure) { grid-column: 1; grid-row: 1 / 4; position: relative; display: block; min-height: 0; }
+  .circuit :global(.figure > .tools), .circuit :global(.figure > .mix) { display: none; }
+  .circuit :global(.figure > .graph) { position: absolute; left: 0; top: var(--drop); width: 340px; transform-origin: 0 0; transform: scale(var(--k)); }
+  .circuit :global(.figure > .key) { position: absolute; left: 24px; bottom: 0; flex-wrap: nowrap; gap: 16px; font: 500 15.5px/20px var(--text); color: var(--ink3); white-space: nowrap; }
+  .circuit :global(.figure > .key li) { gap: 7px; }
+  .circuit :global(.figure > .key .dot) { width: 10px; height: 10px; }
+  .circuit :global(.figure > .key .line) { width: 20px; height: 2.5px; }
+  .circuit :global(.rail > .lists) { grid-column: 2; grid-row: 3; display: flex; flex-direction: column; justify-content: flex-end; gap: 14px; min-height: 0; padding-top: 18px; }
+  .circuit :global(.lists .side) { display: block; }
+  .circuit :global(.lists .side:not(:has(.row))) { display: none; }
+  .circuit :global(.lists .side .head) { margin: 0 0 4px; padding: 0; font: 500 18px/24px var(--text); color: var(--ink3); }
+  .circuit :global(.lists .rows) { display: block; }
+  .circuit :global(.lists .side .row) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0 14px; height: 36px; padding: 0; border-radius: 0; background: none; }
+  .circuit :global(.lists .side .row:nth-child(n + 4)), .circuit :global(.lists .side:nth-child(n + 3) .row:nth-child(n + 3)) { display: none; }
+  .circuit :global(.lists .row .id) { grid-column: 1; grid-row: 1; gap: 10px; font: 500 20px/1 var(--text); color: var(--ink2); white-space: nowrap; }
+  .circuit :global(.lists .row .swatch) { width: 14px; height: 8px; border-radius: 4px; }
+  .circuit :global(.lists .row .title) { grid-column: 2; grid-row: 1; font: 400 21.5px/36px var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-wrap: nowrap; }
+  .circuit :global(.lists .row .title *) { display: inline; white-space: nowrap; text-wrap: nowrap; }
+  .circuit :global(.lists .row .value) { grid-column: 3; grid-row: 1; min-width: 96px; justify-content: flex-end; gap: 10px; font: 500 20px/1 var(--text); color: var(--ink2); }
+  .circuit :global(.lists .row .meter) { width: 30px !important; height: 5px; border-radius: 3px; }
 </style>

@@ -23,6 +23,11 @@ What the site draws for itself, in Ledger:
   the text face's italic where it is lent), what it fires on and what it makes the model say as tokens under their
   captions, and at the foot the explorer's own atlas, squashed into a strip, with the unit's layer lit and the unit
   marked. The light over the atlas is the unit's layer colour and the card's only effect.
+- The card of a unit's connections (the same component, `?card=circuit`), which Discord shows, since its own text
+  already carries the unit's words: the explorer's rail itself, laid out for a card. Its graph at true depth fills the
+  left column, as large as fits, with the unit's own layer on the scale in ink and a little light about the links;
+  on the right, under the same row and the unit's label, the three strongest of Driven by and of Drives and two
+  Siblings, a line each. The rail's tools and mix stay out.
 - The header's placement of `ThemeButton`, and the no-script summary's rules (`src/styles/site.css`).
 - A pruned model's neuron, or its parent's, names its counterpart at the end of the unit's meta line, after its tags
   (`src/explorer/unit/UnitBar.svelte`): "From Qwen3-8B L20·n10768", "Likely from" where only the weights say so, "Kept

@@ -140,8 +140,10 @@ export async function checkHtml(origin, rules, buildDir) {
   // Discord's component embed (unfurl.js): a data block in the head, held here to what Discord documents, since it
   // shows no preview at all for one it can't take: one Container, the kinds of component it allows with their keys
   // and no others, at most 3,000 bytes as written and 40 components.
-  const embedded = unit.match(EMBED);
-  assert.ok(embedded && unit.indexOf(embedded[0]) < unit.indexOf("</head>"), `${UNIT} carries no Discord component embed in its head`);
+  // (While it is being tried, only the address with ?discord carries it.)
+  const tried = unit.match(EMBED) ? unit : await (await get(origin, `${UNIT}?discord`)).text(), embedded = tried.match(EMBED);
+  assert.ok(embedded && tried.indexOf(embedded[0]) < tried.indexOf("</head>"), `${UNIT} carries no Discord component embed in its head, with ?discord or without`);
+  console.log(`      ${UNIT}'s Discord embed: ${tried === unit ? "on every share" : "only with ?discord"}, ${Buffer.byteLength(embedded[1])} bytes`);
   assert.ok(Buffer.byteLength(embedded[1]) <= 3000, `${UNIT}'s Discord embed is ${Buffer.byteLength(embedded[1])} bytes: over Discord's 3,000`);
   const embed = JSON.parse(embedded[1]), KEYS = { 17: ["type", "accent_color", "components"], 10: ["type", "content"], 12: ["type", "items"], 14: ["type", "spacing", "divider"], 1: ["type", "components"], 2: ["type", "style", "label", "url"] };
   let components = 0;
@@ -156,6 +158,11 @@ export async function checkHtml(origin, rules, buildDir) {
   hold(embed.component);
   assert.ok(components <= 40, `${UNIT}'s Discord embed has ${components} components: over Discord's 40`);
   assert.ok(embed.component.components.some((part) => part.type === 10 && part.content.includes("**L8·n344**")), `${UNIT}'s Discord embed doesn't name its unit`);
+  // The embed's own picture: the card of the unit's connections where the project draws them, else as the page's.
+  const pictured = new URL(embed.component.components.find((part) => part.type === 12)?.items[0].media.url ?? "about:blank");
+  assert.ok(["/card.webp", `/card${UNIT}.webp`, `/card/circuit${UNIT}.webp`].includes(pictured.pathname), `${UNIT}'s Discord embed pictures ${pictured.href}, which is none of its cards`);
+  const circuit = await get(pictured.origin, pictured.pathname + pictured.search), circuitBytes = Buffer.from(await circuit.arrayBuffer());
+  assert.ok(circuit.status === 200 && mime(circuit) === "image/webp" && startsWith(circuitBytes, "RIFF") && startsWith(circuitBytes, "WEBP", 8), `${pictured.pathname}: HTTP ${circuit.status} ${mime(circuit)}, not a WebP`);
   assert.ok(unit.includes("<title>L8·n344 · Qwen3-8B · Neuron Lens</title>"), `${UNIT} isn't titled with its unit: scripts/site/unfurl.js isn't running there, or couldn't read the catalog`);
   assert.match(unit, /<meta property="og:title" content="L8·n344 · [^"]+"/, `${UNIT}: its link preview isn't headed with its unit`);
   assert.match(unit, /<meta property="og:description" content="Qwen3-8B · layer 8 of 35 · association layers · [^"]+Labels by Claude Haiku 5\.5"/, `${UNIT}: its link preview doesn't describe its unit`);

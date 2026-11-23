@@ -28,9 +28,10 @@ const WAIT = 2500;                    // ms for the catalog, after which the pag
 const WIRED = 1200;                   // ms for the names of what a neuron is wired to, after which the embed goes without them
 const TITLE = 70, DESCRIPTION = 350;  // bytes: what Discord shows of each
 const COMPONENT = 3000;               // bytes: the most Discord takes of a component embed, as it is written in the page
+const EMBED = false;                  // every unit's page carries Discord's embed; until it has been seen in Discord, only an address with ?discord does
 const LINKS = 128, PER = 16, ENTRY = 6, DRIVEN = 2, DRIVES = 3;   // a pole's record: where its links start, and which lists (src/lib/data.ts, wireOf)
 const SILENT = "near-silent neuron";
-const PICTURE = /^\/card(\/[a-z0-9.-]+\/L\d{1,2}\/[nh]\d{1,5})\.webp$/;
+const PICTURE = /^\/card(\/circuit)?(\/[a-z0-9.-]+\/L\d{1,2}\/[nh]\d{1,5})\.webp$/;
 const DRAWN = 2;                      // the card's look or encoding: raise it when either changes, and every card is drawn again
 const DRAW = 7500;                    // ms a picture's request waits to be drawn; past it the site's card goes out, this once
 const TAKES = 3000;                   // ms a drawing usually takes, for judging whether a busy browser's turn comes in time
@@ -46,13 +47,17 @@ export default {
     const unit = request.method === "GET" ? unitAt(url.pathname) : null;
     if (!unit || page.status !== 200 || !(page.headers.get("content-type") ?? "").includes("text/html")) return page;
     // With ?card the address is the card itself, which the hosted browser opens: it needs no words, only to draw soon.
-    if (url.searchParams.has("card")) return ahead(page, unit, context);
+    if (url.searchParams.has("card")) return ahead(page, unit, context, url.searchParams.get("card") === "circuit");
     try {
-      const has = draws(env) ? keptCard(env, unit).then((body) => (void body?.cancel(), body !== null), () => false) : false;
-      const [words, kept] = await Promise.all([describe(unit, AbortSignal.timeout(WAIT)), has]);
+      // Discord shows nothing at all for an embed it won't take, so a new one is tried on an address of its own first.
+      const embedded = EMBED || url.searchParams.has("discord");
+      const has = (circuit) => (draws(env) ? keptCard(env, unit, circuit).then((body) => (void body?.cancel(), body !== null), () => false) : false);
+      const [words, kept, wired] = await Promise.all([describe(unit, AbortSignal.timeout(WAIT)), has(false), embedded && has(true)]);
       // A picture not kept yet is named at an address of its own: whoever asks may get the site's card in its place
       // (below) and keep that under the address, which the unit's own card then never has to get past.
-      return rewrite(page, words, draws(env) ? `${url.origin}/card${pathOf(unit)}.webp?v=${versionOf(unit)}${kept ? "" : "-new"}` : null, url.origin);
+      const named = (circuit, there) => `${url.origin}/card${circuit ? "/circuit" : ""}${pathOf(unit)}.webp?v=${versionOf(unit)}${there ? "" : "-new"}`;
+      // Discord's embed carries the words itself, so its picture is the unit's connections, where it has any to draw.
+      return rewrite(page, words, draws(env) ? named(false, kept) : null, draws(env) && words.embed.circuit ? named(true, wired) : null, embedded ? url.origin : null);
     } catch {
       return page;
     }
@@ -175,7 +180,7 @@ async function describe({ id, model, layer, kind, index }, signal) {
   const credit = !model.labels ? "Not labelled yet" : lent ? `Labels by Claude Haiku 5.5, written for ${SITE.models[source].name}` : "Labels by Claude Haiku 5.5";
   const lines = [];      // [text, kept only while the whole fits]
   const body = [];       // the same for Discord's embed, in its Markdown
-  let what, side = "", wiring = "", foot = "";
+  let what, side = "", wiring = "", foot = "", circuit = true;      // (a head always has connections to draw)
 
   if (kind === "h") {
     const got = await range(await objectUrl(source, "heads/graph.bin", signal), (layer * model.heads + index) * HEAD_WIRE, HEAD_WIRE, signal);
@@ -207,6 +212,8 @@ async function describe({ id, model, layer, kind, index }, signal) {
     const pole = detail?.poles[at], label = pole?.label ?? {}, shown = poles[at], other = poles[1 - at];
     side = `${at ? "−" : "＋"} side`;
     lines.push([`${where} · ${at ? "−" : "+"} side`]);
+    // A near-silent neuron, or one its record links to nothing, has no circuit to draw.
+    circuit = !(pole ? pole.silent : shown.silent) && [DRIVEN, DRIVES].some((list) => links(got[at].bytes, list, model).length > 0);
     if (pole ? pole.silent : shown.silent) {
       what = SILENT;
       lines.push(["Near-silent: it almost never fires."]);
@@ -237,7 +244,7 @@ async function describe({ id, model, layer, kind, index }, signal) {
     accent: depthColour(layer, model.layers),
     alt: `${SITE.name}: ${name} of ${model.name}, ${what}, with the tokens ${kind === "h" ? "it writes" : what === SILENT ? "its weights read" : "it fires on and those it makes the model say"}, and its layer lit in the model's atlas.`,
     // For Discord's embed: where it is, what it is, its lines, its connections, the small print, and where its buttons go.
-    embed: { where, what, name: `**${name}** · ${side}`, body, wiring, foot: `${foot}${credit}`, path: `/${id}/L${layer}`, at: `${kind}${index}`, layer, head: kind === "h" },
+    embed: { where, what, name: `**${name}** · ${side}`, body, wiring, foot: `${foot}${credit}`, path: `/${id}/L${layer}`, at: `${kind}${index}`, layer, head: kind === "h", circuit },
   };
 }
 
@@ -282,9 +289,9 @@ function component({ accent, alt, embed }, picture, origin) {
 
 /** The page with the unit's words in its head, and its picture where one is drawn; everything else, and every
  *  header, as it was. */
-function rewrite(page, words, card, origin) {
+function rewrite(page, words, card, circuit, origin) {
   const content = (value) => ({ element(element) { element.setAttribute("content", value); } });
-  const embed = component(words, card ?? SITE.picture, origin);
+  const embed = origin ? component(words, circuit ?? card ?? SITE.picture, origin) : null;
   const rewriter = new HTMLRewriter()
     .on("title", { element(element) { element.setInnerContent(words.title); } })
     .on('meta[name="description"]', content(words.summary))
@@ -301,7 +308,8 @@ function rewrite(page, words, card, origin) {
 
 // ---------- the picture: a unit's own card, drawn the first time it is asked for and kept
 //
-// A unit's page names /card/<its address>.webp as its picture. The first request for it has Cloudflare's hosted
+// A unit's page names /card/<its address>.webp as its picture, and in Discord's embed /card/circuit/<its address>.webp,
+// the card of its connections (?card=circuit), drawn and kept the same way. The first request for it has Cloudflare's hosted
 // browser (Browser Run's screenshot endpoint) open the unit's address with ?card, which draws the card and nothing
 // else, and photograph it; the photograph is kept and goes out to whoever asked. Every later request is served what
 // was kept, so a unit costs the hosted browser's time once per catalog build (and again if it is shared after KEEP).
@@ -325,26 +333,30 @@ const pathOf = ({ id, layer, kind, index }) => `/${id}/L${layer}/${kind}${index}
 /** What a unit's card was drawn from: the card's look and the builds it reads (its own and, for a base model, the
  *  one its labels come from). Another of either is another picture, at another address and under another key. */
 const versionOf = ({ id, model }) => [DRAWN, SITE.builds[id], model.labels && model.labels !== id ? SITE.builds[model.labels] : ""].filter(Boolean).join("-");
-const keyOf = (unit) => `${versionOf(unit)}${pathOf(unit)}.webp`;
+const keyOf = (unit, circuit = false) => `${versionOf(unit)}${circuit ? "/circuit" : ""}${pathOf(unit)}.webp`;
 /** A unit's kept picture as a stream (to send, or to cancel when only asking whether there is one: KV has no other
  *  way to ask), or null. */
-const keptCard = (env, unit) => env.CARDS.get(keyOf(unit), "stream");
+const keptCard = (env, unit, circuit = false) => env.CARDS.get(keyOf(unit, circuit), "stream");
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
 async function picture(request, env, context, url) {
-  const unit = request.method === "GET" || request.method === "HEAD" ? unitAt(url.pathname.match(PICTURE)?.[1] ?? "") : null;
+  const [, wired, path] = url.pathname.match(PICTURE) ?? [], circuit = Boolean(wired);
+  const unit = path && (request.method === "GET" || request.method === "HEAD") ? unitAt(path) : null;
   if (!unit) return new Response("No such card.\n", { status: 404, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
-  // The site's card under this address, for now: kept by no one, so the unit's own takes its place once drawn.
+  const drawn = (body, keep = "public, max-age=31536000, immutable") => new Response(body, { headers: { "content-type": "image/webp", "cache-control": keep, "x-content-type-options": "nosniff" } });
+  // Another card under this address, for now, kept by no one, so the unit's own takes its place once drawn: for its
+  // circuit, the card of what it is, if that is already kept; else the site's card.
   const instead = async () => {
+    const other = circuit && draws(env) ? await keptCard(env, unit).catch(() => null) : null;
+    if (other) return drawn(other, "no-store");
     const card = await env.ASSETS.fetch(new URL("/card.webp", url));
     const headers = new Headers(card.headers);
     headers.set("cache-control", "no-store");
     return new Response(card.body, { status: card.status, headers });
   };
-  const drawn = (body) => new Response(body, { headers: { "content-type": "image/webp", "cache-control": "public, max-age=31536000, immutable", "x-content-type-options": "nosniff" } });
   try {
     if (!draws(env)) return await instead();
-    const key = keyOf(unit), kept = await keptCard(env, unit);
+    const key = keyOf(unit, circuit), kept = await keptCard(env, unit, circuit);
     if (kept) return drawn(kept);
     // Drawn here, and kept whether or not this request waits for it (it goes out as soon as it is drawn, and is put
     // away after). A busy browser (it takes one request every ten seconds on the free plan, so two new units shared
@@ -352,7 +364,7 @@ async function picture(request, env, context, url) {
     // leaves time to draw, and otherwise behind it, `late` letting the site's card go out at once.
     let late;
     const turned = new Promise((resolve) => { late = resolve; });
-    const page = `${url.origin}${pathOf(unit)}?${unit.kind === "n" ? "all&" : ""}card`, asked = Date.now();
+    const page = `${url.origin}${pathOf(unit)}?${circuit ? "card=circuit" : unit.kind === "n" ? "all&card" : "card"}`, asked = Date.now();
     const drawing = (async () => {
       for (let tries = 0; ; tries += 1) {
         const shot = await photograph(env, page);
@@ -375,13 +387,14 @@ async function picture(request, env, context, url) {
  *  card reads first, which the page could only ask for once the script, the chunk and the manifest were all in,
  *  one after another. (The files by name only where this worker already holds the build's manifest; else it fetches
  *  it for the next card.) Measured on a neuron's card, it is drawn in about half the time. */
-function ahead(page, unit, context) {
+function ahead(page, unit, context, circuit) {
   const { id, kind, layer } = unit, fetched = (url) => `<${url}>; rel=preload; as=fetch; crossorigin`;
   // (The style as Vite's loader will ask for it, without credentials, or the browser fetches it a second time.)
   const links = SITE.card.map((path) => (path.endsWith(".js") ? `<${path}>; rel=modulepreload` : `<${path}>; rel=preload; as=style; crossorigin`));
   links.push(fetched(`${SITE.catalog}/${id}/${SITE.builds[id]}.json`));
   const manifest = manifests.get(id);
-  const files = kind === "n" ? ["index.json", "vocab.json", "scores.json", `neurons/L${pad(layer)}/index.json`] : ["index.json", "vocab.json", "heads/index.json", `heads/L${pad(layer)}.json`];
+  // (A neuron's circuit has no atlas, so neither every neuron's score nor its layer's list; its links are read by range.)
+  const files = kind === "h" ? ["index.json", "vocab.json", "heads/index.json", `heads/L${pad(layer)}.json`] : circuit ? ["index.json", "vocab.json"] : ["index.json", "vocab.json", "scores.json", `neurons/L${pad(layer)}/index.json`];
   if (manifest) links.push(...files.filter((path) => manifest[path]).map((path) => fetched(`${SITE.catalog}/o/${manifest[path]}`)));
   else context.waitUntil(objectUrl(id, files[0], AbortSignal.timeout(WAIT)).catch(() => {}));
   const headers = new Headers(page.headers);

@@ -119,6 +119,17 @@ test("a unit's address with ?card draws its link card and nothing else", async (
   expect(new URL(page.url()).search).toBe("?all&card");
 });
 
+test("with ?card=circuit a unit's address draws the card of its connections", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 630 });
+  await page.goto("/qwen3-8b/L8/n344?card=circuit");
+  const card = page.locator('[data-card="drawn"]');
+  await expect(card).toBeVisible();
+  await expect(card.getByRole("complementary", { name: "Connections" })).toBeAttached();
+  await expect(card.getByRole("heading", { name: "Driven by" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Site" })).toHaveCount(0);
+  expect(new URL(page.url()).search).toBe("?card=circuit");
+});
+
 const TOUR = ["/","/gemma-4-12b", "/qwen3-8b/L8/n344", "/qwen3-8b/L20/h17", "/gemma-4-12b/L33/n12225", "/gemma-4-12b/L28/heads", "/gemma-4-12b/L14/n8313?all", "/about", "/credits", "/no-such-page"];
 
 test("no console errors anywhere on the tour", async ({ page }) => {

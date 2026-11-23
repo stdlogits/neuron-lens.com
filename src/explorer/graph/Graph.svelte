@@ -264,7 +264,7 @@
   });
 </script>
 
-<div class="graph" bind:clientWidth={width} style:height={`${BOX}px`}>
+<div class="graph" bind:clientWidth={width} style:height={`${BOX}px`} data-settled={graph.settled ? "" : undefined}>
   {#if width > 0}
     {#each ticks as tick, i (tick.key)}
       {#if tick.edge}

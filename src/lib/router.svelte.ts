@@ -7,7 +7,8 @@
 //   /gemma-4-12b/heads             heads, at the model's starting layer for heads
 //   /gemma-4-12b/L35/heads         a layer's heads
 //   /gemma-4-12b/L35/h14           a head (a unit's address with ?card draws only its link card, the
-//                                  picture scripts/site/unfurl.js has taken of it)
+//                                  picture scripts/site/unfurl.js has taken of it; ?card=circuit the
+//                                  one of its connections, which Discord shows)
 //   /about, /credits
 // Links from drowse.ai's old page (/neuron-lens?model=…&layer=…&neuron=…, redirected here with their
 // query) are rewritten to these paths on arrival.
@@ -26,8 +27,8 @@ export interface ExploreRoute {
   all: boolean;
   /** A unit's connections, full screen. */
   graph?: boolean;
-  /** A unit drawn as its link card and nothing else. */
-  card?: boolean;
+  /** A unit drawn as its link card and nothing else: what it is and where, or ("circuit") its connections. */
+  card?: boolean | "circuit";
 }
 export type Route = ExploreRoute | { page: "about" } | { page: "credits" } | { page: "missing" };
 
@@ -59,7 +60,7 @@ export function parse(pathname: string, search = ""): Route {
   if (!unit) return MISSING;
   const index = Number(unit[2]);
   const graph = query.has("graph");
-  const card = query.has("card");
+  const card = query.get("card") === "circuit" ? "circuit" : query.has("card");
   if (unit[1] === "h") return index < model.heads ? { ...route, unit: "heads", index, all: false, graph, card } : MISSING;
   return index < model.mlp ? { ...route, index, graph, card } : MISSING;
 }
@@ -95,7 +96,7 @@ export function href(route: Route): string {
     return `/${model}${unit === "heads" ? "/heads" : ""}${all ? "?all" : ""}`;
   }
   const base = `/${model}/L${layer}`;
-  const ofUnit = [route.graph ? "graph" : "", route.card ? "card" : ""].filter((flag) => flag && index !== null);
+  const ofUnit = [route.graph ? "graph" : "", route.card === "circuit" ? "card=circuit" : route.card ? "card" : ""].filter((flag) => flag && index !== null);
   if (unit === "heads") return index === null ? `${base}/heads` : `${base}/h${index}${ofUnit.length ? `?${ofUnit.join("&")}` : ""}`;
   const query = [all ? "all" : "", ...ofUnit].filter(Boolean).join("&");
   return `${index === null ? base : `${base}/n${index}`}${query ? `?${query}` : ""}`;
