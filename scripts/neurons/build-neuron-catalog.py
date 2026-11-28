@@ -123,12 +123,13 @@ WEIGHT_READ_OF = {"before_R": "read_R", "before_S": "read_S", "mlp_R": "write_R"
 # A head has three inputs where a pole has one read direction, and no weight edges: its `driven`, `heads` and `mix` are its
 # value's, and its query's and key's follow them, with its query's and key's mixes at the record's end.
 ENTRY = np.dtype([("id", "<u4"), ("v", "<f2")])
-RELATIONS = ("in", "out", "driven", "drives", "heads", "with", "drives_heads")
+RELATIONS = ("in", "out", "driven", "drives", "heads", "with", "drives_heads", "in_heads", "out_heads")
 HEAD_RELATIONS = ("driven", "heads", "q_driven", "q_heads", "k_driven", "k_heads", "drives", "drives_heads", "with")
+HEAD_WEIGHT_RELATIONS = ("in", "in_heads", "q_in", "q_in_heads", "k_in", "k_in_heads", "out", "out_heads")
 HEADER = [("conf", "u1"), ("flags", "u1"), ("pack", "u1"), ("pad", "u1"), ("off", "<u4"), ("len", "<u4"), ("mix", "<f2", (3,)), ("title", "S110")]
 WIRE = np.dtype([*HEADER, *[(r, ENTRY, (K,)) for r in RELATIONS]])
-HEAD_WIRE = np.dtype([*HEADER, *[(r, ENTRY, (K,)) for r in HEAD_RELATIONS], ("mix_q", "<f2", (3,)), ("mix_k", "<f2", (3,))])
-assert WIRE.itemsize == 800 and HEAD_WIRE.itemsize == 1004
+HEAD_WIRE = np.dtype([*HEADER, *[(r, ENTRY, (K,)) for r in HEAD_RELATIONS], ("mix_q", "<f2", (3,)), ("mix_k", "<f2", (3,)), *[(r, ENTRY, (K,)) for r in HEAD_WEIGHT_RELATIONS]])
+assert WIRE.itemsize == 992 and HEAD_WIRE.itemsize == 1772
 NONE = 0xFFFFFFFF
 CHANNEL_SHIFT = 28
 STOP = set("""a an the and or of to in on for with by as at from into its it this that these those is are be
@@ -351,6 +352,29 @@ def blank_wires(n, dtype, relations):
 def put_wires(rec, relation, ids, vals):
     rec[relation]["id"] = ids[:, :K]
     rec[relation]["v"] = np.nan_to_num(vals[:, :K]).astype("<f2")
+
+
+def merge_channel_heads(table, prefix):
+    """Merge ``{v,q,k}_<prefix>`` head edge lists into top-K ``(head_id | channel<<CHANNEL_SHIFT, push)`` per row."""
+    ids_list, vals_list = [], []
+    for channel, c in enumerate("vqk"):
+        if f"{c}_{prefix}_layer" not in table.column_names:
+            continue
+        hid = head_ids(mat(table, f"{c}_{prefix}_layer", np.int32), mat(table, f"{c}_{prefix}", np.int32))
+        packed = np.where(hid != NONE, hid | (np.uint32(channel) << np.uint32(CHANNEL_SHIFT)), NONE).astype("<u4")
+        val = np.where(hid != NONE, np.nan_to_num(mat(table, f"{c}_{prefix}_push")), -1.0).astype(np.float32)
+        ids_list.append(packed)
+        vals_list.append(val)
+    if not ids_list:
+        return None
+    all_ids = np.concatenate(ids_list, axis=1)
+    all_vals = np.concatenate(vals_list, axis=1)
+    score = np.where(all_ids != NONE, np.abs(all_vals), -1.0)
+    order = np.argsort(-score, axis=1, kind="stable")[:, :K]
+    rows = np.arange(len(all_ids))[:, None]
+    out_ids = all_ids[rows, order]
+    out_vals = np.where(out_ids != NONE, all_vals[rows, order], 0.0)
+    return out_ids, out_vals
 
 
 def matched_reads(columns, trusted, primary=()):
@@ -647,6 +671,11 @@ def neuron_layer(L):
         for r in ("in", "out"):
             layer, neuron, sign = (mat(edges, f"{r}_{x}", np.int32) for x in ("layer", "neuron", "pole"))
             put_wires(wires, r, pole_ids(layer, neuron, sign), mat(edges, f"{r}_push"))
+        if "in_head_layer" in edges.column_names:
+            put_wires(wires, "in_heads", head_ids(mat(edges, "in_head_layer", np.int32), mat(edges, "in_head", np.int32)), mat(edges, "in_head_push"))
+        out_h = merge_channel_heads(edges, "out_head")
+        if out_h is not None:
+            put_wires(wires, "out_heads", *out_h)
     if sources is not None:
         for r, name, value in (("driven", "driven", "share"), ("with", "with", "co")):
             layer, neuron, sign = (mat(sources, f"{name}_{x}", np.int32) for x in ("layer", "neuron", "pole"))
@@ -722,8 +751,9 @@ def heads():
     t = {name: pq.read_table(f"{catalog}/heads/{name}.parquet") for name in names}
     media_t = {m: x for m in P["media"] if (x := table_or_none(f"{catalog}/heads/{m}.parquet")) is not None}
     sources = table_or_none(f"{catalog}/heads/sources.parquet")
+    edges = table_or_none(f"{catalog}/heads/edges.parquet")
     layer, head = col(t["reads"], "layer").astype(int), col(t["reads"], "head").astype(int)
-    for x in [*t.values(), *media_t.values(), *([sources] if sources is not None else [])]:
+    for x in [*t.values(), *media_t.values(), *([sources] if sources is not None else []), *([edges] if edges is not None else [])]:
         assert (col(x, "layer") == layer).all() and (col(x, "head") == head).all(), "head tables out of order"
     n = len(layer)
     ids = {c: mat(t["reads"], f"{c}_ids", np.int32) for c in HEAD_READS}
@@ -790,7 +820,7 @@ def heads():
         weights, shown = search_weights(header, rd, peaks, [B["fires"], B["attends"], B["writes"]])
         postings.add(L * HEADS + h, True, dict(weights.most_common(40)), shown, (), score)
     os.makedirs(f"{out}/heads", exist_ok=True)
-    wires = blank_wires(n, HEAD_WIRE, HEAD_RELATIONS)
+    wires = blank_wires(n, HEAD_WIRE, (*HEAD_RELATIONS, *HEAD_WEIGHT_RELATIONS))
     for i in range(n):
         B = lab[i] or {}
         wires[i]["title"] = utf8_fit(shorten(B.get("writes"), 110), 110)
@@ -801,6 +831,14 @@ def heads():
             put_wires(wires, f"{into}heads", head_ids(mat(sources, f"{c}_driven_head_layer", np.int32), mat(sources, f"{c}_driven_head", np.int32)), mat(sources, f"{c}_driven_head_share"))
             wires[mix] = np.nan_to_num(np.stack([col(sources, f"{c}_{k}").astype(float) for k in ("neurons_share", "heads_share", "emb_share")], 1)).astype("<f2")
         put_wires(wires, "with", pole_ids(*(mat(sources, f"with_{x}", np.int32) for x in ("layer", "neuron", "pole"))), mat(sources, "with_co"))
+    if edges is not None:
+        for c, into in (("v", ""), ("q", "q_"), ("k", "k_")):
+            put_wires(wires, f"{into}in", pole_ids(*(mat(edges, f"{c}_in_{x}", np.int32) for x in ("layer", "neuron", "pole"))), mat(edges, f"{c}_in_push"))
+            put_wires(wires, f"{into}in_heads", head_ids(mat(edges, f"{c}_in_head_layer", np.int32), mat(edges, f"{c}_in_head", np.int32)), mat(edges, f"{c}_in_head_push"))
+        put_wires(wires, "out", pole_ids(*(mat(edges, f"out_{x}", np.int32) for x in ("layer", "neuron", "pole"))), mat(edges, "out_push"))
+        out_h = merge_channel_heads(edges, "out_head")
+        if out_h is not None:
+            put_wires(wires, "out_heads", *out_h)
     for relation, target in (("drives", "pole"), ("drives_heads", "head")):
         if ("head", target) in DRIVES:
             wires[relation]["id"], wires[relation]["v"] = DRIVES["head", target][0], DRIVES["head", target][1].astype("<f2")

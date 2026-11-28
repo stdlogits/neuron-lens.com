@@ -7,8 +7,8 @@
 import { dropAhead, headKey, headOf, loadHeadWire, loadPoleWire, poleId, poleOf, type Link, type Relation, type Through, type Wire } from "../../lib/data";
 import type { ModelInfo } from "../../lib/models";
 
-/** On a neuron, `context`, `weights` or `with`; on a head, `context` is its value, beside its `query`, its `key` and `with`. */
-export type Mode = "context" | "weights" | "with" | "query" | "key";
+/** The three relations on every unit: in context (driven by / drives), in the weights (wired from / wired to), or fires with. */
+export type Mode = "context" | "weights" | "with";
 export type Side = "up" | "down";
 export type Reach = "near" | "far" | "all";
 
@@ -54,7 +54,7 @@ const REACH: Record<Reach, { floor: number; expand: number; show: number; siblin
 
 const FOLLOW: Record<"context" | "weights", Record<Side, Relation[]>> = {
   context: { up: ["driven", "heads"], down: ["drives", "drivesHeads"] },
-  weights: { up: ["in"], down: ["out"] },
+  weights: { up: ["in", "inHeads"], down: ["out", "outHeads"] },
 };
 
 /** Its place in the order the model computes things: a layer's attention, then its MLP. */
@@ -66,9 +66,13 @@ export const headInput = (who: string, through: Through) => (through === 0 ? `wh
 export const nodeKey = (kind: "neuron" | "head", id: number) => `${kind[0]}${id}`;
 
 /** What a sibling shares with the unit, in words, for a tip. */
-export function siblingTip([above, below]: [number, number], mode: Mode, kind: "neuron" | "head"): string {
-  if (mode === "weights") return `Wired from ${above} of the same neurons, and to ${below} of the same`;
-  if (kind === "head") return `Its ${mode === "query" ? "query" : mode === "key" ? "key" : "value"} is driven by ${above} of the same units, and it drives ${below} of the same`;
+export function siblingTip([above, below]: [number, number], mode: Mode, kind: "neuron" | "head", channel: Through = 0): string {
+  const ch = channel === 1 ? "query" : channel === 2 ? "key" : "value";
+  if (mode === "weights") {
+    if (kind === "head") return `Its ${ch} is wired from ${above} of the same units, and it wires to ${below} of the same`;
+    return `Wired from ${above} of the same units, and to ${below} of the same`;
+  }
+  if (kind === "head") return `Its ${ch} is driven by ${above} of the same units, and it drives ${below} of the same`;
   return `Driven by ${above} of the same units, and drives ${below} of the same`;
 }
 
@@ -98,19 +102,24 @@ const wireOf = (walk: Walk, target: GraphNode, ahead = false) => (target.kind ==
 const AHEAD = 4;
 const AHEAD_MOST = 32;
 
+const isHeadRelation = (r: Relation) => r === "heads" || r === "drivesHeads" || r === "inHeads" || r === "outHeads";
+
 /** Every link followed from a node, as its kind and the link. The unit's own query or key stands in for its value upstream. */
 function follow(wire: Wire, relations: Relation[], input?: "query" | "key"): { kind: "neuron" | "head"; link: Link }[] {
   return relations.flatMap((relation) => {
-    const list = input && (relation === "driven" || relation === "heads") ? wire[input]![relation] : wire.links[relation];
-    return list.map((link) => ({ kind: relation === "heads" || relation === "drivesHeads" ? ("head" as const) : ("neuron" as const), link }));
+    const sub = input ? wire[input] : undefined;
+    const list = sub && (relation === "driven" || relation === "heads" || relation === "in" || relation === "inHeads")
+      ? sub[relation]
+      : wire.links[relation];
+    return list.map((link) => ({ kind: isHeadRelation(relation) ? ("head" as const) : ("neuron" as const), link }));
   });
 }
 
-async function walkSide(walk: Walk, focus: GraphNode, side: Side, mode: Exclude<Mode, "with">, reach: Reach) {
+async function walkSide(walk: Walk, focus: GraphNode, side: Side, mode: Exclude<Mode, "with">, channel: Through, reach: Reach) {
   const { floor, expand } = REACH[reach];
-  const relations = FOLLOW[mode === "weights" ? "weights" : "context"][side];
+  const relations = FOLLOW[mode][side];
   const share = mode !== "weights";
-  const input = mode === "query" || mode === "key" ? mode : undefined;
+  const input = focus.kind === "head" ? (channel === 1 ? "query" : channel === 2 ? "key" : undefined) : undefined;
   let budget = expand;
   const start = place(focus);
   const stops = side === "up" ? [...Array(start + 1).keys()].reverse() : [...Array(walk.model.layers * 2 - start).keys()].map((i) => i + start);
@@ -185,22 +194,37 @@ interface Kin { kind: "neuron" | "head"; id: number; value: number; weight: numb
  * what they share above; each of its children's links up from one, weighted the same, to what they share below.
  * A sibling shares both (their geometric mean), each the same way as the unit does. Read from its first parents'
  * and children's records, which the walk has mostly loaded already; the links it draws are theirs. */
-async function siblings(walk: Walk, focus: GraphNode, mode: Exclude<Mode, "with">, reach: Reach) {
+async function siblings(walk: Walk, focus: GraphNode, mode: Exclude<Mode, "with">, channel: Through, reach: Reach) {
   const { model } = walk;
   const wire = focus.wire!;
   const weights = mode === "weights";
-  const input: Through = mode === "query" ? 1 : mode === "key" ? 2 : 0;
-  const kin = (kind: "neuron" | "head", list: Link[]): Kin[] => {
-    const total = weights ? list.reduce((sum, link) => sum + Math.abs(link[1]), 0) || 1 : 1;
-    return list.map(([id, value, through]) => ({ kind, id, value, weight: value / total, through }));
+  const input: Through = focus.kind === "head" ? channel : 0;
+  const kin = (kind: "neuron" | "head", list: Link[], total = 1): Kin[] =>
+    list.map(([id, value, through]) => ({ kind, id, value, weight: value / total, through }));
+  const norm = (neurons: Link[], heads: Link[]): Kin[] => {
+    const total = weights ? ([...neurons, ...heads].reduce((sum, link) => sum + Math.abs(link[1]), 0) || 1) : 1;
+    return [...kin("neuron", neurons, total), ...kin("head", heads, total)];
   };
   const inputOf = (w: Wire, through: Through | undefined) => (through ? w[through === 1 ? "query" : "key"] ?? w.links : w.links);
   const own = inputOf(wire, input);
-  const parents = weights ? kin("neuron", wire.links.in) : [...kin("neuron", own.driven), ...kin("head", own.heads)];
-  const children = weights ? kin("neuron", wire.links.out) : [...kin("neuron", wire.links.drives), ...kin("head", wire.links.drivesHeads)];
+  const parents = weights ? norm(own.in, own.inHeads) : norm(own.driven, own.heads);
+  const children = weights ? norm(wire.links.out, wire.links.outHeads) : norm(wire.links.drives, wire.links.drivesHeads);
   // A parent's links down into the row, and a child's up from it; a head is reached through the input this view is of.
-  const below = (w: Wire) => (focus.kind === "head" ? kin("head", w.links.drivesHeads).filter((link) => link.through === input) : kin("neuron", weights ? w.links.out : w.links.drives));
-  const above = (w: Wire, child: Kin) => (focus.kind === "head" ? kin("head", inputOf(w, child.through).heads) : kin("neuron", weights ? w.links.in : inputOf(w, child.through).driven));
+  const below = (w: Wire) => {
+    const neurons = weights ? w.links.out : w.links.drives;
+    const heads = weights ? w.links.outHeads : w.links.drivesHeads;
+    const total = weights ? ([...neurons, ...heads].reduce((sum, link) => sum + Math.abs(link[1]), 0) || 1) : 1;
+    return focus.kind === "head"
+      ? kin("head", heads, total).filter((link) => link.through === input)
+      : kin("neuron", neurons, total);
+  };
+  const above = (w: Wire, child: Kin) => {
+    const src = inputOf(w, child.through);
+    const neurons = weights ? src.in : src.driven;
+    const heads = weights ? src.inHeads : src.heads;
+    const total = weights ? ([...neurons, ...heads].reduce((sum, link) => sum + Math.abs(link[1]), 0) || 1) : 1;
+    return focus.kind === "head" ? kin("head", heads, total) : kin("neuron", neurons, total);
+  };
   const inRow = (id: number) => {
     if (focus.kind === "head") return id !== focus.id && headOf(model.heads, id).layer === focus.layer;
     const { layer, neuron } = poleOf(model.mlp, id);
@@ -269,7 +293,7 @@ export function focusOf(model: ModelInfo, unit: "neurons" | "heads", layer: numb
 }
 
 /** Walk the graph around a unit, calling back as it grows. Stop by making `live` false. */
-export async function trace(model: ModelInfo, start: GraphNode, mode: Mode, reach: Reach, publish: (take: Take) => void, live: () => boolean) {
+export async function trace(model: ModelInfo, start: GraphNode, mode: Mode, reach: Reach, publish: (take: Take) => void, live: () => boolean, channel: Through = 0) {
   const focus = { ...start, flow: 1, onward: 1 };
   const walk: Walk = { model, flows: new Map([[focus.key, focus]]), edges: new Map(), live, update: () => publish(() => view(walk, focus, reach, false)) };
   const wire = await wireOf(walk, focus).catch(() => null);
@@ -284,8 +308,8 @@ export async function trace(model: ModelInfo, start: GraphNode, mode: Mode, reac
       walk.edges.set(`${other.key}>${focus.key}`, { key: `${other.key}>${focus.key}`, from: other.key, to: focus.key, value, flow: value });
     }
   } else {
-    await Promise.all((["up", "down"] as Side[]).map((side) => walkSide(walk, focus, side, mode, reach)));
-    if (live()) await siblings(walk, focus, mode, reach);
+    await Promise.all((["up", "down"] as Side[]).map((side) => walkSide(walk, focus, side, mode, channel, reach)));
+    if (live()) await siblings(walk, focus, mode, channel, reach);
   }
   if (!live()) return;
   // Everything shown gets its title, strongest first.

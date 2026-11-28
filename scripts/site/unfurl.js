@@ -21,8 +21,10 @@
 const SITE = /*SITE*/null;
 
 // A pole's record in a layer's graph.bin and a head's in heads/graph.bin (WIRE and HEAD_WIRE in the catalog's builder):
-// how sure the labeller was, its flags, where its detail is, then its title. The file's size is checked against these.
-const WIRE = 800, HEAD_WIRE = 1004;
+// how sure the labeller was, its flags, where its detail is, then its title. Both legacy (800/1004) and head-edge
+// (992/1772) record widths are accepted, checked against the file's whole size.
+const WIRES = new Set([800, 992]), HEAD_WIRES = new Set([1004, 1772]);
+const wireCache = new Map();
 const UNIT = /^\/([a-z0-9.-]+)\/L(\d{1,2})\/([nh])(\d{1,5})\/?$/;
 const WAIT = 2500;                    // ms for the catalog, after which the page goes out as it is
 const WIRED = 1200;                   // ms for the names of what a neuron is wired to, after which the embed goes without them
@@ -195,6 +197,21 @@ function depthColour(layer, layers) {
   return `#${rgb.map((v) => Math.round(Math.min(1, Math.max(0, gamma(v))) * 255).toString(16).padStart(2, "0")).join("")}`;
 }
 
+/** Read one fixed-width record from graph.bin, adapting once if the build uses a different supported record width. */
+async function readWire(source, path, slot, count, allowed, fallback, signal) {
+  const key = `${source}:${allowed === HEAD_WIRES ? "h" : "n"}`;
+  const url = await objectUrl(source, path, signal);
+  let width = wireCache.get(key) ?? fallback;
+  let got = await range(url, slot * width, width, signal);
+  const actual = got.size / count;
+  if (!allowed.has(actual)) throw new Error(`${path}: another record size`);
+  if (actual !== width) {
+    wireCache.set(key, actual);
+    got = await range(url, slot * actual, actual, signal);
+  }
+  return got;
+}
+
 /** What a preview says of a unit: the page's title as the explorer sets it, the preview's heading, and its lines. */
 async function describe({ id, model, layer, kind, index }, signal) {
   // A base model is shown with its post-trained model's labels (labelsFrom, src/lib/models.ts); its own are empty.
@@ -208,8 +225,7 @@ async function describe({ id, model, layer, kind, index }, signal) {
   let what, side = "", wiring = "", foot = "", circuit = true;      // (a head always has connections to draw)
 
   if (kind === "h") {
-    const got = await range(await objectUrl(source, "heads/graph.bin", signal), (layer * model.heads + index) * HEAD_WIRE, HEAD_WIRE, signal);
-    if (got.size !== HEAD_WIRE * model.layers * model.heads) throw new Error("heads/graph.bin: another record size");
+    const got = await readWire(source, "heads/graph.bin", layer * model.heads + index, model.layers * model.heads, HEAD_WIRES, 1772, signal);
     const file = await (await get(await objectUrl(source, `heads/L${pad(layer)}.json`, signal), signal)).json();
     const detail = file.heads.find((head) => head.h === index), label = detail?.label ?? {};
     what = record(got.bytes).title || "attention head";
@@ -220,9 +236,10 @@ async function describe({ id, model, layer, kind, index }, signal) {
     if (example) lines.push([`e.g. ${example}`, true]), body.push([`> ${firing(context, MARKS)}`, true]);
     if (label.writes) lines.push([`Writes: ${lower(label.writes)}`]), body.push([`**Writes** ${md(lower(label.writes))}`]);
   } else {
-    const url = await objectUrl(source, `neurons/L${pad(layer)}/graph.bin`, signal);
-    const got = await Promise.all([range(url, index * WIRE, WIRE, signal), range(url, (index + model.mlp) * WIRE, WIRE, signal)]);
-    if (got[0].size !== WIRE * 2 * model.mlp) throw new Error("graph.bin: another record size");
+    const path = `neurons/L${pad(layer)}/graph.bin`;
+    const first = await readWire(source, path, index, 2 * model.mlp, WIRES, 992, signal);
+    const second = await readWire(source, path, index + model.mlp, 2 * model.mlp, WIRES, 992, signal);
+    const got = [first, second];
     const poles = got.map((pole) => record(pole.bytes));
     const [{ pack, offset, length }] = poles;
     // The names of its connections wait no longer than this from here, the detail that says which side is shown and all.
@@ -284,7 +301,7 @@ function links(bytes, list, model) {
 /** A linked pole as a line of Discord's Markdown: which way it pushes, its ID as a link to it, and its title. */
 async function named({ pole, against }, id, source, model, signal) {
   const layer = Math.floor(pole / (2 * model.mlp)), slot = pole % (2 * model.mlp);
-  const { title } = record((await range(await objectUrl(source, `neurons/L${pad(layer)}/graph.bin`, signal), slot * WIRE, WIRE, signal)).bytes);
+  const { title } = record((await readWire(source, `neurons/L${pad(layer)}/graph.bin`, slot, 2 * model.mlp, WIRES, 992, signal)).bytes);
   return `${against ? "−" : "＋"} [L${layer}·n${slot % model.mlp}](${SITE.origin}/${id}/L${layer}/n${slot % model.mlp})${title ? ` ${md(cut(title, 60))}` : ""}`;
 }
 

@@ -48,7 +48,13 @@ function madeUpScores(model) {
 function blankRecord(wire) {
   const record = Buffer.alloc(wire);
   const firstLink = 128;
-  for (let at = firstLink; at < wire; at += 6) record.writeUInt32LE(0xffffffff, at);
+  // Head records hold mix_q/mix_k at bytes 992..1004; leave those zeroed and fill link slots with NONE.
+  const isHead = wire === 1004 || wire === 1772;
+  const end1 = isHead ? 992 : wire;
+  for (let at = firstLink; at + 6 <= end1; at += 6) record.writeUInt32LE(0xffffffff, at);
+  if (wire === 1772) {
+    for (let at = 1004; at + 6 <= wire; at += 6) record.writeUInt32LE(0xffffffff, at);
+  }
   return record;
 }
 

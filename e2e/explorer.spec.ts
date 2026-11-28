@@ -404,20 +404,74 @@ test("a head's rail splits what drives it over its three inputs", async ({ page 
   await page.goto("/qwen3-8b/L20/h17");
   const rail = page.getByRole("complementary", { name: "Connections" });
   const views = rail.getByRole("group", { name: "Which connections" });
-  await expect(views.getByRole("button", { name: "Value" })).toHaveAttribute("aria-pressed", "true");
+  const inputs = rail.getByRole("group", { name: "Which input" });
+  await expect(views.getByRole("button", { name: "In context" })).toHaveAttribute("aria-pressed", "true");
+  await expect(inputs.getByRole("button", { name: "Value" })).toHaveAttribute("aria-pressed", "true");
+  // The legacy mock fixture has headWire=1004 (no head weight edges yet), so In the weights stays hidden.
   await expect(views.getByRole("button", { name: "In the weights" })).toHaveCount(0);
   const drivenBy = rail.getByRole("heading", { name: "Driven by" }).locator("..").getByRole("link");
   await expect(rail.getByRole("heading", { name: "Drives" })).toBeVisible();
   await expect(drivenBy.first()).toBeVisible();
   const value = await drivenBy.allTextContents();
 
-  await views.getByRole("button", { name: "Query" }).click();
-  await expect(views.getByRole("button", { name: "Query" })).toHaveAttribute("aria-pressed", "true");
+  await inputs.getByRole("button", { name: "Query" }).click();
+  await expect(inputs.getByRole("button", { name: "Query" })).toHaveAttribute("aria-pressed", "true");
   await expect.poll(() => drivenBy.allTextContents()).not.toEqual(value);
 
   await views.getByRole("button", { name: "Fires with" }).click();
   await expect(rail.getByRole("heading", { name: "Fires with" })).toBeVisible();
   await expect(rail.getByRole("heading", { name: "Driven by" })).toHaveCount(0);
+  await expect(inputs).toHaveCount(0);
+});
+
+test("a head with head weight edges supports In the weights across Value, Query and Key", async ({ page }) => {
+  const index = await fixture<CatalogIndex>("qwen3-8b/index.json");
+  const headGraph = await fixture<{ wire: number; records: Record<string, string> }>("qwen3-8b/heads/graph.json");
+  const headId20 = 20 * index.headsPerLayer + 17;
+  // Upgrade L20·h17's 1004-byte record to 1772 bytes with synthetic Value/Key head weight edges & an out neuron edge.
+  const base = Buffer.from(headGraph.records[headId20], "base64");
+  const ext = Buffer.alloc(1772);
+  base.copy(ext, 0, 0, 1004);
+  for (let at = 1004; at + 6 <= 1772; at += 6) ext.writeUInt32LE(0xffffffff, at);
+  // Half-float 1.0 = 0x3c00; in (offset 1004): L8·n344 +; k_in_heads (offset 1004 + 5*96 = 1484): L19·h20; out (offset 1004 + 6*96 = 1580): L21·n0 +
+  const pole8 = 8 * 2 * index.neuronsPerLayer + 344;
+  const pole21 = 21 * 2 * index.neuronsPerLayer + 0;
+  const head19 = 19 * index.headsPerLayer + 20;
+  ext.writeUInt32LE(pole8, 1004);
+  ext.writeUInt16LE(0x3c00, 1008);
+  ext.writeUInt32LE(head19, 1484);
+  ext.writeUInt16LE(0x3c00, 1488);
+  ext.writeUInt32LE(pole21, 1580);
+  ext.writeUInt16LE(0x3c00, 1584);
+
+  await page.route("**/data/qwen3-8b/index.json", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...index, headWire: 1772 }) }),
+  );
+  await page.route("**/data/qwen3-8b/heads/graph.bin", (route) => {
+    const m = /^bytes=(\d+)-(\d+)$/.exec(route.request().headers()["range"] ?? "")!;
+    const [start, end] = [Number(m[1]), Number(m[2])];
+    const id = Math.floor(start / 1772);
+    const body = id === headId20 ? ext : (() => {
+      const b = Buffer.alloc(1772);
+      for (let at = 128; at + 6 <= 992; at += 6) b.writeUInt32LE(0xffffffff, at);
+      for (let at = 1004; at + 6 <= 1772; at += 6) b.writeUInt32LE(0xffffffff, at);
+      return b;
+    })();
+    return route.fulfill({ status: 206, contentType: "application/octet-stream", headers: { "content-range": `bytes ${start}-${end}/*`, "accept-ranges": "bytes" }, body });
+  });
+
+  await page.goto("/qwen3-8b/L20/h17");
+  const rail = page.getByRole("complementary", { name: "Connections" });
+  const views = rail.getByRole("group", { name: "Which connections" });
+  const inputs = rail.getByRole("group", { name: "Which input" });
+  await views.getByRole("button", { name: "In the weights" }).click();
+  await expect(rail.getByRole("heading", { name: "Wired from" })).toBeVisible();
+  await expect(rail.getByRole("heading", { name: "Wired to" })).toBeVisible();
+  const wiredFrom = rail.getByRole("heading", { name: "Wired from" }).locator("..");
+  await expect(wiredFrom).toContainText("L8·n344");
+
+  await inputs.getByRole("button", { name: "Key" }).click();
+  await expect(wiredFrom).toContainText("L19·h20");
 });
 
 test("the baskets sort a neuron's evidence and take you to each", async ({ page }) => {

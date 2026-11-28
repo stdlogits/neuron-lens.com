@@ -2,7 +2,7 @@
   import { onDestroy, untrack } from "svelte";
   import { Icon, fadeIn, fadeOut, hideTip } from "@stdlogits/ledger";
   import { bandOf, depthColor, type ModelInfo } from "../../lib/models";
-  import { headId, neuronId, percent } from "../../lib/data";
+  import { headId, neuronId, percent, type Through } from "../../lib/data";
   import { Ink, OVERSCAN, type View } from "./ink";
   import { layout, rows, spanOf, type Crop, type Layout, type Open, type Spot } from "./layout";
   import { Stage, type Look, type Seated, type Shown } from "./stage";
@@ -17,10 +17,11 @@
   // The links are drawn on a canvas (ink.ts): its own, behind the marks, or the navigator's, which sits
   // outside its zoom and draws them under its view, so they stay sharp at any zoom. A touch, with no
   // hover to show a unit's tip, opens its card (onpick) where a mouse's click would go straight there.
-  let { graph, model, mode, href, hovered, point, height = 780, open, labels = null, labelScale = 1, axis = true, onlaid, onpick, found = null, wave = null, round = 0, surface }: {
+  let { graph, model, mode, channel = 0, href, hovered, point, height = 780, open, labels = null, labelScale = 1, axis = true, onlaid, onpick, found = null, wave = null, round = 0, surface }: {
     graph: Graph;
     model: ModelInfo;
     mode: Mode;
+    channel?: Through;
     href: (kind: "neuron" | "head", layer: number, index: number) => string;
     hovered: string | null;
     /** The pointer has come to this unit, or left (null). */
@@ -148,11 +149,11 @@
   /** How it stands to the unit, under its title in the tip. */
   function standing(n: Seated): string | undefined {
     if (n.side === "focus") return undefined;
-    if (n.side === "sibling") return siblingTip(n.shares ?? [0, 0], mode, n.kind);
+    if (n.side === "sibling") return siblingTip(n.shares ?? [0, 0], mode, n.kind, channel);
     if (mode === "with") return `Active at ${Math.round(n.flow * 5)} of its first 5 top firings`;
     if (mode !== "weights") {
       const shareOf = (part: number) => percent(Math.min(1, part), part < 0.1 ? 1 : 0);
-      if (n.side === "up") return `${shareOf(n.flow)} of ${focus?.kind === "head" ? headInput("it", mode === "query" ? 1 : mode === "key" ? 2 : 0) : "its activation"}`;
+      if (n.side === "up") return `${shareOf(n.flow)} of ${focus?.kind === "head" ? headInput("it", channel) : "its activation"}`;
       // A head reached through its value and its query or key has both in its flow; what it writes is the value's share alone.
       if (n.kind === "head") return n.onward > 0 ? `${shareOf(n.onward)} of what this head writes` : `${shareOf(n.flow)} of where this head looks`;
       return `${shareOf(n.flow)} of this neuron's activation`;

@@ -483,17 +483,19 @@ const inflated = (bytes: ArrayBuffer) => new Response(new Blob([bytes]).stream()
 
 // ---------- connections: a fixed-width record per pole (graph.bin, see WIRE in the builder)
 
-export type Relation = "in" | "out" | "driven" | "drives" | "heads" | "with" | "drivesHeads";
-const POLE_RELATIONS = ["in", "out", "driven", "drives", "heads", "with", "drivesHeads"] as const;
-const HEAD_RELATIONS = ["driven", "heads", "qDriven", "qHeads", "kDriven", "kHeads", "drives", "drivesHeads", "with"] as const;
+export type Relation = "in" | "out" | "inHeads" | "outHeads" | "driven" | "drives" | "heads" | "with" | "drivesHeads";
+const POLE_RELATIONS_BASE = ["in", "out", "driven", "drives", "heads", "with", "drivesHeads"] as const;
+const POLE_RELATIONS_EXT = [...POLE_RELATIONS_BASE, "inHeads", "outHeads"] as const;
+const HEAD_RELATIONS_BASE = ["driven", "heads", "qDriven", "qHeads", "kDriven", "kHeads", "drives", "drivesHeads", "with"] as const;
+const HEAD_WEIGHT_RELATIONS = ["in", "inHeads", "qIn", "qInHeads", "kIn", "kInHeads", "out", "outHeads"] as const;
 /** The input a link reaches a head through: 0 its value, 1 its query, 2 its key. */
 export type Through = 0 | 1 | 2;
 /** One connection: the other unit's id and its value (a push, a share, or the share of firings in common); into a head, the input it arrives through. */
 export type Link = [id: number, value: number, through?: Through];
 /** The share of a unit's input from neurons, heads and the embedding. */
 export type Mix = [number, number, number];
-/** A head's query or key: what drives it there, as `driven`, `heads` and `mix` say for its value. */
-export interface HeadInput { driven: Link[]; heads: Link[]; mix: Mix }
+/** A head's query or key: what drives it there in context and by weight, as the top-level links say for its value. */
+export interface HeadInput { driven: Link[]; heads: Link[]; in: Link[]; inHeads: Link[]; mix: Mix }
 export interface Wire {
   /** The unit's clearest label, shortened, and its confidence 0–100. */
   title: string;
@@ -506,6 +508,8 @@ export interface Wire {
   links: Record<Relation, Link[]>;
   /** Where its neuron's detail is: a units pack, an offset and a length. */
   detail: [number, number, number];
+  /** Whether this record's build carries head weight edges (true for poles; true for heads when headWire includes them). */
+  hasWeightEdges: boolean;
   /** A head's other inputs. */
   query?: HeadInput;
   key?: HeadInput;
@@ -530,26 +534,37 @@ function half(bits: number): number {
 
 const utf8 = new TextDecoder();
 
-function wireOf(buffer: ArrayBuffer, perRelation: number, relations: readonly string[]): Wire {
+function readLinks(view: DataView, start: number, perRelation: number, relations: readonly string[]): Map<string, Link[]> {
+  return new Map(relations.map((relation, r) => {
+    const list: Link[] = [];
+    for (let i = 0; i < perRelation; i += 1) {
+      const at = start + (r * perRelation + i) * ENTRY_BYTES;
+      const id = view.getUint32(at, true);
+      if (id === NO_LINK) break;
+      const value = half(view.getUint16(at + 4, true));
+      list.push(relation === "drivesHeads" || relation === "outHeads" ? [id % 2 ** THROUGH_SHIFT, value, (id >>> THROUGH_SHIFT) as Through] : [id, value]);
+    }
+    return [relation, list] as const;
+  }));
+}
+
+function wireOf(buffer: ArrayBuffer, perRelation: number, isHead: boolean): Wire {
   const view = new DataView(buffer);
   const bytes = new Uint8Array(buffer);
   let end = TITLE_START;
   while (end < TITLE_START + TITLE_BYTES && bytes[end] !== 0) end += 1;
-  const lists = new Map(relations.map((relation, r) => {
-    const list: Link[] = [];
-    for (let i = 0; i < perRelation; i += 1) {
-      const at = LINKS_START + (r * perRelation + i) * ENTRY_BYTES;
-      const id = view.getUint32(at, true);
-      if (id === NO_LINK) break;
-      const value = half(view.getUint16(at + 4, true));
-      list.push(relation === "drivesHeads" ? [id % 2 ** THROUGH_SHIFT, value, (id >>> THROUGH_SHIFT) as Through] : [id, value]);
-    }
-    return [relation, list] as const;
-  }));
+  const block = perRelation * ENTRY_BYTES;
+  const baseRelations = isHead ? HEAD_RELATIONS_BASE : (buffer.byteLength >= LINKS_START + POLE_RELATIONS_EXT.length * block ? POLE_RELATIONS_EXT : POLE_RELATIONS_BASE);
+  const lists = readLinks(view, LINKS_START, perRelation, baseRelations);
+  const inputs = LINKS_START + baseRelations.length * block;
+  const headWeightsStart = inputs + 12;
+  const hasHeadWeights = isHead && buffer.byteLength >= headWeightsStart + HEAD_WEIGHT_RELATIONS.length * block;
+  if (hasHeadWeights) {
+    for (const [k, v] of readLinks(view, headWeightsStart, perRelation, HEAD_WEIGHT_RELATIONS)) lists.set(k, v);
+  }
   const list = (relation: string) => lists.get(relation) ?? [];
   const mixAt = (at: number): Mix => [half(view.getUint16(at, true)), half(view.getUint16(at + 2, true)), half(view.getUint16(at + 4, true))];
-  const links = Object.fromEntries(POLE_RELATIONS.map((relation) => [relation, list(relation)])) as Record<Relation, Link[]>;
-  const inputs = LINKS_START + relations.length * perRelation * ENTRY_BYTES;
+  const links = Object.fromEntries(POLE_RELATIONS_EXT.map((relation) => [relation, list(relation)])) as Record<Relation, Link[]>;
   return {
     title: utf8.decode(bytes.subarray(TITLE_START, end)),
     conf: bytes[0],
@@ -558,9 +573,10 @@ function wireOf(buffer: ArrayBuffer, perRelation: number, relations: readonly st
     mix: mixAt(12),
     links,
     detail: [bytes[2], view.getUint32(4, true), view.getUint32(8, true)],
-    ...(lists.has("qDriven") ? {
-      query: { driven: list("qDriven"), heads: list("qHeads"), mix: mixAt(inputs) },
-      key: { driven: list("kDriven"), heads: list("kHeads"), mix: mixAt(inputs + 6) },
+    hasWeightEdges: !isHead || hasHeadWeights,
+    ...(isHead ? {
+      query: { driven: list("qDriven"), heads: list("qHeads"), in: list("qIn"), inHeads: list("qInHeads"), mix: mixAt(inputs) },
+      key: { driven: list("kDriven"), heads: list("kHeads"), in: list("kIn"), inHeads: list("kInHeads"), mix: mixAt(inputs + 6) },
     } : {}),
   };
 }
@@ -581,7 +597,7 @@ function ownPoleWire(model: ModelId, id: number, early: boolean) {
     if (early) ahead.add(key);
     const { wire, neuronsPerLayer: mlp, connections } = await ownIndex(model);
     const { layer, neuron, pole } = poleOf(mlp, id);
-    return wireOf(await range(await dataUrl(model, `neurons/L${pad(layer)}/graph.bin`), (neuron + (pole < 0 ? mlp : 0)) * wire, wire, early ? key : undefined), connections, POLE_RELATIONS);
+    return wireOf(await range(await dataUrl(model, `neurons/L${pad(layer)}/graph.bin`), (neuron + (pole < 0 ? mlp : 0)) * wire, wire, early ? key : undefined), connections, false);
   });
 }
 function ownHeadWire(model: ModelId, id: number, early: boolean) {
@@ -590,7 +606,7 @@ function ownHeadWire(model: ModelId, id: number, early: boolean) {
   return records(key, async () => {
     if (early) ahead.add(key);
     const { headWire, connections } = await ownIndex(model);
-    return wireOf(await range(await dataUrl(model, "heads/graph.bin"), id * headWire, headWire, early ? key : undefined), connections, HEAD_RELATIONS);
+    return wireOf(await range(await dataUrl(model, "heads/graph.bin"), id * headWire, headWire, early ? key : undefined), connections, true);
   });
 }
 /** A borrower's record: its own, with the lender's title. */

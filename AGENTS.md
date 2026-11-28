@@ -92,8 +92,8 @@ quiet until pointed at, and comes last; so is a read the findings say fails on t
 Left is always what comes in and right what goes out. Beside them the rail holds its connections: a
 directed graph at true depth, and its strongest links in words. The graph opens at Near (only the units most
 of its flow passes through); Far and All follow it further. Wired to, driven by and fires with are
-three relations and stay three views (findings §12). A head has no wired to, because two heads meet through a matrix and not a dot product;
-what drives it is split over its three inputs, so its views are Value, Query, Key and Fires with.
+three relations and stay three views (findings §12) on both neurons and heads; on a head, both Driven by and Wired to
+split over its three inputs (Value, Query, Key), with Wired to shown once the model's build carries head weight edges.
 Each view but Fires with also shows the unit's siblings, beside it in its own row (a9's idea, 2026-11-17): units of its layer (heads for
 a head) that share both what feeds it and what it feeds in that view's relation. They are a kind of node, like what is above and below it,
 and not a fourth relation, so Wired to and Driven by each have their own. `siblings` in `trace.ts` reads them from the unit's first parents'
@@ -294,12 +294,12 @@ Labels come from neuron-lens's `scripts/10_labels.py`, per model. The builder al
 titles then fall back to a unit's media label or its peak tokens.
 
 Each layer's neurons are two kinds of file, both read by HTTP range. `graph.bin` holds a fixed-width
-record per pole (`WIRE` in the builder, 800 bytes): its title, where its detail is, and its 16 strongest
-links per relation, ids and half-floats, so a pole's record costs one small request and the graph can follow
+record per pole (`WIRE` in the builder, 992 bytes; 800 on legacy builds): its title, where its detail is, and its 16 strongest
+links per relation (including head weight edges), ids and half-floats, so a pole's record costs one small request and the graph can follow
 links as far as it likes. `units-<pack>.bin` holds each neuron's detail as deflated JSON, end to end, in
 packs of at most 20 MiB. The builder inverts every `sources` table for what each pole and head drives (the
-catalog lists only what drives a unit). `heads/graph.bin` holds a record per head (`HEAD_WIRE`, 1004 bytes): what drives
-it through its value, its query and its key, what fires with it, and what it drives.
+catalog lists only what drives a unit). `heads/graph.bin` holds a record per head (`HEAD_WIRE`, 1772 bytes; 1004 on legacy builds): what drives
+it through its value, its query and its key, what fires with it, what it drives, and its direct weight edges per channel.
 The graph's walk (`trace.ts`) settles a layer before the next, so it reads ahead: what already clears the floor
 a few layers on is asked for at once, as a read that waits behind any needed now (`range` in `data.ts`) and
 moves up when it is. The graph comes out the same; All settles in about a third of the time. A walk that ends drops the reads it asked

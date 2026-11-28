@@ -20,6 +20,7 @@
   });
 
   let mode = $state<Mode>("context");
+  let channel = $state<Through>(0);
   let reach = $state<Reach>("near");
   let hovered = $state<string | null>(null);
   // A unit lights what connects it once the pointer rests on it, so a pointer passing over the graph or
@@ -108,18 +109,25 @@
     return () => query.removeEventListener("change", look);
   });
   const FIRES_WITH = { value: "with" as const, label: "Fires with", hint: "Earlier neurons active when it fires" };
-  const modes = $derived<{ value: Mode; label: string; hint: string }[]>(isHead ? [
-    { value: "context", label: "Value", hint: "Where what it copies comes from, and goes" },
-    { value: "query", label: "Query", hint: "What sets where it looks, from its query" },
-    { value: "key", label: "Key", hint: "What sets where it looks, from its keys" },
-    FIRES_WITH,
-  ] : [
+  const hasHeadWeights = $derived((lens.index?.headWire ?? 0) > 1004);
+  const modes = $derived<{ value: Mode; label: string; hint: string }[]>([
     { value: "context", label: tight ? "Context" : "In context", hint: "What feeds it and what it feeds, in real text" },
-    { value: "weights", label: tight ? "Weights" : "In the weights", hint: "Direct links, from the weights alone" },
+    ...(!isHead || hasHeadWeights ? [{ value: "weights" as const, label: tight ? "Weights" : "In the weights", hint: "Direct links, from the weights alone" }] : []),
     FIRES_WITH,
   ]);
   // A view one kind of unit doesn't have stays chosen for when the page is on the other kind again.
   const shownMode = $derived<Mode>(modes.some((option) => option.value === mode) ? mode : "context");
+  const shownChannel = $derived<Through>(isHead ? channel : 0);
+  const CHANNEL_KEYS = ["value", "query", "key"] as const;
+  const channels = $derived<{ value: string; label: string; hint: string }[]>(isHead ? [
+    { value: "value", label: "Value", hint: shownMode === "weights" ? "Wired into what it writes, by weight" : "Where what it copies comes from, and goes" },
+    { value: "query", label: "Query", hint: shownMode === "weights" ? "Wired into its query, by weight" : "What sets where it looks, from its query" },
+    { value: "key", label: "Key", hint: shownMode === "weights" ? "Wired into its keys, by weight" : "What sets where it looks, from its keys" },
+  ] : []);
+  const setChannel = (value: string) => {
+    const idx = CHANNEL_KEYS.indexOf(value as (typeof CHANNEL_KEYS)[number]);
+    channel = (idx >= 0 ? idx : 0) as Through;
+  };
   const reaches: { value: Reach; label: string; hint: string }[] = [
     { value: "near", label: "Near", hint: "Only its strongest links" },
     { value: "far", label: "Far", hint: "Followed until the flow is faint" },
@@ -156,7 +164,7 @@
       if (!frame) { frame = requestAnimationFrame(flush); timer = window.setTimeout(flush, 100); }
     };
     const focus = focusOf(lens.model, lens.unit, lens.layer, lens.selected!, lens.side === 0 ? 1 : -1);
-    void trace(lens.model, focus, shownMode, reach, publish, () => latest === token);
+    void trace(lens.model, focus, shownMode, reach, publish, () => latest === token, shownChannel);
     return () => {
       cancelAnimationFrame(frame);
       clearTimeout(timer);
@@ -205,8 +213,9 @@
   }
 
   /** The input of a head this view is about: its value, unless it is on the query or the key. */
-  const input = $derived<Through>(shownMode === "query" ? 1 : shownMode === "key" ? 2 : 0);
+  const input = $derived<Through>(shownChannel);
   const DRIVEN_TIPS = ["Earlier units that make up most of what it writes", "Earlier units that set where it looks, at its query", "Earlier units that set where it looks, at its keys"];
+  const WIRED_FROM_TIPS = ["Earlier units that move its value most, by weight", "Earlier units that move its query most, by weight", "Earlier units that move its keys most, by weight"];
   const THROUGH = ["value", "query", "key"];
 
   const SHOWN = 8;
@@ -217,7 +226,8 @@
     .slice(0, SHOWN)
     .map((node): Row => ({ ...row(node.kind, [node.id, node.flow]), shares: node.shares })));
   const SIBLING_TIPS = {
-    weights: "Neurons in its layer wired from and to the same neurons",
+    weightsNeuron: "Neurons in its layer wired from and to the same units",
+    weightsHead: "Heads in its layer wired from and to the same units",
     neuron: "Neurons in its layer driven by the same units, and driving the same",
     head: "Heads in its layer driven by the same units, and driving the same",
   };
@@ -226,15 +236,16 @@
     const { links } = focusWire;
     const byStrength = (rows: Row[]) => rows.sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, SHOWN);
     const drives = { title: "Drives", tip: "Later units it drives most", rows: byStrength([...links.drives.map((link) => row("neuron", link)), ...headTargets(links.drivesHeads)]) };
+    const sibKey = shownMode === "weights" ? (isHead ? "weightsHead" : "weightsNeuron") : isHead ? "head" : "neuron";
     // Only once the walk has looked for them, so the list doesn't say None before it has.
-    const siblings = graph?.settled || siblingRows.length ? [{ title: "Siblings", tip: SIBLING_TIPS[shownMode === "weights" ? "weights" : isHead ? "head" : "neuron"], rows: siblingRows }] : [];
+    const siblings = graph?.settled || siblingRows.length ? [{ title: "Siblings", tip: SIBLING_TIPS[sibKey], rows: siblingRows }] : [];
     if (shownMode === "with") return [{ title: "Fires with", tip: "Earlier neurons active when it fires, beyond their usual rate", rows: links.with.slice(0, SHOWN).map((link) => row("neuron", link)) }];
+    const from = isHead && input === 1 ? focusWire.query! : isHead && input === 2 ? focusWire.key! : links;
     if (shownMode === "weights") return [
-      { title: "Wired from", tip: "Earlier neurons that move it most, by weight", rows: byStrength(collapsed(links.in)) },
-      { title: "Wired to", tip: "Later neurons it moves most, by weight", rows: byStrength(collapsed(links.out)) },
+      { title: "Wired from", tip: isHead ? WIRED_FROM_TIPS[input] : "Earlier units that move it most, by weight", rows: byStrength([...collapsed(from.in), ...from.inHeads.map((link) => row("head", link))]) },
+      { title: "Wired to", tip: "Later units it moves most, by weight", rows: byStrength([...collapsed(links.out), ...headTargets(links.outHeads)]) },
       ...siblings,
     ];
-    const from = shownMode === "query" || shownMode === "key" ? focusWire[shownMode]! : links;
     return [
       { title: "Driven by", tip: isHead ? DRIVEN_TIPS[input] : "Earlier units that make up most of its activation", rows: byStrength([...from.driven.map((link) => row("neuron", link)), ...from.heads.map((link) => row("head", link))]) },
       drives,
@@ -242,25 +253,25 @@
     ];
   });
   /** One list giving way to the next: a new unit, or a new view of it. */
-  const listKey = $derived(`${graph?.nodes.find((node) => node.side === "focus")?.key ?? ""}/${shownMode}`);
+  const listKey = $derived(`${graph?.nodes.find((node) => node.side === "focus")?.key ?? ""}/${shownMode}/${shownChannel}`);
 
   const hrefFor = (kind: "neuron" | "head", layer: number, index: number) => lens.unitHref(kind === "head" ? "heads" : "neurons", layer, index);
   // In the full-screen graph, a unit's mark opens it there.
   const graphHref = (kind: "neuron" | "head", layer: number, index: number) => lens.hrefFor({ unit: kind === "head" ? "heads" : "neurons", layer, index, all: kind === "neuron" && lens.all, graph: true });
   const focusNode = $derived(navGraph?.nodes.find((node) => node.side === "focus") ?? null);
   const focusName = $derived(focusNode ? (focusNode.kind === "head" ? headId(focusNode.layer, focusNode.index) : `${neuronId(focusNode.layer, focusNode.index)} ${focusNode.pole > 0 ? "+" : "−"}`) : "");
-  const shownValue = (title: string, { value, shares }: Row) => {
+  const shownValue = (title: string, { value, kind, shares }: Row) => {
     if (title === "Siblings") return `↑${shares?.[0] ?? 0} ↓${shares?.[1] ?? 0}`;
     if (shownMode === "with") return `${Math.round(value * 5)} of 5`;
-    if (shownMode === "weights") return `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(2)}`;
+    if (shownMode === "weights") return isHead || kind === "head" ? Math.abs(value).toFixed(2) : `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(2)}`;
     return `${value >= 0 ? "+" : "−"}${percent(Math.abs(value))}`;
   };
   /** What a row's number is. */
   function valueTip(title: string, { value, kind, through, shares }: Row): string {
-    if (title === "Siblings") return siblingTip(shares ?? [0, 0], shownMode, kind);
+    if (title === "Siblings") return siblingTip(shares ?? [0, 0], shownMode, kind, input);
     if (title === "Fires with") return `Active at ${Math.round(value * 5)} of its first 5 top firings`;
-    if (title === "Wired from") return "How far its firing moves this neuron";
-    if (title === "Wired to") return "How far this neuron's firing moves it";
+    if (title === "Wired from") return isHead ? `How far its firing moves this head's ${THROUGH[input]}` : "How far its firing moves this neuron";
+    if (title === "Wired to") return kind === "head" ? `How far this ${isHead ? "head's" : "neuron's"} firing moves that head's ${THROUGH[through[0] ?? 0]}` : `How far this ${isHead ? "head's" : "neuron's"} firing moves it`;
     const what = title === "Driven by"
       ? (isHead ? headInput("it", input) : "its activation")
       : (kind === "head" ? headInput("that head", through[0] ?? 0) : "that neuron's activation");
@@ -269,7 +280,7 @@
   // A share can run past the whole, with another taking it back.
   const signedPercent = (value: number) => `${value < -0.005 ? "−" : ""}${percent(Math.abs(value) < 0.005 ? 0 : Math.abs(value))}`;
   const top = (rows: Row[]) => Math.max(1e-9, ...rows.map((r) => Math.abs(r.value)));
-  const mix = $derived(!focusWire || shownMode === "weights" || shownMode === "with" ? null : shownMode === "context" ? focusWire.mix : focusWire[shownMode]!.mix);
+  const mix = $derived(!focusWire || shownMode === "weights" || shownMode === "with" ? null : isHead && input === 1 ? focusWire.query!.mix : isHead && input === 2 ? focusWire.key!.mix : focusWire.mix);
   const mixTip = $derived(`Where ${isHead ? headInput("it", input) : "its activation"} comes from`);
   const showsHeads = $derived(graph?.nodes.some((node) => node.kind === "head") ?? false);
   const showsAgainst = $derived(graph?.edges.some((edge) => edge.value < 0) ?? false);
@@ -279,6 +290,7 @@
   <div class="figure" bind:this={figure}>
     <div class="tools">
       {#if modes.length > 1}<Segmented options={modes} value={shownMode} onchange={(value: Mode) => (mode = value)} label="Which connections" />{/if}
+      {#if channels.length > 1 && shownMode !== "with"}<Segmented options={channels} value={CHANNEL_KEYS[shownChannel]} onchange={setChannel} label="Which input" />{/if}
       <div class="reach" class:off={shownMode === "with"} inert={shownMode === "with"}><Tabs options={reaches} value={reach} onchange={(value: string) => (reach = value as Reach)} label="How far" /></div>
       <span class="opener" bind:this={expander}><IconButton icon="expand" label="Full screen, with every title" onclick={() => lens.setGraph(true)} /></span>
     </div>
@@ -292,12 +304,12 @@
 
     {#if navGraph}
       {#await navigator() then { default: Navigator }}
-      <Navigator graph={navGraph} model={lens.model} mode={shownMode} modes={modes} onmode={(value: Mode) => (mode = value)} {reach} {reaches} onreach={(value: Reach) => (reach = value)}
+      <Navigator graph={navGraph} model={lens.model} mode={shownMode} modes={modes} onmode={(value: Mode) => (mode = value)} channel={shownChannel} {channels} onchannel={setChannel} {reach} {reaches} onreach={(value: Reach) => (reach = value)}
         {hovered} {point} href={graphHref} name={focusName} title={focusNode?.wire?.title ?? ""} close={() => lens.setGraph(false)} />
       {/await}
     {/if}
     {#if graph && !lens.graphOpen}
-      <Graph {graph} model={lens.model} mode={shownMode} href={hrefFor} hovered={lit} {point} onpick={pick} />
+      <Graph {graph} model={lens.model} mode={shownMode} channel={shownChannel} href={hrefFor} hovered={lit} {point} onpick={pick} />
       {#if picked}<Card {picked} close={() => (picked = null)} fixed />{/if}
       <ul class="key meta" aria-label="Key">
         <li data-tip="A neuron side; larger carries more"><i class="dot"></i>Neuron</li>

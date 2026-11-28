@@ -10,7 +10,7 @@
   import { rows, type Layout, type Open, type Placed, type Spot } from "./layout";
   import type { Graph as GraphData, GraphNode, Mode, Reach } from "./trace";
   import { MODELS, bandOf, type ModelInfo } from "../../lib/models";
-  import { headId, loadWords, neuronId, type Words } from "../../lib/data";
+  import { headId, loadWords, neuronId, type Through, type Words } from "../../lib/data";
   import { findWords } from "../search/engine";
   import type { Matches } from "../lens.svelte";
 
@@ -25,12 +25,15 @@
   // view's size, under the view, so they stay sharp) are laid out at a base view, and a pan moves only the layer
   // that holds both, by a translation the compositor applies alone: nothing is painted or layered again until the
   // pan runs past what the canvas drew around the screen, or the zoom changes, which lay them out at the view anew.
-  let { graph, model, mode, modes, onmode, reach, reaches, onreach, hovered, point, href, name, title, close }: {
+  let { graph, model, mode, modes, onmode, channel = 0, channels = [], onchannel, reach, reaches, onreach, hovered, point, href, name, title, close }: {
     graph: GraphData;
     model: ModelInfo;
     mode: Mode;
     modes: { value: Mode; label: string; hint: string }[];
     onmode: (mode: Mode) => void;
+    channel?: Through;
+    channels?: { value: string; label: string; hint: string }[];
+    onchannel?: (channel: string) => void;
     reach: Reach;
     reaches: { value: Reach; label: string; hint: string }[];
     onreach: (reach: Reach) => void;
@@ -821,7 +824,7 @@
     <div class="pan" style:transform={`translate(${shown.tx - base.tx}px, ${shown.ty - base.ty}px)`}>
       <canvas class="links" bind:this={links} aria-hidden="true"></canvas>
       <div class="canvas" style:transform={`translate(${base.tx}px, ${base.ty}px) scale(${base.k})`}>
-        <Graph {graph} {model} {mode} {href} hovered={picked?.key ?? current ?? hovered} point={pointHere} {height} {open} labels={spots} {labelScale} axis={false} onlaid={laid} onpick={(next) => (picked = next)} {found} {wave} {round} {surface} />
+        <Graph {graph} {model} {mode} {channel} {href} hovered={picked?.key ?? current ?? hovered} point={pointHere} {height} {open} labels={spots} {labelScale} axis={false} onlaid={laid} onpick={(next) => (picked = next)} {found} {wave} {round} {surface} />
       </div>
     </div>
     <div class="axis" aria-hidden="true">
@@ -843,6 +846,7 @@
       </div>
       <div class="tools">
         {#if modes.length > 1}<Segmented options={modes} value={mode} onchange={onmode} label="Which connections" />{/if}
+        {#if channels.length > 1 && mode !== "with" && onchannel}<Segmented options={channels} value={["value", "query", "key"][channel]} onchange={onchannel} label="Which input" />{/if}
         <div class="reach" class:off={mode === "with"} inert={mode === "with"}><Tabs options={reaches} value={reach} onchange={(value: string) => onreach(value as Reach)} label="How far" /></div>
         <div class="zoom">
           <span class="step"><IconButton icon="minus" label="Zoom out" onclick={() => zoomBy(1 / 1.25)} /></span>
