@@ -1,17 +1,17 @@
 {
   "origin": "https://data.neuron-lens.com",
   "builds": {
-    "qwen3-8b": "7c6b8d80e9c8",
-    "gemma-4-12b": "999f921622dc",
-    "qwen3-0.6b": "d3c20e40d534",
-    "qwen3-0.6b-base": "bac410e57b00",
-    "qwen3-1.7b": "ec233b7b6856",
-    "qwen3-1.7b-base": "234d05b74196",
-    "qwen3-4b": "6f250ea8a5cb",
-    "qwen3-4b-base": "396d391cad99",
-    "qwen3-8b-base": "bef0898994ef",
-    "qwen3-14b": "0b6ca832fde2",
-    "qwen3-14b-base": "afd5eb7ac68e"
+    "qwen3-8b": "5e84a9bcceeb",
+    "gemma-4-12b": "a54df38a6d41",
+    "qwen3-0.6b": "fbdb49e3eb94",
+    "qwen3-0.6b-base": "371990d68d10",
+    "qwen3-1.7b": "8c96fd7a6113",
+    "qwen3-1.7b-base": "80840c6d050f",
+    "qwen3-4b": "26c4647923a4",
+    "qwen3-4b-base": "a4c1fdbf1617",
+    "qwen3-8b-base": "cc67f2f6107a",
+    "qwen3-14b": "5e7db1ab9348",
+    "qwen3-14b-base": "b87c64f01c4f"
   },
   "lineage": "15c305d6ff70"
 }
